@@ -7,14 +7,26 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig `mapstructure:"server"`
-	LLM    LLMConfig    `mapstructure:"llm"`
-	Log    LogConfig    `mapstructure:"log"`
+	Server   ServerConfig   `mapstructure:"server"`
+	LLM      LLMConfig      `mapstructure:"llm"`
+	Database DatabaseConfig `mapstructure:"database"`
+	Auth     AuthConfig     `mapstructure:"auth"`
+	Log      LogConfig      `mapstructure:"log"`
+}
+
+type AuthConfig struct {
+	JWTSecret     string `mapstructure:"jwt_secret"`
+	TokenDuration int    `mapstructure:"token_duration"` // hours
 }
 
 type ServerConfig struct {
 	Port string `mapstructure:"port"`
 	Mode string `mapstructure:"mode"`
+}
+
+type DatabaseConfig struct {
+	Driver string `mapstructure:"driver"` // sqlite or mysql
+	Source string `mapstructure:"source"` // file path or dsn
 }
 
 type LLMConfig struct {
@@ -41,11 +53,14 @@ func LoadConfig(path string) (*Config, error) {
 	viper.SetDefault("llm.base_url", "https://api.deepseek.com")
 	viper.SetDefault("llm.model", "deepseek-chat")
 	viper.SetDefault("llm.timeout", 120)
+	viper.SetDefault("database.driver", "sqlite")
+	viper.SetDefault("database.source", "storytrim.db")
+	viper.SetDefault("auth.jwt_secret", "storytrim-secret-key-default")
+	viper.SetDefault("auth.token_duration", 24)
 	viper.SetDefault("log.level", "info")
 	viper.SetDefault("log.format", "console")
 
 	if err := viper.ReadInConfig(); err != nil {
-		// 如果配置文件不存在，我们也可以接受，只使用环境变量或默认值
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, err
 		}

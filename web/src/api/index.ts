@@ -7,42 +7,71 @@ const client = axios.create({
   timeout: 300000, 
 });
 
+// 请求拦截器注入 Token
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export interface Chapter {
+  id: number;
+  book_id: number;
   index: number;
   title: string;
   content: string;
+  trimmed_content?: string;
 }
 
 export interface UploadResponse {
+  book_id: number;
   filename: string;
   chapters: Chapter[];
   total: number;
 }
 
 export const api = {
+  // Auth
+  register: (data: any) => client.post('/auth/register', data),
+  login: (data: any) => client.post('/auth/login', data),
+
+  // Story
   upload: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return client.post<any>('/upload', formData);
   },
+
+  getBooks: () => client.get('/books'),
+  getBookDetail: (id: number) => client.get(`/books/${id}`),
   
-  trim: (content: string) => {
-    return client.post<any>('/trim', { content });
+  trim: (content: string, chapterId?: number) => {
+    return client.post<any>('/trim', { content, chapter_id: chapterId });
   },
 
+  // SSE Stream with Auth
   trimStream: async (
     content: string, 
+    chapterId: number | undefined,
     onData: (text: string) => void,
     onError: (err: string) => void,
     onDone: () => void
   ) => {
     try {
+      const token = localStorage.getItem('token');
+      const headers: any = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${BASE_URL}/trim/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
+        headers: headers,
+        body: JSON.stringify({ content, chapter_id: chapterId }),
       });
 
       if (!response.ok) {
@@ -61,12 +90,7 @@ export const api = {
 
         buffer += decoder.decode(value, { stream: true });
         
-        // 简单状态机解析 SSE
         const lines = buffer.split('\n');
-        // 如果最后一行不为空，说明 buffer 还没结束，保留到下一轮
-        // 但是 SSE 消息以 \n\n 结尾，所以 split 后最后一行通常是空字符串（如果完整）
-        // 如果不完整，最后一行就是残留数据
-        
         buffer = lines.pop() ?? ''; 
 
         let currentEvent = '';
@@ -76,26 +100,13 @@ export const api = {
             currentEvent = line.substring(6).trim();
           } else if (line.startsWith('data:')) {
             const data = line.substring(5); 
-            // 如果是 message 事件
             if (currentEvent === 'message' || currentEvent === '') {
-               // data: 后面通常有个空格，但如果内容本身是空格开头呢？
-               // Gin 实现是 fmt.Fprintf(w, "data: %v\n\n", data)
-               // 所以 data 是原样输出的。但通常前面没有空格，除非我们自己加了？
-               // 实际上 Gin 的 c.SSEvent 源码：
-               // "," err := fmt.Fprintf(c.Writer, "data:%s\n\n", string(data))
-               // 不对，是 data:%s (没有空格) —— 抱歉，Gin 1.7+ 改了
-               // 让我们假设 data: 后面直接就是内容。但为了安全，如果是以空格开头，只去掉第一个空格。
-               
                let text = data;
-               if (text.startsWith(' ')) {
-                 text = text.substring(1);
-               }
                onData(text);
             } else if (currentEvent === 'error') {
                onError(data.trim());
             }
           } else if (line.trim() === '') {
-            // 空行意味着事件结束，重置
             currentEvent = '';
           }
         }
