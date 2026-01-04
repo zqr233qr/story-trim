@@ -1,0 +1,29 @@
+# Binaries
+bin/
+server
+story-trim
+
+# Config with secrets
+config.yaml
+
+# Logs
+*.log
+
+# Editor
+.idea/
+.vscode/
+.DS_Store
+
+# Go
+vendor/
+
+# Node
+node_modules/
+web/node_modules/
+web/dist/
+
+# Temp
+tmp/
+*.tmp
+*_trimmed.txt
+test_novel.txt
