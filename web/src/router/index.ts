@@ -30,7 +30,7 @@ const router = createRouter({
 })
 
 // 简单的路由守卫 (可选)
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _, next) => {
   const userStore = useUserStore()
   // 如果去 dashboard 且没 token，这里允许通行，因为我们支持游客
   // 如果你有必须登录的页面，可以在这里拦截

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { useBookStore } from '../stores/book'
 import { useUserStore } from '../stores/user'
-import { UploadCloud, Loader2, BookOpen, Clock, CheckCircle2 } from 'lucide-vue-next'
+import { UploadCloud, Loader2, BookOpen, Clock } from 'lucide-vue-next'
 
 const router = useRouter()
 const bookStore = useBookStore()
@@ -93,9 +93,8 @@ const handleLogout = () => {
           <router-link v-else to="/login" class="text-teal-600 font-bold">登录</router-link>
         </nav>
         <div class="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold border-2 border-white shadow-sm" title="User">
-          {{ userStore.username ? userStore.username[0].toUpperCase() : 'G' }}
-        </div>
-      </div>
+          {{ userStore.username ? userStore.username.charAt(0).toUpperCase() : 'G' }}
+        </div>      </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-8 py-12">

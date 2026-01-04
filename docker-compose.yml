@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  story-trim:
+    build: .
+    image: kirydocker/story-trim:latest
+    container_name: story-trim
+    ports:
+      - "8088:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./storytrim.db:/app/storytrim.db
+    restart: unless-stopped
