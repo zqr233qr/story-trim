@@ -3,61 +3,58 @@ package handler
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 
 	"github/zqr233qr/story-trim/internal/api"
 	"github/zqr233qr/story-trim/internal/api/middleware"
 	"github/zqr233qr/story-trim/internal/domain"
 	"github/zqr233qr/story-trim/internal/service"
+	"github/zqr233qr/story-trim/pkg/config"
 )
 
 type StoryHandler struct {
 	llm         service.LLMProcessor
 	bookService *service.BookService
+	worker      *service.WorkerService
+	cfg         *config.Config
 }
 
-func NewStoryHandler(llm service.LLMProcessor, bookService *service.BookService) *StoryHandler {
+func NewStoryHandler(llm service.LLMProcessor, bookService *service.BookService, worker *service.WorkerService, cfg *config.Config) *StoryHandler {
 	return &StoryHandler{
 		llm:         llm,
 		bookService: bookService,
+		worker:      worker,
+		cfg:         cfg,
 	}
 }
 
-// Upload 处理文件上传 (持久化版本)
 func (h *StoryHandler) Upload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		api.Error(c, http.StatusBadRequest, 4001, "无法获取上传文件")
+		api.Error(c, http.StatusBadRequest, 4001, "Invalid file")
 		return
 	}
 	defer file.Close()
 
 	contentBytes, err := io.ReadAll(file)
 	if err != nil {
-		log.Error().Err(err).Msg("读取文件失败")
-		api.Error(c, http.StatusInternalServerError, 5001, "读取文件失败")
+		api.Error(c, http.StatusInternalServerError, 5001, "Read error")
 		return
 	}
 
-	log.Info().Str("filename", header.Filename).Int("size", len(contentBytes)).Msg("File uploaded, creating book...")
-
-	// 获取 UserID (如果已登录)
 	var userID uint
 	if v, exists := c.Get(middleware.ContextUserIDKey); exists {
-		if id, ok := v.(uint); ok {
-			userID = id
-		}
+		userID = v.(uint)
 	}
 
-	// 调用 BookService 创建书籍
 	book, err := h.bookService.CreateBookFromContent(header.Filename, string(contentBytes), userID)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create book")
-		api.Error(c, http.StatusInternalServerError, 5003, "书籍创建失败: "+err.Error())
+		api.Error(c, http.StatusInternalServerError, 5003, err.Error())
 		return
 	}
 
@@ -69,111 +66,42 @@ func (h *StoryHandler) Upload(c *gin.Context) {
 	})
 }
 
-// ListBooks 获取书籍列表
-// GET /api/books
-func (h *StoryHandler) ListBooks(c *gin.Context) {
+type TrimRequest struct {
+	ChapterID     uint   `json:"chapter_id" binding:"required"`
+	PromptID      uint   `json:"prompt_id"`
+	PromptVersion string `json:"prompt_version"`
+}
+
+func (h *StoryHandler) GetChapter(c *gin.Context) {
+	idStr := c.Param("id")
+	var chapterID uint
+	fmt.Sscanf(idStr, "%d", &chapterID)
+
+	promptIDStr := c.DefaultQuery("prompt_id", "2")
+	version := c.DefaultQuery("version", "v1.0")
+	var promptID uint
+	fmt.Sscanf(promptIDStr, "%d", &promptID)
+
 	var userID uint
 	if v, exists := c.Get(middleware.ContextUserIDKey); exists {
-		if id, ok := v.(uint); ok {
-			userID = id
-		}
+		userID = v.(uint)
 	}
 
-	// 如果没登录，返回空列表或提示登录 (这里暂返空)
-	if userID == 0 {
-		api.Success(c, []interface{}{})
-		return
-	}
-
-	var books []domain.Book
-	// 只查元数据，不查章节内容，节省带宽
-	if err := h.bookService.GetDB().Where("user_id = ?", userID).Order("updated_at DESC").Find(&books).Error; err != nil {
-		api.Error(c, http.StatusInternalServerError, 5004, "获取书架失败")
-		return
-	}
-
-	api.Success(c, books)
-}
-
-// GetBookDetail 获取书籍详情（含章节列表）
-// GET /api/books/:id
-func (h *StoryHandler) GetBookDetail(c *gin.Context) {
-	id := c.Param("id")
-	
-	// 这里可以用更严谨的类型转换
-	var bookID uint
-	fmt.Sscanf(id, "%d", &bookID)
-
-	book, err := h.bookService.GetBook(bookID)
+	chapter, err := h.bookService.GetChapterFull(chapterID, promptID, version, userID, h.cfg.Memory.ContextMode)
 	if err != nil {
-		api.Error(c, http.StatusNotFound, 4004, "书籍未找到")
+		api.Error(c, http.StatusNotFound, 4004, "Not Found")
 		return
 	}
 
-	// 权限检查：只能看自己的书 (匿名上传的除外)
-	// 如果 book.UserID != 0，则必须匹配当前 userID
-	
-	api.Success(c, book)
+	if userID > 0 {
+		go func() {
+			_ = h.bookService.UpsertReadingHistory(userID, chapter.BookID, chapter.ID, promptID)
+		}()
+	}
+
+	api.Success(c, chapter)
 }
 
-// TrimRequest 精简请求参数
-type TrimRequest struct {
-	Content   string `json:"content"`
-	ChapterID uint   `json:"chapter_id"` // 可选，优先使用 ID
-}
-
-// Trim 普通接口 (保留，暂未深度改造)
-func (h *StoryHandler) Trim(c *gin.Context) {
-	var req TrimRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.Error(c, http.StatusBadRequest, 4002, "参数错误")
-		return
-	}
-
-	content := req.Content
-	// 如果有 ChapterID，优先查库
-	if req.ChapterID > 0 {
-		chap, err := h.bookService.GetChapter(req.ChapterID)
-		if err == nil {
-			// 如果已有结果，直接返回
-			if chap.TrimmedContent != "" {
-				api.Success(c, gin.H{
-					"original_len": len(chap.Content),
-					"trimmed_len":  len(chap.TrimmedContent),
-					"content":      chap.TrimmedContent,
-					"cached":       true,
-				})
-				return
-			}
-			content = chap.Content
-		}
-	}
-
-	if content == "" {
-		api.Error(c, http.StatusBadRequest, 4002, "内容不能为空")
-		return
-	}
-
-	trimmed, err := h.llm.TrimContent(content)
-	if err != nil {
-		api.Error(c, http.StatusInternalServerError, 5002, err.Error())
-		return
-	}
-
-	// 如果有 ChapterID，保存结果
-	if req.ChapterID > 0 {
-		_ = h.bookService.UpdateChapterTrimmed(req.ChapterID, trimmed)
-	}
-
-	api.Success(c, gin.H{
-		"original_len": len(content),
-		"trimmed_len":  len(trimmed),
-		"content":      trimmed,
-		"cached":       false,
-	})
-}
-
-// TrimStream 流式接口 (核心改造)
 func (h *StoryHandler) TrimStream(c *gin.Context) {
 	var req TrimRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -181,72 +109,199 @@ func (h *StoryHandler) TrimStream(c *gin.Context) {
 		return
 	}
 
+	var userID uint
+	if v, exists := c.Get(middleware.ContextUserIDKey); exists {
+		userID = v.(uint)
+	}
+
+	pVer := req.PromptVersion
+	if pVer == "" {
+		pVer = "v1.0"
+	}
+
+	book, err := h.bookService.GetBookByChapterID(req.ChapterID)
+	if err != nil {
+		c.SSEvent("error", "Book not found")
+		return
+	}
+
+	var currentChap domain.Chapter
+	h.bookService.GetDB().First(&currentChap, req.ChapterID)
+
+	// 1. 采集上下文 (摘要)
+	var summaries []string
+	if h.cfg.Memory.Enabled && h.cfg.Memory.ContextMode >= 1 {
+		summaries, _ = h.bookService.GetPreviousSummaries(book.ID, currentChap.Index, h.cfg.Memory.SummaryLimit)
+	}
+
+	// 2. 采集上下文 (百科) - StoryTrim 3.5 新增
+	var encyclopedia string
+	if h.cfg.Memory.ContextMode == 2 && book.Fingerprint != "" {
+		// 尝试获取最近的公共百科
+		encyclopedia, _ = h.bookService.GetRelevantEncyclopedia(book.Fingerprint, currentChap.Index)
+	}
+
+	// 3. 确定 Context Level
+	level := 0
+	if len(summaries) > 0 {
+		level = 1
+	}
+	if encyclopedia != "" {
+		level = 2
+	}
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 
-	content := req.Content
-	var chapterID uint
-
-	// 1. 尝试从 DB 获取
-	if req.ChapterID > 0 {
-		chapterID = req.ChapterID
-		chap, err := h.bookService.GetChapter(chapterID)
-		if err != nil {
-			c.SSEvent("error", "Chapter not found")
-			return
-		}
-		
-		// 1.1 命中缓存：直接返回 DB 中的结果
-		if chap.TrimmedContent != "" {
-			// 模拟流式发送（为了前端兼容，还是拆开发送比较好，或者一次性发也行）
-			// 这里简单地一次性发送，因为速度极快
-			c.SSEvent("message", chap.TrimmedContent)
-			// 发送一个完成信号可选，但前端主要靠连接断开或 done
-			return 
-		}
-		content = chap.Content
-	}
-
-	if content == "" {
-		c.SSEvent("error", "Content is empty")
+	fullChap, _ := h.bookService.GetChapterFull(req.ChapterID, req.PromptID, pVer, userID, level)
+	if fullChap != nil && fullChap.TrimmedContent != "" {
+		h.mockStreaming(c, fullChap.TrimmedContent)
 		return
 	}
 
-	// 2. 调用 LLM
+	if cached, hit := h.bookService.CheckGlobalCache(currentChap.ContentMD5, pVer, req.PromptID, level); hit {
+		if userID > 0 {
+			_ = h.bookService.RecordUserTrimAction(userID, book.ID, currentChap.ID, req.PromptID)
+		}
+		h.mockStreaming(c, cached)
+		return
+	}
+
+	var promptObj domain.Prompt
+	h.bookService.GetDB().First(&promptObj, req.PromptID)
+
+	// 注入百科内容到 Prompt
+	systemPrompt := h.assemblePrompt(encyclopedia, summaries, promptObj.Content)
+
+	var raw domain.RawContent
+	h.bookService.GetDB().First(&raw, "content_md5 = ?", currentChap.ContentMD5)
+
 	ctx := c.Request.Context()
-	stream, err := h.llm.TrimContentStream(ctx, content)
+	stream, err := h.llm.TrimContentStream(ctx, "System Instructions:"+systemPrompt+"\n\nUser Content:"+raw.Content)
 	if err != nil {
 		c.SSEvent("error", err.Error())
 		return
 	}
 
-	// 3. 收集结果用于保存
-	var fullTrimmed strings.Builder
-
+	var result strings.Builder
 	c.Stream(func(w io.Writer) bool {
 		if msg, ok := <-stream; ok {
 			c.SSEvent("message", msg)
-			if chapterID > 0 {
-				fullTrimmed.WriteString(msg)
-			}
+			result.WriteString(msg)
 			return true
 		}
 		return false
 	})
 
-	// 4. 保存回数据库
-	if chapterID > 0 {
-		finalContent := fullTrimmed.String()
-		if finalContent != "" {
-			// 异步保存，不阻塞连接结束
-			go func() {
-				if err := h.bookService.UpdateChapterTrimmed(chapterID, finalContent); err != nil {
-					log.Error().Err(err).Uint("chapter_id", chapterID).Msg("Failed to save trimmed content")
-				} else {
-					log.Info().Uint("chapter_id", chapterID).Msg("Trimmed content saved to DB")
-				}
-			}()
-		}
+	finalTrimmed := result.String()
+	if finalTrimmed != "" {
+		md5 := currentChap.ContentMD5
+		pID := req.PromptID
+		go func() {
+			_ = h.bookService.SaveTrimResult(md5, pVer, pID, finalTrimmed, level)
+			if userID > 0 {
+				_ = h.bookService.RecordUserTrimAction(userID, book.ID, currentChap.ID, pID)
+			}
+
+			// 异步生成摘要
+			h.worker.GenerateSummary(finalTrimmed, md5, "v1.0")
+
+			// 检查并触发百科更新 (每 50 章)
+			h.worker.CheckAndGenerateEncyclopedia(book.ID, currentChap.Index)
+		}()
 	}
+}
+
+func (h *StoryHandler) assemblePrompt(global string, summaries []string, template string) string {
+	var sb strings.Builder
+	sb.WriteString(h.cfg.Protocol.BaseInstruction)
+	sb.WriteString("\n\n")
+	if global != "" {
+		sb.WriteString("[全局百科背景]\n" + global + "\n\n")
+	}
+	if len(summaries) > 0 {
+		sb.WriteString("[前情提要]\n" + strings.Join(summaries, "\n---\n") + "\n\n")
+	}
+	sb.WriteString("[具体风格要求]\n" + template)
+	return sb.String()
+}
+
+func (h *StoryHandler) mockStreaming(c *gin.Context, content string) {
+	runes := []rune(content)
+	total := len(runes)
+	i := 0
+	// 调快速度
+	speed := h.cfg.Memory.MockStreamSpeed
+	if speed <= 0 {
+		speed = 25
+	}
+	for i < total {
+		step := rand.Intn(10) + 5
+		if i+step > total {
+			step = total - i
+		}
+		c.SSEvent("message", string(runes[i:i+step]))
+		i += step
+		time.Sleep(time.Duration(rand.Intn(speed/2)+speed/2) * time.Millisecond)
+	}
+}
+
+func (h *StoryHandler) ListBooks(c *gin.Context) {
+	var userID uint
+	if v, exists := c.Get(middleware.ContextUserIDKey); exists {
+		userID = v.(uint)
+	}
+	if userID == 0 {
+		api.Success(c, []interface{}{})
+		return
+	}
+	var books []domain.Book
+	h.bookService.GetDB().Where("user_id = ?", userID).Order("updated_at DESC").Find(&books)
+	api.Success(c, books)
+}
+
+func (h *StoryHandler) GetBookDetail(c *gin.Context) {
+	idStr := c.Param("id")
+	var bookID uint
+	fmt.Sscanf(idStr, "%d", &bookID)
+	promptIDStr := c.DefaultQuery("prompt_id", "2")
+	var promptID uint
+	fmt.Sscanf(promptIDStr, "%d", &promptID)
+
+	book, err := h.bookService.GetBook(bookID)
+	if err != nil {
+		api.Error(c, http.StatusNotFound, 4004, "Not Found")
+		return
+	}
+
+	var userID uint
+	if v, exists := c.Get(middleware.ContextUserIDKey); exists {
+		userID = v.(uint)
+	}
+
+	var trimmedIDs []uint
+	if userID > 0 {
+		trimmedIDs, _ = h.bookService.GetUserTrimmedChapterIDs(userID, book.ID, promptID)
+	}
+	var history *domain.ReadingHistory
+	if userID > 0 {
+		history, _ = h.bookService.GetReadingHistory(userID, book.ID)
+	}
+
+	api.Success(c, gin.H{
+		"book":            book,
+		"trimmed_ids":     trimmedIDs,
+		"reading_history": history,
+	})
+}
+
+func (h *StoryHandler) ListPrompts(c *gin.Context) {
+	var prompts []domain.Prompt
+	h.bookService.GetDB().Where("is_system = ?", true).Order("id ASC").Find(&prompts)
+	api.Success(c, prompts)
+}
+
+func (h *StoryHandler) Trim(c *gin.Context) {
+	// 暂略
 }

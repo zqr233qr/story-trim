@@ -61,8 +61,8 @@ const openBook = async (bookID: number) => {
     const res = await api.getBookDetail(bookID)
     const data = res.data as any
     if (data.code === 0) {
-      const b = data.data
-      bookStore.setBook(b.id, b.title, b.chapters)
+      const { book, trimmed_ids, reading_history } = data.data
+      bookStore.setBook(book.id, book.title, book.chapters, trimmed_ids, reading_history)
       router.push('/reader')
     }
   } catch (err) {

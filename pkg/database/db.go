@@ -18,8 +18,6 @@ func Init(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	switch cfg.Driver {
 	case "sqlite":
 		dialector = sqlite.Open(cfg.Source)
-	// case "mysql":
-	// 	dialector = mysql.Open(cfg.Source)
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
 	}
@@ -31,9 +29,27 @@ func Init(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
 
-	// 自动迁移表结构
-	if err := db.AutoMigrate(&domain.User{}, &domain.Book{}, &domain.Chapter{}); err != nil {
+	// 自动迁移所有表结构 (V3.0)
+	err = db.AutoMigrate(
+		&domain.User{},
+		&domain.Book{},
+		&domain.Chapter{},
+		&domain.Prompt{},
+		&domain.RawContent{},
+		&domain.RawSummary{},
+		&domain.TrimResult{},
+		&domain.UserProcessedChapter{},
+		&domain.ReadingHistory{},
+		&domain.SharedEncyclopedia{},
+	)
+	
+	if err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
+	}
+
+	// 注入预设数据
+	if err := SeedPrompts(db); err != nil {
+		return nil, fmt.Errorf("failed to seed data: %w", err)
 	}
 
 	return db, nil

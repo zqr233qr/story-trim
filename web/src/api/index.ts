@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8080/api';
+// 自动判断环境：生产环境使用相对路径，开发环境连接本地 8080
+const BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8080/api';
 
 const client = axios.create({
   baseURL: BASE_URL,
@@ -25,6 +26,14 @@ export interface Chapter {
   trimmed_content?: string;
 }
 
+export interface Prompt {
+  id: number;
+  name: string;
+  version: string;
+  content: string;
+  is_system: boolean;
+}
+
 export interface UploadResponse {
   book_id: number;
   filename: string;
@@ -46,9 +55,12 @@ export const api = {
 
   getBooks: () => client.get('/books'),
   getBookDetail: (id: number) => client.get(`/books/${id}`),
+  getChapter: (id: number, promptId?: number, version?: string) => 
+    client.get(`/chapters/${id}`, { params: { prompt_id: promptId, version } }),
+  getPrompts: () => client.get('/prompts'),
   
-  trim: (content: string, chapterId?: number) => {
-    return client.post<any>('/trim', { content, chapter_id: chapterId });
+  trim: (params: { chapter_id: number; prompt_id?: number; prompt_version?: string }) => {
+    return client.post<any>('/trim', params);
   },
 
   // SSE Stream with Auth
@@ -57,7 +69,9 @@ export const api = {
     chapterId: number | undefined,
     onData: (text: string) => void,
     onError: (err: string) => void,
-    onDone: () => void
+    onDone: () => void,
+    promptId?: number,
+    promptVersion?: string
   ) => {
     try {
       const token = localStorage.getItem('token');
@@ -71,7 +85,12 @@ export const api = {
       const response = await fetch(`${BASE_URL}/trim/stream`, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({ content, chapter_id: chapterId }),
+        body: JSON.stringify({
+          content, 
+          chapter_id: chapterId,
+          prompt_id: promptId,
+          prompt_version: promptVersion
+        }),
       });
 
       if (!response.ok) {
@@ -101,7 +120,9 @@ export const api = {
           } else if (line.startsWith('data:')) {
             const data = line.substring(5); 
             if (currentEvent === 'message' || currentEvent === '') {
+               // 尝试去除 data: 后面的一个前置空格（如果存在）
                let text = data;
+               if (text.startsWith(' ')) text = text.substring(1);
                onData(text);
             } else if (currentEvent === 'error') {
                onError(data.trim());

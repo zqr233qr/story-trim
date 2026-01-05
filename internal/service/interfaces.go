@@ -8,9 +8,9 @@ import (
 // Splitter 定义分章服务的接口
 type Splitter interface {
 	// SplitFile 读取文件并进行分章
-	SplitFile(filePath string) ([]domain.Chapter, error)
+	SplitFile(filePath string) ([]domain.SplitChapter, error)
 	// SplitContent 直接处理文本内容
-	SplitContent(content string) []domain.Chapter
+	SplitContent(content string) []domain.SplitChapter
 }
 
 // LLMProcessor 定义 AI 处理服务的接口

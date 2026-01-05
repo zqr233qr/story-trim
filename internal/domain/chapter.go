@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Chapter 代表小说的一个章节 (数据库实体)
+// Chapter 章节关联表 (业务逻辑)
 type Chapter struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time      `json:"created_at"`
@@ -14,16 +14,25 @@ type Chapter struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	BookID uint `gorm:"index" json:"book_id"`
-	// 不直接关联 Book 对象以避免循环引用或复杂的序列化，除非必要
 
-	Index          int    `json:"index"`           // 章节序号
-	Title          string `gorm:"size:255" json:"title"` // 章节标题
-	Content        string `gorm:"type:text" json:"content"` // 章节原始内容 (Text 类型支持长文本)
-	TrimmedContent string `gorm:"type:text" json:"trimmed_content"` // 缩减后的内容
+	Index int    `json:"index"`           // 章节序号
+	Title string `gorm:"size:255" json:"title"` // 章节标题
+
+	// ContentMD5 是指向 RawContent 原始文本池的逻辑外键
+	ContentMD5 string `gorm:"index;size:32" json:"content_md5"`
 }
 
-// ProcessedChapter 用于 API 响应的临时结构 (如果还需要的话，或者直接用 Chapter)
-type ProcessedChapter struct {
+// SplitChapter 仅用于分章阶段的临时结构
+type SplitChapter struct {
+	Index   int
+	Title   string
+	Content string
+}
+
+// ChapterWithContent DTO 用于 API 传输，包含展开后的内容
+type ChapterWithContent struct {
 	Chapter
-	Summary string `json:"summary"`
+	Content        string `json:"content"`
+	TrimmedContent string `json:"trimmed_content"`
+	Summary        string `json:"summary"`
 }
