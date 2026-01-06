@@ -5,40 +5,17 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
-	"unicode"
 )
 
-var (
-	// 匹配所有标点符号的正则
-	punctuationRegex = regexp.MustCompile(`[[:punct:]]`)
-)
+var puncRegexp = regexp.MustCompile(`[^a-zA-Z0-9\p{L}\p{N}]`)
 
-// GetContentFingerprint 计算内容的归一化 MD5 指纹
+// GetContentFingerprint 计算归一化后的 MD5
 func GetContentFingerprint(content string) string {
-	// 1. 归一化处理
-	normalized := NormalizeText(content)
-	
+	// 1. 仅保留字母和数字 (自动移除空白、换行、中英文标点、特殊符号)
+	normalized := puncRegexp.ReplaceAllString(content, "")
+	normalized = strings.ToLower(normalized)
+
 	// 2. 计算 MD5
 	hash := md5.Sum([]byte(normalized))
 	return hex.EncodeToString(hash[:])
-}
-
-// NormalizeText 去除换行、空格、制表符及所有标点符号
-func NormalizeText(text string) string {
-	// 去除空白字符
-	f := func(r rune) bool {
-		return unicode.IsSpace(r)
-	}
-	text = strings.Join(strings.FieldsFunc(text, f), "")
-
-	// 去除标点符号 (包含中文标点)
-	// 更加彻底的写法是只保留汉字、数字和英文字母
-	var builder strings.Builder
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			builder.WriteRune(r)
-		}
-	}
-	
-	return builder.String()
 }

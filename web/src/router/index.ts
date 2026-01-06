@@ -1,8 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginView from '../views/LoginView.vue'
-import DashboardView from '../views/DashboardView.vue'
-import ReaderView from '../views/ReaderView.vue'
 import { useUserStore } from '../stores/user'
+import DashboardView from '../views/DashboardView.vue'
+import LoginView from '../views/LoginView.vue'
+import ReaderView from '../views/ReaderView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -15,12 +15,14 @@ const router = createRouter({
     {
       path: '/dashboard',
       name: 'dashboard',
-      component: DashboardView
+      component: DashboardView,
+      meta: { requiresAuth: true }
     },
     {
       path: '/reader',
       name: 'reader',
-      component: ReaderView
+      component: ReaderView,
+      meta: { requiresAuth: true }
     },
     {
       path: '/',
@@ -29,15 +31,19 @@ const router = createRouter({
   ]
 })
 
-// 简单的路由守卫 (可选)
-router.beforeEach((to, _, next) => {
+// 全局前置守卫：校验登录状态
+router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
-  // 如果去 dashboard 且没 token，这里允许通行，因为我们支持游客
-  // 如果你有必须登录的页面，可以在这里拦截
-  if (to.path === '/reader' && !userStore.isLoggedIn && !localStorage.getItem('token')) {
-     // 允许游客进入 reader，只要 book store 有数据
+  
+  if (to.meta.requiresAuth && !userStore.isLoggedIn) {
+    // 需要登录但未登录，重定向到登录页
+    next('/login')
+  } else if (to.name === 'login' && userStore.isLoggedIn) {
+    // 已登录状态访问登录页，重定向到首页
+    next('/dashboard')
+  } else {
+    next()
   }
-  next()
 })
 
 export default router

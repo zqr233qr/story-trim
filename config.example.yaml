@@ -1,13 +1,15 @@
-server:
-  port: "8080"
-  mode: "debug" # debug or release
-
 llm:
   base_url: "https://api.deepseek.com"
   api_key: "your-api-key-here"
   model: "deepseek-chat"
-  timeout: 120
 
-log:
-  level: "info"   # debug, info, warn, error
-  format: "console" # console or json
+database:
+  source: "storytrim.db"
+
+memory:
+  summary_limit: 1          # 每次携带的前章摘要数
+  encyclopedia_interval: 50 # 百科更新频率
+  mock_stream_speed: 35     # 拟真流延迟(ms)
+
+protocol:
+  base_instruction: "你是一个具备逻辑追踪能力的文学编辑。请参考提供的[全局背景]和[前情提要]进行精简。如果原文中出现了背景中提到的重要人物或设定，请务必保留相关描写。"
