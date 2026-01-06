@@ -1,20 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+
+interface Prompt {
+  id: number;
+  name: string;
+  description?: string;
+}
 
 const props = defineProps<{ 
   show: boolean, 
   bookTitle: string,
+  prompts: Prompt[],
   isDarkMode?: boolean
 }>()
 const emit = defineEmits(['close', 'confirm'])
 
-const modes = [
-  { id: 'dewater', name: '标准沉浸', icon: '💧', desc: '大幅删减无意义的重复描写、心理独白。' },
-  { id: 'summary', name: '轻度精简', icon: '🍃', desc: '仅优化语感、合并琐碎短句。' },
-  { id: 'speed', name: '极简速读', icon: '⚡', desc: '剧情优先。大胆删除所有环境与心理描写。' }
-]
+const selectedId = ref<number | string>('')
 
-const selectedId = ref('dewater')
+watch(() => props.prompts, (newPs) => {
+  if (newPs.length > 0 && !selectedId.value) {
+    selectedId.value = newPs[0].id
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -24,15 +31,17 @@ const selectedId = ref('dewater')
         <h3 class="text-lg font-bold mb-2" :class="isDarkMode ? 'text-stone-100' : 'text-stone-800'">全书后台处理</h3>
         <p class="text-xs mb-4" :class="isDarkMode ? 'text-stone-500' : 'text-stone-500'">将对《{{ bookTitle }}》剩余章节进行批量精简。处理将在后台进行，您可以继续阅读。</p>
 
-        <div class="space-y-2 mb-6">
-          <div v-for="mode in modes" :key="mode.id"
-            @click="selectedId = mode.id"
-            :class="selectedId === mode.id 
+        <div class="space-y-2 mb-6 max-h-60 overflow-y-auto pr-1">
+          <div v-for="prompt in prompts" :key="prompt.id"
+            @click="selectedId = prompt.id"
+            :class="selectedId === prompt.id 
               ? (isDarkMode ? 'border-teal-600 bg-teal-900/20 text-teal-500' : 'border-teal-500 bg-teal-50 text-teal-700') 
               : (isDarkMode ? 'border-stone-800 bg-stone-900/50 text-stone-500 hover:border-stone-700' : 'border-stone-200 text-stone-600')"
             class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors">
-            <span class="text-lg">{{ mode.icon }}</span>
-            <span class="text-sm font-bold">{{ mode.name }}</span>
+            <div>
+               <div class="text-sm font-bold">{{ prompt.name }}</div>
+               <div class="text-[10px] opacity-70 mt-0.5">{{ prompt.description || '暂无描述' }}</div>
+            </div>
           </div>
         </div>
 

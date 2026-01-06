@@ -120,13 +120,12 @@ func (s *bookService) GetChapterDetail(ctx context.Context, chapterID uint) (*do
 	return chap, content, nil
 }
 
-func (s *bookService) GetChapterWithTrim(ctx context.Context, userID uint, chapterID uint, promptID uint) (*domain.Chapter, *domain.RawContent, string, error) {
-	chap, raw, err := s.GetChapterDetail(ctx, chapterID)
+func (s *bookService) GetTrimmedContent(ctx context.Context, userID uint, chapterID uint, promptID uint) (string, error) {
+	chap, err := s.bookRepo.GetChapterByID(ctx, chapterID)
 	if err != nil {
-		return nil, nil, "", err
+		return "", err
 	}
 
-	var trimmedContent string
 	if userID > 0 {
 		ids, err := s.actionRepo.GetUserTrimmedIDs(ctx, userID, chap.BookID, promptID)
 		if err == nil {
@@ -141,13 +140,12 @@ func (s *bookService) GetChapterWithTrim(ctx context.Context, userID uint, chapt
 			if isProcessed {
 				res, err := s.cacheRepo.GetTrimResult(ctx, chap.ContentMD5, promptID)
 				if err == nil && res != nil {
-					trimmedContent = res.TrimmedContent
+					return res.TrimmedContent, nil
 				}
 			}
 		}
 	}
-
-	return chap, raw, trimmedContent, nil
+	return "", nil
 }
 
 func (s *bookService) ListUserBooks(ctx context.Context, userID uint) ([]domain.Book, error) {

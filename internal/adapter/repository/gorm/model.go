@@ -16,7 +16,7 @@ type User struct {
 type Book struct {
 	ID            uint   `gorm:"primaryKey"`
 	UserID        uint   `gorm:"index"`
-	Fingerprint   string `gorm:"uniqueIndex;size:32"`
+	Fingerprint   string `gorm:"index;size:32"`
 	Title         string `gorm:"size:255"`
 	TotalChapters int
 	CreatedAt     time.Time
@@ -109,6 +109,7 @@ type Task struct {
 type Prompt struct {
 	ID                   uint    `gorm:"primaryKey"`
 	Name                 string  `gorm:"size:50"`
+	Description          string  `gorm:"size:255"` // 新增：前端展示用描述
 	PromptContent        string  `gorm:"type:text"`
 	SummaryPromptContent string  `gorm:"type:text"`
 	Type                 int     // 提示词类型 0-精简提示词 1-摘要提示词
@@ -117,4 +118,5 @@ type Prompt struct {
 	BoundaryRatioMin     float64 // e.g., 0.45 目标边界字数剩余率
 	BoundaryRatioMax     float64 // e.g., 0.65
 	IsSystem             bool
+	IsDefault            bool // 新增：是否为系统默认
 }

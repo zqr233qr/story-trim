@@ -2,10 +2,12 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
+import { api } from '../api'
 import ModeConfigModal from '../components/ModeConfigModal.vue'
 import SettingsPanel from '../components/SettingsPanel.vue'
 import ChapterList from '../components/ChapterList.vue'
 import BatchTaskModal from '../components/BatchTaskModal.vue'
+import GenerationTerminal from '../components/GenerationTerminal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +28,12 @@ const pageMode = ref<'scroll' | 'click'>('scroll')
 const currentPageIndex = ref(0)
 const totalPages = ref(1)
 const isTextTransitioning = ref(false)
+const isAiLoading = ref(false)
+const showTerminal = ref(false)
+const generatingTitle = ref('')
+const streamingContent = ref('')
+const toastMsg = ref('')
+const showToast = ref(false)
 
 // --- 2. 计算属性 ---
 const activeBook = computed(() => bookStore.activeBook)
@@ -38,9 +46,13 @@ const currentText = computed(() => {
 })
 
 const activeModeName = computed(() => {
-  const map: Record<string, string> = { 'original': '原文', 'dewater': '标准沉浸', 'summary': '轻度精简', 'speed': '极简速读' }
-  const key = isMagicActive.value ? (activeBook.value?.activeModeId || 'original') : 'original'
-  return map[key] || key
+  if (!isMagicActive.value) return '原文'
+  const modeId = activeBook.value?.activeModeId
+  if (!modeId || modeId === 'original') return '原文'
+  
+  // Try to find in fetched prompts
+  const prompt = bookStore.prompts.find(p => p.id.toString() === modeId || p.id === parseInt(modeId))
+  return prompt ? prompt.name : modeId
 })
 
 // --- 3. 核心分页算法 ---
@@ -96,6 +108,26 @@ const switchChapter = (index: number, targetPosition: 'start' | 'end' = 'start')
   
   // 核心：等待数据渲染后重新分页
   setTimeout(async () => {
+    // Auto-downgrade if content missing for current mode
+    if (isMagicActive.value && activeBook.value && activeChapter.value) {
+       const modeId = activeBook.value.activeModeId
+       // Try to load if it's marked as trimmed but missing locally
+       if (modeId && !activeChapter.value.modes[modeId]) {
+          const isTrimmed = activeChapter.value.trimmed_prompt_ids?.includes(Number(modeId))
+          if (isTrimmed) {
+             // Attempt silent fetch
+             await bookStore.fetchChapterTrim(activeChapter.value.id, Number(modeId))
+          }
+       }
+       
+       // Final check: still no content? Downgrade.
+       if (modeId && !activeChapter.value.modes[modeId]) {
+          isMagicActive.value = false
+          const p = bookStore.prompts.find(p => p.id.toString() === modeId)
+          showNotification(`本章暂无[${p?.name || 'AI'}]数据，已切回原文。点击魔法棒可精简。`)
+       }
+    }
+
     if (pageMode.value === 'click') {
       await calculatePages(targetPosition)
     } else {
@@ -156,8 +188,13 @@ watch([currentText, fontSize, pageMode], () => {
   }
 })
 
-onMounted(() => {
-  if (!bookStore.activeBook || bookStore.activeBook.id !== bookId) bookStore.setActiveBook(bookId)
+onMounted(async () => {
+  // Fetch real data
+  await Promise.all([
+    bookStore.fetchBookDetail(bookId),
+    bookStore.fetchPrompts()
+  ])
+  
   if (!bookStore.activeBook) {
     router.replace('/shelf')
     return
@@ -165,10 +202,13 @@ onMounted(() => {
   
   if (bookStore.activeBook.status === 'new') {
     showConfigModal.value = true
-  } else if (bookStore.activeBook.status === 'ready') {
-    isMagicActive.value = true
-  }
+  } 
   
+  // Set default active mode if not set
+  if (!bookStore.activeBook.activeModeId && bookStore.prompts.length > 0) {
+     bookStore.activeBook.activeModeId = bookStore.prompts[0].id.toString()
+  }
+
   if (pageMode.value === 'click') {
     calculatePages('start')
   }
@@ -197,48 +237,178 @@ const handleContentClick = (e: MouseEvent) => {
   }
 }
 
-const toggleMagic = () => {
-  if (!activeBook.value || activeBook.value.status !== 'ready') {
-    alert('暂无精简数据，请先配置 AI')
-    showConfigModal.value = true
+// Switching Logic
+const switchToMode = async (modeId: string, showModalOnFailure: boolean = true) => {
+  if (!activeBook.value || !activeChapter.value) return
+  
+  // 1. Check Local
+  if (activeChapter.value.modes[modeId]) {
+    activeBook.value.activeModeId = modeId
+    isMagicActive.value = true
+    if (pageMode.value === 'click') calculatePages('start')
     return
   }
+
+  // 2. Check Remote
   isTextTransitioning.value = true
-  setTimeout(() => {
-    isMagicActive.value = !isMagicActive.value
-    isTextTransitioning.value = false
+  isAiLoading.value = true
+  const hasData = await bookStore.fetchChapterTrim(activeChapter.value.id, parseInt(modeId))
+  isAiLoading.value = false
+  isTextTransitioning.value = false
+  
+  if (hasData) {
+    activeBook.value.activeModeId = modeId
+    isMagicActive.value = true
     if (pageMode.value === 'click') calculatePages('start')
-  }, 300)
+  } else if (showModalOnFailure) {
+    // 3. Ask to Generate
+    activeBook.value.activeModeId = modeId // Set target intent
+    showConfigModal.value = true // Re-use modal for confirmation/start
+  } else {
+    // Silent mode: just set the target, computed will handle fallback
+    activeBook.value.activeModeId = modeId
+    if (pageMode.value === 'click') calculatePages('start')
+  }
 }
 
-const handleStartProcess = (modeId: string) => {
-  showConfigModal.value = false
-  bookStore.updateBookStatus(bookId, 'processing')
-  setTimeout(() => {
-    bookStore.updateBookStatus(bookId, 'ready')
-    if (activeBook.value) {
-      activeBook.value.activeModeId = modeId
-      isMagicActive.value = true
-      if (pageMode.value === 'click') calculatePages('start')
+const toggleMagic = () => {
+  if (isMagicActive.value) {
+    // Switch to Original
+    isMagicActive.value = false
+    if (pageMode.value === 'click') calculatePages('start')
+  } else {
+    // Switch to AI Mode
+    const targetMode = activeBook.value?.activeModeId || (bookStore.prompts[0]?.id.toString())
+    if (!targetMode) {
+      showConfigModal.value = true
+      return
     }
-  }, 2000)
+    switchToMode(targetMode, true)
+  }
+}
+
+// Long Press Logic
+let longPressTimer: any
+const startLongPress = () => {
+  longPressTimer = setTimeout(() => {
+    showConfigModal.value = true
+  }, 600)
+}
+const endLongPress = () => {
+  clearTimeout(longPressTimer)
+}
+
+const showNotification = (msg: string) => {
+  toastMsg.value = msg
+  showToast.value = true
+  setTimeout(() => { showToast.value = false }, 3500)
+}
+
+const handleTerminalClose = () => {
+  showTerminal.value = false
+  showNotification('AI 精简将在后台继续...')
+}
+
+const handleStartProcess = async (modeId: string | number) => {
+  if (!activeBook.value || !activeChapter.value) return
+  
+  const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
+  if (isNaN(promptId)) return
+
+  // Check if already trimmed
+  if (activeChapter.value.trimmed_prompt_ids?.includes(promptId)) {
+     showConfigModal.value = false
+     await switchToMode(promptId.toString(), false)
+     return
+  }
+
+  showConfigModal.value = false
+  
+  // Start Terminal Mode
+  const promptName = bookStore.prompts.find(p => p.id === promptId)?.name || 'Processing'
+  generatingTitle.value = promptName
+  streamingContent.value = ''
+  showTerminal.value = true
+  
+  await api.trimStream(
+    activeChapter.value.id,
+    promptId,
+    (text) => {
+       streamingContent.value += text
+    },
+    (err) => {
+       console.error(err)
+       showTerminal.value = false
+       showNotification('生成失败: ' + err)
+    },
+    () => {
+       // Done
+       const isForeground = showTerminal.value
+       
+                // Apply Content
+                if (activeChapter.value) {
+                   activeChapter.value.modes[promptId.toString()] = streamingContent.value.split(/\\n|\n|\r\n/)
+                   if (!activeChapter.value.trimmed_prompt_ids.includes(promptId)) {             activeChapter.value.trimmed_prompt_ids.push(promptId)
+          }
+          
+          if (isForeground) {
+            // Foreground: Auto switch
+            setTimeout(async () => {
+               showTerminal.value = false
+               
+                           // Switch view
+                           activeBook.value!.activeModeId = promptId.toString()
+                           isMagicActive.value = true
+                           isTextTransitioning.value = true
+                           
+                           await nextTick()
+                           
+                           setTimeout(async () => {
+                              if (pageMode.value === 'click') {
+                                  // First pass (might be hidden)
+                                  await calculatePages('start')
+                              }
+                              isTextTransitioning.value = false
+                              
+                              // Second pass (visible and stable) - Fixes missing content issue
+                              if (pageMode.value === 'click') {
+                                  setTimeout(() => calculatePages('start'), 50)
+                              }
+                           }, 300)            }, 800)
+          } else {
+            // Background: Notify
+            showNotification(`[${promptName}] 精简已完成`)
+          }
+       }
+    }
+  )
 }
 
 const handleModeChange = (modeId: string) => {
-  if (activeBook.value) {
-    activeBook.value.activeModeId = modeId
-    if (!isMagicActive.value) isMagicActive.value = true
-    isTextTransitioning.value = true
-    setTimeout(() => {
-      isTextTransitioning.value = false
-      if (pageMode.value === 'click') calculatePages('start')
-    }, 300)
-  }
+   // From Settings Panel
+   if (modeId === 'original') {
+     isMagicActive.value = false
+   } else {
+     switchToMode(modeId, false)
+   }
 }
 
-const handleBatchTask = (modeId: string) => {
+const handleBatchTask = async (modeId: string | number) => {
+  if (!activeBook.value) return
+  const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
+  if (isNaN(promptId)) return
+
   showBatchModal.value = false
-  alert(`已启动全书 [${modeId}] 任务，请在书架查看进度`)
+  try {
+    const res = await api.startBatchTrim(activeBook.value.id, promptId)
+    if (res.data.code === 0) {
+      alert(`已启动全书处理任务，任务 ID: ${res.data.data.task_id}。您可以在书架关注处理进度。`)
+    } else {
+      alert(`启动失败: ${res.data.msg}`)
+    }
+  } catch (e: any) {
+    alert(`网络错误: ${e.message}`)
+  }
 }
 </script>
 
@@ -263,8 +433,8 @@ const handleBatchTask = (modeId: string) => {
       id="reader-viewport"
       @click="handleContentClick" 
       :class="[
-        pageMode === 'scroll' ? 'overflow-y-auto' : 'overflow-hidden touch-none',
-        'flex-1 relative no-scrollbar'
+        pageMode === 'scroll' ? 'overflow-y-auto touch-pan-y' : 'overflow-hidden touch-none',
+        'flex-1 relative no-scrollbar min-h-0 w-full'
       ]">
       
       <!-- 主画布：使用 Transform 进行物理位移 -->
@@ -295,7 +465,18 @@ const handleBatchTask = (modeId: string) => {
 
           <div class="content-body">
              <p v-for="(para, index) in currentText" :key="index" 
-                class="mb-6 indent-8 break-inside-avoid-column">{{ para }}</p>
+                class="mb-6 indent-8">{{ para }}</p>
+          </div>
+
+          <!-- Bottom Next Chapter Button -->
+          <div v-if="pageMode === 'scroll' && activeBook && activeBook.activeChapterIndex < activeBook.chapters.length - 1" 
+               class="mt-12 mb-8 flex justify-center break-inside-avoid-column">
+             <button @click.stop="nextChapter" 
+               :class="isDarkMode ? 'bg-stone-800 text-stone-300 hover:bg-stone-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'"
+               class="px-8 py-3 rounded-full font-bold text-sm transition-colors shadow-sm flex items-center gap-2">
+               <span>下一章</span>
+               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+             </button>
           </div>
           
           <div v-if="pageMode === 'scroll'" class="h-32"></div>
@@ -336,12 +517,14 @@ const handleBatchTask = (modeId: string) => {
 
     <transition name="pop">
       <div v-show="menuVisible" class="fixed bottom-20 right-6 z-40">
-        <button @click.stop="toggleMagic"
+        <button @click.stop="toggleMagic" 
+          @mousedown="startLongPress" @touchstart="startLongPress" 
+          @mouseup="endLongPress" @mouseleave="endLongPress" @touchend="endLongPress"
           :class="[
             isMagicActive ? 'bg-teal-500 text-white shadow-teal-500/40 rotate-12' : (isDarkMode ? 'bg-stone-700 text-stone-200 shadow-black/50' : 'bg-stone-800 text-white shadow-stone-800/30')
           ]"
-          class="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all transform active:scale-95 hover:-translate-y-1 hover:shadow-xl">
-          <svg v-if="!isTextTransitioning" class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          class="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all transform active:scale-95 hover:-translate-y-1 hover:shadow-xl select-none">
+          <svg v-if="!isAiLoading" class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
           <svg v-else class="animate-spin w-7 h-7" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
         </button>
       </div>
@@ -351,16 +534,33 @@ const handleBatchTask = (modeId: string) => {
       <div v-show="menuVisible" 
         :class="isDarkMode ? 'bg-stone-900/95 border-stone-800' : 'bg-white/95 border-stone-100'"
         class="fixed bottom-0 inset-x-0 backdrop-blur z-30 border-t pb-safe transition-colors">
-        <div class="h-16 flex items-center justify-between px-8 max-w-2xl mx-auto relative">
-          <button @click.stop="showChapterList = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-12 transition-colors">
+        <div class="h-16 flex items-center justify-between px-4 sm:px-8 max-w-2xl mx-auto">
+          <!-- 目录 -->
+          <button @click.stop="showChapterList = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-14 transition-colors">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
             <span class="text-[10px]">目录</span>
           </button>
-          <button @click.stop="showBatchModal = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-16 transition-colors">
+
+          <!-- 上一章 -->
+          <button @click.stop="prevChapter" :class="isDarkMode ? 'text-stone-500 hover:text-stone-300' : 'text-stone-400 hover:text-stone-600'" class="flex flex-col items-center gap-1 w-14 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <span class="text-[10px]">上一章</span>
+          </button>
+
+          <!-- 全书处理 -->
+          <button @click.stop="showBatchModal = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-14 transition-colors">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
             <span class="text-[10px]">全书处理</span>
           </button>
-          <button @click.stop="showSettings = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-12 transition-colors">
+
+          <!-- 下一章 -->
+          <button @click.stop="nextChapter" :class="isDarkMode ? 'text-stone-500 hover:text-stone-300' : 'text-stone-400 hover:text-stone-600'" class="flex flex-col items-center gap-1 w-14 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            <span class="text-[10px]">下一章</span>
+          </button>
+
+          <!-- 设置 -->
+          <button @click.stop="showSettings = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-14 transition-colors">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
             <span class="text-[10px]">设置</span>
           </button>
@@ -369,10 +569,34 @@ const handleBatchTask = (modeId: string) => {
     </transition>
 
     <!-- Modals -->
-    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :is-dark-mode="isDarkMode" @close="showConfigModal = false" @start="handleStartProcess" />
-    <SettingsPanel :show="showSettings" :modes="Object.keys(activeChapter?.modes || {}).filter(k => k !== 'original')" :active-mode="activeBook?.activeModeId || ''" v-model:font-size="fontSize" v-model:is-dark-mode="isDarkMode" v-model:page-mode="pageMode" @close="showSettings = false" @update:active-mode="handleModeChange" @add-mode="showSettings = false; showConfigModal = true" />
+    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :is-dark-mode="isDarkMode" @close="showConfigModal = false" @start="handleStartProcess" />
+    <SettingsPanel 
+      :show="showSettings" 
+      :modes="bookStore.prompts.map(p => p.id.toString())" 
+      :prompts="bookStore.prompts" 
+      :active-mode="activeBook?.activeModeId || ''" 
+      v-model:font-size="fontSize" 
+      v-model:is-dark-mode="isDarkMode" 
+      v-model:page-mode="pageMode" 
+      @close="showSettings = false" 
+      @update:active-mode="handleModeChange" 
+      @add-mode="showSettings = false; showConfigModal = true" 
+    />
     <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :is-dark-mode="isDarkMode" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
-    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :is-dark-mode="isDarkMode" @close="showBatchModal = false" @confirm="handleBatchTask" />
+    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :is-dark-mode="isDarkMode" @close="showBatchModal = false" @confirm="handleBatchTask" />
+    
+    <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :is-dark-mode="isDarkMode" @close="handleTerminalClose" />
+
+    <!-- Toast Notification -->
+    <transition name="toast">
+      <div v-if="showToast" class="fixed bottom-36 left-1/2 -translate-x-1/2 z-[60] pointer-events-none">
+        <div :class="isDarkMode ? 'bg-stone-800 text-stone-200 border-stone-700' : 'bg-stone-900 text-white'" 
+             class="px-5 py-2.5 rounded-full text-xs font-medium shadow-2xl border flex items-center gap-2 whitespace-nowrap">
+          <svg class="w-4 h-4 text-teal-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-12 0 8 8 0 0112 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+          {{ toastMsg }}
+        </div>
+      </div>
+    </transition>
 
   </div>
 </template>
@@ -384,5 +608,7 @@ const handleBatchTask = (modeId: string) => {
 .slide-down-enter-from, .slide-down-leave-to { transform: translateY(-100%); }
 .pop-enter-active, .pop-leave-active { transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s; }
 .pop-enter-from, .pop-leave-to { transform: scale(0) rotate(-45deg); opacity: 0; }
+.toast-enter-active, .toast-leave-active { transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, 20px) scale(0.9); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 </style>

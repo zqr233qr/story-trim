@@ -19,19 +19,21 @@ type Task struct {
 }
 
 type Prompt struct {
-	ID      uint   `json:"id"`
-	Name    string `json:"name"`
-	
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsDefault   bool   `json:"is_default"`
+
 	// Executable Content
-	PromptContent        string `json:"prompt_content"`         // 具体执行要求
-	SummaryPromptContent string `json:"summary_prompt_content"` // 摘要要求 (仅对 Type=1 或 Summary 任务有效)
-	
-	IsSystem bool `json:"is_system"`
+	PromptContent        string `json:"-"` // 具体执行要求
+	SummaryPromptContent string `json:"-"` // 摘要要求 (仅对 Type=1 或 Summary 任务有效)
+
+	IsSystem bool `json:"-"`
 
 	// Constraint Fields
-	Type             int     `json:"type"`               // 0: Trim, 1: SummaryConfig
-	TargetRatioMin   float64 `json:"target_ratio_min"`   // e.g. 0.50
-	TargetRatioMax   float64 `json:"target_ratio_max"`   // e.g. 0.60
-	BoundaryRatioMin float64 `json:"boundary_ratio_min"` // e.g. 0.45
-	BoundaryRatioMax float64 `json:"boundary_ratio_max"` // e.g. 0.65
+	Type             int     `json:"-"` // 0: Trim, 1: SummaryConfig
+	TargetRatioMin   float64 `json:"-"` // e.g. 0.50
+	TargetRatioMax   float64 `json:"-"` // e.g. 0.60
+	BoundaryRatioMin float64 `json:"-"` // e.g. 0.45
+	BoundaryRatioMax float64 `json:"-"` // e.g. 0.65
 }

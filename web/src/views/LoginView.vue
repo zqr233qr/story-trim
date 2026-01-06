@@ -19,27 +19,21 @@ const handleSubmit = async () => {
   errorMsg.value = ''
 
   try {
-    // Mock Login for UI Preview
-    // if (isLogin.value) {
-    //   res = await api.login({ username: username.value, password: password.value })
-    // } else { ... }
+    let res;
+    if (isLogin.value) {
+      res = await api.login({ username: username.value, password: password.value })
+    } else {
+      await api.register({ username: username.value, password: password.value })
+      // Auto login after register
+      res = await api.login({ username: username.value, password: password.value })
+    }
 
-    // 模拟登录成功 (即使后端未启动)
-    setTimeout(() => {
-      const mockToken = 'mock-token-' + Date.now()
-      userStore.setLogin(mockToken, username.value)
-      router.push('/shelf')
-    }, 500)
-    
-    // Original Logic (Commented out)
-    /*
     if (res && res.data.code === 0) {
       userStore.setLogin(res.data.data.token, username.value)
       router.push('/shelf')
     } else {
       errorMsg.value = res?.data.msg || '操作失败'
     }
-    */
   } catch (e: any) {
     errorMsg.value = e.message || '网络错误'
   } finally {

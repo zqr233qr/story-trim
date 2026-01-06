@@ -8,7 +8,7 @@ import (
 type BookService interface {
 	UploadAndProcess(ctx context.Context, userID uint, filename string, data []byte) (*domain.Book, error)
 	GetChapterDetail(ctx context.Context, chapterID uint) (*domain.Chapter, *domain.RawContent, error)
-	GetChapterWithTrim(ctx context.Context, userID uint, chapterID uint, promptID uint) (*domain.Chapter, *domain.RawContent, string, error)
+	GetTrimmedContent(ctx context.Context, userID uint, chapterID uint, promptID uint) (string, error)
 	ListUserBooks(ctx context.Context, userID uint) ([]domain.Book, error)
 }
 

@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useBookStore, type Book } from '../stores/book'
 import BookCard from '../components/BookCard.vue'
-import { api } from '../api'
 
 const router = useRouter()
 const userStore = useUserStore()
 const bookStore = useBookStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 
+onMounted(() => {
+  bookStore.fetchBooks()
+})
+
 const handleBookClick = (book: Book) => {
   bookStore.setActiveBook(book.id)
-  // 如果是新书，也进入阅读页，但在阅读页会自动弹出配置
   router.push(`/reader/${book.id}`)
 }
 
@@ -26,20 +28,7 @@ const handleFileChange = async (event: Event) => {
   if (!file) return
 
   try {
-    const res = await api.upload(file)
-    if (res.data.code === 0) {
-      // Refresh list or add locally
-      // Currently using mock store, so manual add
-      const newBook: Book = {
-        id: res.data.data.id,
-        title: res.data.data.title,
-        lastChapter: '未开始阅读',
-        progress: 0,
-        status: 'new',
-        modes: {}
-      }
-      bookStore.books.unshift(newBook)
-    }
+    await bookStore.uploadBook(file)
   } catch (e) {
     alert('上传失败')
   }

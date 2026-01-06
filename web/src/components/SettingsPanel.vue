@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+
+interface Prompt {
+  id: number;
+  name: string;
+}
 
 const props = defineProps<{
   show: boolean,
-  modes: string[],
+  modes: string[], // List of mode IDs that have content
+  prompts: Prompt[], // Complete list of available prompts for naming
   activeMode: string,
   fontSize: number,
   isDarkMode: boolean,
@@ -12,11 +18,10 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'update:activeMode', 'update:fontSize', 'update:isDarkMode', 'update:pageMode', 'addMode'])
 
-const modeNames: Record<string, string> = {
-  'original': '原文',
-  'dewater': '标准沉浸',
-  'summary': '轻度精简',
-  'speed': '极简速读'
+const getModeName = (id: string) => {
+  if (id === 'original') return '原文'
+  const prompt = props.prompts.find(p => p.id.toString() === id)
+  return prompt ? prompt.name : id
 }
 </script>
 
@@ -34,7 +39,6 @@ const modeNames: Record<string, string> = {
         <div class="mb-8">
           <div class="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3 flex justify-between">
             <span>AI 阅读层</span>
-            <span class="text-teal-600 font-normal cursor-pointer text-[10px] hover:underline" @click="emit('addMode')">+ 新增处理</span>
           </div>
 
           <div v-if="modes.length > 0" class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
@@ -42,7 +46,7 @@ const modeNames: Record<string, string> = {
               @click="emit('update:activeMode', modeKey)"
               :class="activeMode === modeKey ? 'bg-teal-500 text-white border-transparent shadow-md shadow-teal-200' : 'bg-white text-stone-600 border-stone-200 hover:border-teal-300'"
               class="px-4 py-2 rounded-full text-xs font-medium border flex-shrink-0 transition-all">
-              {{ modeNames[modeKey] || modeKey }}
+              {{ getModeName(modeKey) }}
             </button>
           </div>
           <div v-else class="text-sm text-stone-400 italic bg-stone-50 p-3 rounded-lg text-center">当前书籍尚未进行 AI 处理</div>

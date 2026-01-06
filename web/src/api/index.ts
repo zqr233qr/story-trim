@@ -58,6 +58,7 @@ export interface Chapter {
   title: string;
   content?: string; // 详情时才有
   trimmed_content?: string; // 详情时才有
+  trimmed_prompt_ids?: number[]; // 新增：该章节已精简过的prompt列表
 }
 
 export interface ReadingHistory {
@@ -75,6 +76,8 @@ export interface BookDetail {
 export interface Prompt {
   id: number;
   name: string;
+  description?: string; // 新增
+  is_default?: boolean; // 新增
   version: string;
   content: string;
   is_system: boolean;
@@ -107,8 +110,11 @@ export const api = {
   getBookDetail: (id: number, promptId?: number) => 
     client.get<Response<BookDetail>>(`/books/${id}`, { params: { prompt_id: promptId } }),
   
-  getChapter: (id: number, promptId?: number) => 
-    client.get<Response<Chapter>>(`/chapters/${id}`, { params: { prompt_id: promptId } }),
+  getChapter: (id: number) => 
+    client.get<Response<Chapter>>(`/chapters/${id}`),
+
+  getChapterTrim: (id: number, promptId: number) => 
+    client.get<Response<{ prompt_id: number, trimmed_content: string }>>(`/chapters/${id}/trim`, { params: { prompt_id: promptId } }),
   
   getPrompts: () => client.get<Response<Prompt[]>>('/prompts'),
 
@@ -159,9 +165,18 @@ export const api = {
 
         for (const line of lines) {
           if (line.startsWith('data:')) {
-            let data = line.substring(5);
-            if (data.startsWith(' ')) data = data.substring(1); // 去除第一个空格
-            onData(data);
+            let rawData = line.substring(5);
+            if (rawData.startsWith(' ')) rawData = rawData.substring(1); 
+            
+            try {
+              const parsed = JSON.parse(rawData);
+              if (parsed && typeof parsed.c === 'string') {
+                onData(parsed.c);
+              }
+            } catch (e) {
+              // 降级处理：如果不是JSON，则作为原始字符串处理（兼容旧数据或异常）
+              onData(rawData);
+            }
           }
         }
       }

@@ -37,6 +37,7 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 				protected.GET("/prompts", storyH.ListPrompts)
 				protected.GET("/books/:id", storyH.GetBookDetail)
 				protected.GET("/chapters/:id", storyH.GetChapter)
+				protected.GET("/chapters/:id/trim", storyH.GetChapterTrim)
 				protected.POST("/trim/stream", storyH.TrimStream)
 
 				// Task 模块

@@ -322,6 +322,14 @@ func (r *repository) GetUserTrimmedIDs(ctx context.Context, userID, bookID, prom
 	return ids, err
 }
 
+func (r *repository) GetChapterTrimmedPromptIDs(ctx context.Context, userID, bookID, chapterID uint) ([]uint, error) {
+	var ids []uint
+	err := r.db.WithContext(ctx).Model(&UserProcessedChapter{}).
+		Where("user_id = ? AND book_id = ? AND chapter_id = ?", userID, bookID, chapterID).
+		Pluck("prompt_id", &ids).Error
+	return ids, err
+}
+
 // --- UserRepository 实现 ---
 
 func (r *repository) Create(ctx context.Context, user *domain.User) error {
@@ -421,6 +429,8 @@ func (r *repository) GetPromptByID(ctx context.Context, id uint) (*domain.Prompt
 	return &domain.Prompt{
 		ID:                   p.ID,
 		Name:                 p.Name,
+		Description:          p.Description,
+		IsDefault:            p.IsDefault,
 		PromptContent:        p.PromptContent,
 		SummaryPromptContent: p.SummaryPromptContent,
 		IsSystem:             p.IsSystem,
@@ -434,17 +444,16 @@ func (r *repository) GetPromptByID(ctx context.Context, id uint) (*domain.Prompt
 
 func (r *repository) ListSystemPrompts(ctx context.Context) ([]domain.Prompt, error) {
 	var dbPs []Prompt
-	if err := r.db.WithContext(ctx).Where("is_system = ?", true).Find(&dbPs).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("is_system = ? and type = 0", true).Find(&dbPs).Error; err != nil {
 		return nil, err
 	}
 	var res []domain.Prompt
 	for _, p := range dbPs {
 		res = append(res, domain.Prompt{
-			ID:                   p.ID,
-			Name:                 p.Name,
-			PromptContent:        p.PromptContent,
-			SummaryPromptContent: p.SummaryPromptContent,
-			IsSystem:             p.IsSystem,
+			ID:          p.ID,
+			Name:        p.Name,
+			Description: p.Description,
+			IsDefault:   p.IsDefault,
 		})
 	}
 	return res, nil
