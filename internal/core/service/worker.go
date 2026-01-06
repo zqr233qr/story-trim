@@ -10,6 +10,7 @@ import (
 
 	"github/zqr233qr/story-trim/internal/core/domain"
 	"github/zqr233qr/story-trim/internal/core/port"
+	"github/zqr233qr/story-trim/pkg/config"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -29,9 +30,9 @@ type workerService struct {
 }
 
 func NewWorkerService(br port.BookRepository, cr port.CacheRepository, ar port.ActionRepository, tr port.TaskRepository, pr port.PromptRepository, llm port.LLMPort, cfg *TrimConfig) *workerService {
-	tmplBatch, _ := template.ParseFiles("pkg/config/trimAndSummaryPrompt.tmpl")
-	tmplSum, _ := template.ParseFiles("pkg/config/summaryOnlyPrompt.tmpl")
-	tmplTrim, _ := template.ParseFiles("pkg/config/trimPrompt.tmpl")
+	tmplBatch, _ := template.ParseFS(config.Templates, "trimAndSummaryPrompt.tmpl")
+	tmplSum, _ := template.ParseFS(config.Templates, "summaryOnlyPrompt.tmpl")
+	tmplTrim, _ := template.ParseFS(config.Templates, "trimPrompt.tmpl")
 
 	return &workerService{
 		bookRepo:   br,

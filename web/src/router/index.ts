@@ -1,8 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import DashboardView from '../views/DashboardView.vue'
-import LoginView from '../views/LoginView.vue'
-import ReaderView from '../views/ReaderView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -10,37 +7,31 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: LoginView
+      component: () => import('../views/LoginView.vue')
     },
     {
-      path: '/dashboard',
-      name: 'dashboard',
-      component: DashboardView,
+      path: '/shelf',
+      name: 'shelf',
+      component: () => import('../views/BookshelfView.vue'),
       meta: { requiresAuth: true }
     },
     {
-      path: '/reader',
+      path: '/reader/:id',
       name: 'reader',
-      component: ReaderView,
+      component: () => import('../views/ReaderView.vue'),
       meta: { requiresAuth: true }
     },
     {
       path: '/',
-      redirect: '/dashboard'
+      redirect: '/shelf'
     }
   ]
 })
 
-// 全局前置守卫：校验登录状态
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
-  
-  if (to.meta.requiresAuth && !userStore.isLoggedIn) {
-    // 需要登录但未登录，重定向到登录页
+  if (to.meta.requiresAuth && !userStore.isLoggedIn()) {
     next('/login')
-  } else if (to.name === 'login' && userStore.isLoggedIn) {
-    // 已登录状态访问登录页，重定向到首页
-    next('/dashboard')
   } else {
     next()
   }

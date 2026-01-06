@@ -1,10 +1,14 @@
 package config
 
 import (
+	"embed"
 	"strings"
 
 	"github.com/spf13/viper"
 )
+
+//go:embed *.tmpl
+var Templates embed.FS
 
 type Config struct {
 	FileStorage FileStorageConfig `mapstructure:"file_storage"`
@@ -46,6 +50,7 @@ type LLMConfig struct {
 
 func LoadConfig(path string) (*Config, error) {
 	viper.SetConfigFile(path)
+	viper.SetConfigType("yaml")
 	viper.SetConfigType("yaml")
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

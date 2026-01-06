@@ -10,6 +10,7 @@ import (
 
 	"github/zqr233qr/story-trim/internal/core/domain"
 	"github/zqr233qr/story-trim/internal/core/port"
+	"github/zqr233qr/story-trim/pkg/config"
 
 	"github.com/rs/zerolog/log"
 )
@@ -33,10 +34,10 @@ type trimService struct {
 }
 
 func NewTrimService(cr port.CacheRepository, br port.BookRepository, ar port.ActionRepository, pr port.PromptRepository, ws port.WorkerService, llm port.LLMPort, cfg *TrimConfig) *trimService {
-	// 预加载模板
-	tmpl, err := template.ParseFiles("pkg/config/trimPrompt.tmpl")
+	// 从嵌入的文件系统中加载模板
+	tmpl, err := template.ParseFS(config.Templates, "trimPrompt.tmpl")
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse trimPrompt.tmpl, service might fail")
+		log.Error().Err(err).Msg("Failed to parse embedded trimPrompt.tmpl")
 	}
 	
 	return &trimService{

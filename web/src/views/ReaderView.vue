@@ -1,303 +1,388 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { api, type Prompt } from '../api'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
-import { 
-  ArrowLeft, Download, CheckCircle2, Loader2, Play, Pause, Scissors, 
-  BookOpen, X, Layout, Columns, ChevronDown
-} from 'lucide-vue-next'
+import ModeConfigModal from '../components/ModeConfigModal.vue'
+import SettingsPanel from '../components/SettingsPanel.vue'
+import ChapterList from '../components/ChapterList.vue'
+import BatchTaskModal from '../components/BatchTaskModal.vue'
 
+const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
 
-// 1. 基础状态
-const chapters = computed(() => bookStore.chapters)
-const fileName = computed(() => bookStore.bookTitle)
-const selectedIndex = ref<number>(0)
-const isTrimming = ref(false)
-const viewMode = ref<'split' | 'trimmed' | 'original'>('trimmed')
-const showSidebar = ref(false)
-const readingMode = ref<'scroll' | 'page'>('scroll')
-const showControls = ref(true)
-const isChapterLoading = ref(false)
-const currentPage = ref(0)
+const bookId = parseInt(route.params.id as string)
+
+// --- 1. 状态定义 ---
+const menuVisible = ref(true)
+const showChapterList = ref(false)
+const showConfigModal = ref(false)
+const showBatchModal = ref(false)
+const showSettings = ref(false)
+const isMagicActive = ref(false)
+const isDarkMode = ref(false)
+const fontSize = ref(18)
+const pageMode = ref<'scroll' | 'click'>('scroll')
+const currentPageIndex = ref(0)
 const totalPages = ref(1)
+const isTextTransitioning = ref(false)
 
-// 提示词模板
-const prompts = ref<Prompt[]>([])
-const selectedPromptID = ref<number>(2) 
-const selectedPrompt = computed(() => prompts.value.find(p => p.id === selectedPromptID.value))
+// --- 2. 计算属性 ---
+const activeBook = computed(() => bookStore.activeBook)
+const activeChapter = computed(() => bookStore.activeChapter)
 
-// 2. 缓存池
-const trimmedCache = ref<Record<number, Record<number, string>>>({})
-const streamingContent = ref('')
-
-const trimmedContainer = ref<HTMLElement | null>(null)
-const pageContentRef = ref<HTMLElement | null>(null)
-
-const selectedChapter = computed(() => 
-  selectedIndex.value >= 0 ? chapters.value[selectedIndex.value] : null
-)
-
-const currentDisplayContent = computed(() => {
-  const pID = selectedPromptID.value
-  if (trimmedCache.value[pID]?.[selectedIndex.value]) {
-    return trimmedCache.value[pID][selectedIndex.value]
-  }
-  if (isTrimming.value) {
-    return streamingContent.value
-  }
-  return ''
+const currentText = computed(() => {
+  if (!activeChapter.value) return []
+  const modeKey = isMagicActive.value ? (activeBook.value?.activeModeId || 'original') : 'original'
+  return activeChapter.value.modes[modeKey] || activeChapter.value.modes['original'] || ['加载中...']
 })
 
-const isCurrentChapterTrimmed = computed(() => {
-  if (!selectedChapter.value) return false
-  const pID = selectedPromptID.value
-  return bookStore.trimmedIDs.includes(selectedChapter.value.id) || !!trimmedCache.value[pID]?.[selectedIndex.value]
+const activeModeName = computed(() => {
+  const map: Record<string, string> = { 'original': '原文', 'dewater': '标准沉浸', 'summary': '轻度精简', 'speed': '极简速读' }
+  const key = isMagicActive.value ? (activeBook.value?.activeModeId || 'original') : 'original'
+  return map[key] || key
 })
 
-const calculatePages = async () => {
-  if (readingMode.value !== 'page') return
-  await nextTick(); await nextTick()
-  if (pageContentRef.value) {
-    const el = pageContentRef.value
-    const gap = 48
-    const calculated = Math.round((el.scrollWidth + gap) / (el.clientWidth + gap))
-    totalPages.value = Math.max(1, calculated)
-  }
-}
+// --- 3. 核心分页算法 ---
 
-const fetchChapterContent = async (index: number) => {
-  const chap = chapters.value[index]
-  if (!chap) return
+/**
+ * 计算总页数并定位
+ * @param targetPosition 'start' 定位到第一页, 'end' 定位到最后一页
+ */
+const calculatePages = async (targetPosition: 'start' | 'end' = 'start') => {
+  const container = document.getElementById('reader-viewport')
+  const canvas = document.getElementById('reader-canvas')
+  if (!container || !canvas) return
 
-  const pID = selectedPromptID.value
+  // 1. 暂时取消位移以便测量
+  const originalTransition = canvas.style.transition
+  canvas.style.transition = 'none'
   
-  isChapterLoading.value = !chap.content 
-  try {
-    const res = await api.getChapter(chap.id, pID) 
-    if (res.data.code === 0) {
-      const data = res.data.data
-      bookStore.chapters[index].content = data.content // 更新 store 中的内容
-      
-      if (data.trimmed_content) {
-        if (!trimmedCache.value[pID]) trimmedCache.value[pID] = {}
-        trimmedCache.value[pID][index] = data.trimmed_content
-        bookStore.markChapterTrimmed(chap.id)
-      }
-    }
-  } catch (err) {
-    console.error(err)
-  } finally {
-    isChapterLoading.value = false
-  }
-}
-
-const selectChapter = (index: number, fromEnd = false) => {
-  if (index < 0 || index >= chapters.value.length) return
-  selectedIndex.value = index
-  fetchChapterContent(index)
-  if (window.innerWidth < 1024) showSidebar.value = false
+  await nextTick()
   
-  nextTick(() => {
-    if (fromEnd) {
-      setTimeout(() => { calculatePages().then(() => { currentPage.value = totalPages.value - 1 }) }, 100)
+  // 2. 高精度测量
+  // 在 CSS Columns 模式下，scrollWidth 代表了所有列的总宽度
+  const viewW = container.getBoundingClientRect().width
+  const totalW = canvas.scrollWidth
+  
+  if (viewW > 0) {
+    totalPages.value = Math.max(1, Math.round(totalW / viewW))
+    
+    // 3. 定位页码
+    if (targetPosition === 'end') {
+      currentPageIndex.value = totalPages.value - 1
     } else {
-      currentPage.value = 0
+      currentPageIndex.value = 0
     }
-    if (trimmedContainer.value) trimmedContainer.value.scrollTop = 0
-  })
-}
-
-const nextPage = () => {
-  if (currentPage.value < totalPages.value - 1) currentPage.value++
-  else if (selectedIndex.value < chapters.value.length - 1) selectChapter(selectedIndex.value + 1)
-}
-
-const prevPage = () => {
-  if (currentPage.value > 0) currentPage.value--
-  else if (selectedIndex.value > 0) selectChapter(selectedIndex.value - 1, true)
-}
-
-const processChapter = async () => {
-  if (!selectedChapter.value) return
-  const pID = selectedPromptID.value
+    
+    console.log(`[Paging] TotalW: ${totalW}, ViewW: ${viewW}, Pages: ${totalPages.value}, SetIndex: ${currentPageIndex.value}`)
+  }
   
-  streamingContent.value = ''
-  isTrimming.value = true
-  
-  await api.trimStream(
-    selectedChapter.value.id,
-    pID,
-    (text) => {
-      streamingContent.value += text
-      if (readingMode.value === 'scroll' && trimmedContainer.value) {
-        trimmedContainer.value.scrollTop = trimmedContainer.value.scrollHeight
-      }
-    },
-    (err) => { isTrimming.value = false },
-    () => {
-      if (!trimmedCache.value[pID]) trimmedCache.value[pID] = {}
-      trimmedCache.value[pID][selectedIndex.value] = streamingContent.value
-      streamingContent.value = ''
-      isTrimming.value = false
-      bookStore.markChapterTrimmed(selectedChapter.value!.id)
-      calculatePages()
-    }
-  )
+  // 4. 恢复过渡动画
+  setTimeout(() => {
+    canvas.style.transition = originalTransition
+  }, 50)
 }
 
-// 批量精简：调用后台任务接口
-const startBatchTask = async () => {
-  try {
-    const res = await api.startBatchTrim(bookStore.currentBookId, selectedPromptID.value)
-    if (res.data.code === 0) {
-      bookStore.startTaskPolling(res.data.data.task_id)
+// 切换章节逻辑（处理跨章定位）
+const switchChapter = (index: number, targetPosition: 'start' | 'end' = 'start') => {
+  if (!activeBook.value) return
+  
+  // 开启转场遮罩，避免闪烁
+  isTextTransitioning.value = true
+  
+  // 切换数据
+  bookStore.setChapter(index)
+  
+  // 核心：等待数据渲染后重新分页
+  setTimeout(async () => {
+    if (pageMode.value === 'click') {
+      await calculatePages(targetPosition)
+    } else {
+      const container = document.getElementById('reader-viewport')
+      if (container) container.scrollTop = 0
     }
-  } catch (e) {
-    alert('启动任务失败')
+    isTextTransitioning.value = false
+  }, 60)
+}
+
+const nextChapter = () => {
+  if (!activeBook.value) return
+  const nextIdx = activeBook.value.activeChapterIndex + 1
+  if (nextIdx < activeBook.value.chapters.length) {
+    switchChapter(nextIdx, 'start')
+  } else {
+    alert('已经是最后一章了')
   }
 }
 
-onMounted(async () => {
-  if (chapters.value.length === 0) return router.replace('/dashboard')
-  
-  try {
-    const res = await api.getPrompts()
-    if (res.data.code === 0) prompts.value = res.data.data
-  } catch (e) {}
-
-  if (bookStore.lastReadInfo) {
-    selectedPromptID.value = bookStore.lastReadInfo.last_prompt_id
-    const idx = chapters.value.findIndex(c => c.id === bookStore.lastReadInfo!.last_chapter_id)
-    if (idx >= 0) selectedIndex.value = idx
+const prevChapter = () => {
+  if (!activeBook.value) return
+  const prevIdx = activeBook.value.activeChapterIndex - 1
+  if (prevIdx >= 0) {
+    // 关键：进入上一章并定位到最后一页
+    switchChapter(prevIdx, 'end')
+  } else {
+    alert('已经是第一章了')
   }
+}
 
-  selectChapter(selectedIndex.value)
-  window.addEventListener('resize', calculatePages)
+const navigatePage = (direction: number) => {
+  if (direction === 1) {
+    // 下一页
+    if (currentPageIndex.value + 1 < totalPages.value) {
+      currentPageIndex.value++
+    } else {
+      nextChapter()
+    }
+  } else {
+    // 上一页
+    if (currentPageIndex.value > 0) {
+      currentPageIndex.value--
+    } else {
+      prevChapter()
+    }
+  }
+}
+
+// --- 4. 监听与生命周期 ---
+watch(isDarkMode, (val) => {
+  document.body.style.backgroundColor = val ? '#1c1917' : '#fafaf9'
+}, { immediate: true })
+
+watch([currentText, fontSize, pageMode], () => {
+  if (pageMode.value === 'click') {
+    calculatePages('start')
+  }
 })
 
-watch([readingMode, viewMode, selectedPromptID], () => {
-  if (readingMode.value === 'page') {
-    currentPage.value = 0
-    if (viewMode.value === 'split') viewMode.value = 'trimmed'
-    setTimeout(calculatePages, 100)
+onMounted(() => {
+  if (!bookStore.activeBook || bookStore.activeBook.id !== bookId) bookStore.setActiveBook(bookId)
+  if (!bookStore.activeBook) {
+    router.replace('/shelf')
+    return
   }
-  fetchChapterContent(selectedIndex.value)
+  
+  if (bookStore.activeBook.status === 'new') {
+    showConfigModal.value = true
+  } else if (bookStore.activeBook.status === 'ready') {
+    isMagicActive.value = true
+  }
+  
+  if (pageMode.value === 'click') {
+    calculatePages('start')
+  }
 })
 
-onUnmounted(() => window.removeEventListener('resize', calculatePages))
+// --- 5. 事件处理 ---
+const handleContentClick = (e: MouseEvent) => {
+  if (menuVisible.value) {
+    menuVisible.value = false
+    return
+  }
+  if (pageMode.value === 'scroll') {
+    menuVisible.value = true
+    return
+  }
+  
+  const w = window.innerWidth
+  const x = e.clientX
+  
+  if (x < w * 0.3) {
+    navigatePage(-1)
+  } else if (x > w * 0.7) {
+    navigatePage(1)
+  } else {
+    menuVisible.value = true
+  }
+}
+
+const toggleMagic = () => {
+  if (!activeBook.value || activeBook.value.status !== 'ready') {
+    alert('暂无精简数据，请先配置 AI')
+    showConfigModal.value = true
+    return
+  }
+  isTextTransitioning.value = true
+  setTimeout(() => {
+    isMagicActive.value = !isMagicActive.value
+    isTextTransitioning.value = false
+    if (pageMode.value === 'click') calculatePages('start')
+  }, 300)
+}
+
+const handleStartProcess = (modeId: string) => {
+  showConfigModal.value = false
+  bookStore.updateBookStatus(bookId, 'processing')
+  setTimeout(() => {
+    bookStore.updateBookStatus(bookId, 'ready')
+    if (activeBook.value) {
+      activeBook.value.activeModeId = modeId
+      isMagicActive.value = true
+      if (pageMode.value === 'click') calculatePages('start')
+    }
+  }, 2000)
+}
+
+const handleModeChange = (modeId: string) => {
+  if (activeBook.value) {
+    activeBook.value.activeModeId = modeId
+    if (!isMagicActive.value) isMagicActive.value = true
+    isTextTransitioning.value = true
+    setTimeout(() => {
+      isTextTransitioning.value = false
+      if (pageMode.value === 'click') calculatePages('start')
+    }, 300)
+  }
+}
+
+const handleBatchTask = (modeId: string) => {
+  showBatchModal.value = false
+  alert(`已启动全书 [${modeId}] 任务，请在书架查看进度`)
+}
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-[#F9F7F1] overflow-hidden select-none font-sans text-slate-900">
-    <header class="h-14 bg-white/90 backdrop-blur-md border-b border-gray-200/50 flex items-center justify-between px-4 lg:px-6 shrink-0 fixed top-0 left-0 right-0 z-30 transition-transform duration-300" :class="showControls ? 'translate-y-0' : '-translate-y-full'">
-      <div class="flex items-center gap-2 lg:gap-4 flex-1 min-w-0">
-        <button @click.stop="showSidebar = true" class="lg:hidden p-2"><BookOpen class="w-5 h-5 text-teal-600" /></button>
-        <button @click="router.push('/dashboard')" class="hidden lg:block p-2 hover:bg-black/5 rounded-full"><ArrowLeft class="w-5 h-5 text-gray-600" /></button>
-        <div class="min-w-0">
-          <h1 class="font-bold text-gray-800 text-sm truncate max-w-[100px] lg:max-w-[180px]">{{ fileName }}</h1>
-        </div>
-      </div>
-      
-      <div class="flex items-center gap-1 bg-gray-100/50 rounded-lg p-1 border border-gray-200 mx-2">
-        <div class="relative group hidden sm:block mr-1">
-          <select v-model="selectedPromptID" class="appearance-none bg-white border-none text-[10px] font-bold px-2 py-1 pr-6 rounded shadow-sm focus:ring-0 cursor-pointer text-teal-700">
-            <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-          <ChevronDown class="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-teal-600" />
-        </div>
-        <button @click="readingMode = 'scroll'" class="p-1.5 rounded-md transition-colors" :class="readingMode === 'scroll' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-400'"><Layout class="w-4 h-4" /></button>
-        <button @click="readingMode = 'page'" class="p-1.5 rounded-md transition-colors" :class="readingMode === 'page' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-400'"><Columns class="w-4 h-4" /></button>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <button @click="viewMode = 'trimmed'" class="px-2.5 py-1 rounded-md text-[11px] font-bold" :class="viewMode === 'trimmed' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-400'">精简</button>
-        <button @click="viewMode = 'original'" class="px-2.5 py-1 rounded-md text-[11px] font-bold" :class="viewMode === 'original' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-400'">原文</button>
-      </div>
-
-      <div class="flex items-center gap-1">
-        <!-- 任务进度展示 -->
-        <div v-if="bookStore.isTaskRunning" class="flex items-center gap-2 mr-2 bg-slate-100 px-3 py-1 rounded-full">
-          <Loader2 class="w-3 h-3 animate-spin text-teal-600" />
-          <span class="text-[10px] font-bold text-slate-600">{{ bookStore.taskProgress }}%</span>
-        </div>
-
-        <button @click="processChapter" :disabled="isTrimming || isCurrentChapterTrimmed" class="p-2 transition-colors" :class="isCurrentChapterTrimmed ? 'text-teal-500' : 'text-gray-400'">
-          <Loader2 v-if="isTrimming" class="w-4 h-4 animate-spin" /><Scissors v-else class="w-4 h-4" />
+  <div :class="isDarkMode ? 'bg-stone-900 text-stone-300' : 'bg-[#fafaf9] text-stone-800'" class="h-screen w-full flex flex-col relative transition-colors duration-300 overflow-hidden">
+    
+    <!-- Top Bar -->
+    <transition name="slide-down">
+      <div v-show="menuVisible" 
+        :class="isDarkMode ? 'bg-stone-900/95 border-stone-800' : 'bg-white/95 border-stone-100'"
+        class="fixed top-0 inset-x-0 h-14 backdrop-blur z-30 flex items-center justify-between px-4 shadow-sm border-b transition-colors">
+        <button @click="router.push('/shelf')" :class="isDarkMode ? 'text-stone-400 hover:bg-stone-800' : 'text-stone-500 hover:bg-stone-100'" class="p-2 rounded-full transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
-        <button class="bg-black text-white p-2 rounded-full hover:bg-gray-800 transition-colors ml-1"><Download class="w-4 h-4" /></button>
+        <span :class="isDarkMode ? 'text-stone-300' : 'text-stone-800'" class="font-bold text-sm truncate max-w-[200px]">{{ activeBook?.title }}</span>
+        <div class="w-10"></div>
       </div>
-    </header>
+    </transition>
 
-    <div class="flex-1 overflow-hidden flex relative">
-      <aside class="bg-white border-r border-gray-100 flex flex-col shrink-0 fixed inset-y-0 left-0 w-72 z-50 transition-transform duration-300 transform lg:static lg:translate-x-0" :class="showSidebar ? 'translate-x-0' : '-translate-x-full'">
-        <div class="p-4 border-b border-gray-100 flex justify-between items-center lg:hidden"><span class="font-bold text-teal-600">目录</span><button @click="showSidebar = false"><X class="w-5 h-5 text-gray-400" /></button></div>
-        <div class="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-1">
-          <button v-for="(chap, idx) in chapters" :key="idx" @click.stop="selectChapter(idx)" class="w-full text-left px-3 py-3 lg:py-2 rounded-lg text-sm transition-colors flex justify-between items-center group" :class="selectedIndex === idx ? 'bg-teal-50 text-teal-700 font-bold' : 'text-gray-500 hover:bg-gray-50'">
-            <span class="truncate pr-4 text-[13px] lg:text-sm">{{ chap.title }}</span>
-            <CheckCircle2 v-if="bookStore.trimmedIDs.includes(chap.id)" class="w-3.5 h-3.5 text-teal-500 shrink-0" />
+    <!-- Reader Viewport -->
+    <main 
+      id="reader-viewport"
+      @click="handleContentClick" 
+      :class="[
+        pageMode === 'scroll' ? 'overflow-y-auto' : 'overflow-hidden touch-none',
+        'flex-1 relative no-scrollbar'
+      ]">
+      
+      <!-- 主画布：使用 Transform 进行物理位移 -->
+      <div 
+        id="reader-canvas"
+        :style="pageMode === 'click' ? {
+          columnWidth: '100vw',
+          columnGap: '0px',
+          columnFill: 'auto',
+          height: '100%',
+          transform: `translateX(-${currentPageIndex * 100}%)`,
+          transition: isTextTransitioning ? 'none' : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+        } : { height: 'auto' }"
+        class="w-full h-full"
+        :class="isTextTransitioning ? 'opacity-0' : 'opacity-100'">
+        
+        <article 
+          :style="{ fontSize: fontSize + 'px' }" 
+          :class="[
+            isDarkMode ? 'prose-invert text-stone-400' : 'text-stone-800',
+            pageMode === 'click' ? 'max-w-none px-8 py-20' : 'max-w-2xl mx-auto px-6 py-20'
+          ]"
+          class="prose prose-stone font-serif-sc text-justify leading-loose transition-colors select-none">
+          
+          <h2 class="text-2xl font-bold mb-10 text-center" :class="isDarkMode ? 'text-stone-100' : 'text-stone-900'">
+            {{ activeChapter?.title }}
+          </h2>
+
+          <div class="content-body">
+             <p v-for="(para, index) in currentText" :key="index" 
+                class="mb-6 indent-8 break-inside-avoid-column">{{ para }}</p>
+          </div>
+          
+          <div v-if="pageMode === 'scroll'" class="h-32"></div>
+        </article>
+      </div>
+
+      <!-- 影子容器 (仅用于静默测量，用户看不见) -->
+      <div 
+        id="shadow-measurer" 
+        class="absolute top-0 left-0 w-full pointer-events-none invisible"
+        style="height: auto; overflow: visible;">
+        <article :style="{ fontSize: fontSize + 'px' }" class="prose px-8 py-20 leading-loose">
+          <h2 class="text-2xl font-bold mb-10 text-center">{{ activeChapter?.title }}</h2>
+          <p v-for="(para, index) in currentText" :key="index" class="mb-6 indent-8">{{ para }}</p>
+        </article>
+      </div>
+    </main>
+
+    <!-- UI Overlays -->
+    
+    <!-- TOP-RIGHT: Mode Watermark (As requested) -->
+    <div class="fixed top-16 right-6 pointer-events-none transition-opacity duration-500 z-10"
+         :class="menuVisible ? 'opacity-0' : 'opacity-40'">
+      <span class="text-[9px] font-mono tracking-widest border px-1.5 py-0.5 rounded transition-colors shadow-sm" 
+            :class="isDarkMode ? 'text-stone-700 border-stone-800 bg-stone-950/50' : 'text-stone-300 border-stone-100 bg-white/50'">
+         {{ isMagicActive ? activeModeName : '原文' }}
+      </span>
+    </div>
+
+    <!-- BOTTOM-RIGHT: Page Number -->
+    <div v-if="pageMode === 'click'" 
+         class="fixed bottom-6 right-6 pointer-events-none transition-opacity duration-500 z-10"
+         :class="menuVisible ? 'opacity-0' : 'opacity-40'">
+      <span class="text-[10px] font-bold tracking-tighter" :class="isDarkMode ? 'text-stone-700' : 'text-stone-400'">
+         {{ currentPageIndex + 1 }} / {{ totalPages }}
+      </span>
+    </div>
+
+    <transition name="pop">
+      <div v-show="menuVisible" class="fixed bottom-20 right-6 z-40">
+        <button @click.stop="toggleMagic"
+          :class="[
+            isMagicActive ? 'bg-teal-500 text-white shadow-teal-500/40 rotate-12' : (isDarkMode ? 'bg-stone-700 text-stone-200 shadow-black/50' : 'bg-stone-800 text-white shadow-stone-800/30')
+          ]"
+          class="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all transform active:scale-95 hover:-translate-y-1 hover:shadow-xl">
+          <svg v-if="!isTextTransitioning" class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <svg v-else class="animate-spin w-7 h-7" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        </button>
+      </div>
+    </transition>
+
+    <transition name="slide-up">
+      <div v-show="menuVisible" 
+        :class="isDarkMode ? 'bg-stone-900/95 border-stone-800' : 'bg-white/95 border-stone-100'"
+        class="fixed bottom-0 inset-x-0 backdrop-blur z-30 border-t pb-safe transition-colors">
+        <div class="h-16 flex items-center justify-between px-8 max-w-2xl mx-auto relative">
+          <button @click.stop="showChapterList = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-12 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+            <span class="text-[10px]">目录</span>
+          </button>
+          <button @click.stop="showBatchModal = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-16 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            <span class="text-[10px]">全书处理</span>
+          </button>
+          <button @click.stop="showSettings = true" :class="isDarkMode ? 'text-stone-500' : 'text-stone-400'" class="flex flex-col items-center gap-1 w-12 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
+            <span class="text-[10px]">设置</span>
           </button>
         </div>
-      </aside>
+      </div>
+    </transition>
 
-      <main class="flex-1 flex overflow-hidden relative bg-[#F9F7F1]" @mousedown="() => showControls = !showControls">
-        <div v-if="isChapterLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#F9F7F1]/80 backdrop-blur-sm"><Loader2 class="w-8 h-8 animate-spin text-teal-600 mb-4" /><p class="text-xs text-gray-400 uppercase tracking-widest tracking-widest">Loading Content...</p></div>
+    <!-- Modals -->
+    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :is-dark-mode="isDarkMode" @close="showConfigModal = false" @start="handleStartProcess" />
+    <SettingsPanel :show="showSettings" :modes="Object.keys(activeChapter?.modes || {}).filter(k => k !== 'original')" :active-mode="activeBook?.activeModeId || ''" v-model:font-size="fontSize" v-model:is-dark-mode="isDarkMode" v-model:page-mode="pageMode" @close="showSettings = false" @update:active-mode="handleModeChange" @add-mode="showSettings = false; showConfigModal = true" />
+    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :is-dark-mode="isDarkMode" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
+    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :is-dark-mode="isDarkMode" @close="showBatchModal = false" @confirm="handleBatchTask" />
 
-        <!-- 分页模式 -->
-        <div v-if="readingMode === 'page'" class="flex-1 overflow-hidden px-6 lg:px-12 pt-20 pb-10 lg:pt-24 lg:pb-14">
-          <div ref="pageContentRef" class="h-full transition-transform duration-300 ease-out" :style="{ columnWidth: 'calc(100vw - 48px)', columnGap: '48px', transform: `translateX(calc(-${currentPage} * (100% + 48px)))`, display: 'block' }">
-            <div class="max-w-2xl mx-auto h-full">
-               <article class="prose prose-slate prose-lg font-serif leading-loose text-gray-800 whitespace-pre-wrap">
-                 <div class="mb-10 opacity-20 italic font-sans text-xs tracking-widest uppercase">{{ selectedChapter?.title }}</div>
-                 <template v-if="viewMode === 'original' || currentDisplayContent">
-                    {{ viewMode === 'original' ? selectedChapter?.content : currentDisplayContent }}
-                    <span v-if="isTrimming" class="inline-block w-1.5 h-5 bg-teal-500 ml-1 animate-pulse align-middle"></span>
-                 </template>
-                 <div v-else class="flex flex-col items-center justify-center h-64 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
-                    <Scissors class="w-10 h-10 mb-4 opacity-30" />
-                    <p class="text-sm font-medium">当前章节尚未精简</p>
-                    <div class="flex gap-3 mt-4">
-                      <button @click.stop="processChapter" class="px-6 py-2 bg-teal-600 text-white rounded-full text-xs font-bold shadow-lg shadow-teal-600/20 active:scale-95 transition-all">立即精简本章</button>
-                      <button @click.stop="startBatchTask" class="px-6 py-2 bg-slate-800 text-white rounded-full text-xs font-bold shadow-lg shadow-slate-800/20 active:scale-95 transition-all flex items-center gap-2"><Play class="w-3 h-3 text-teal-400" /> 精简全书</button>
-                    </div>
-                 </div>
-               </article>
-            </div>
-          </div>
-          <div class="absolute bottom-4 left-0 right-0 flex justify-center text-[10px] text-gray-300 font-medium tracking-tighter"><span>PAGE {{ currentPage + 1 }} / {{ totalPages }}</span></div>
-        </div>
-
-        <!-- 滚动模式 -->
-        <div v-else ref="trimmedContainer" class="flex-1 overflow-y-auto scroll-smooth pt-14 px-6 lg:px-12 py-10 lg:py-14">
-          <div v-if="viewMode === 'split'" class="flex flex-row min-h-full divide-x divide-gray-200/50">
-             <section class="flex-1 p-4 lg:p-8"><article class="prose prose-slate prose-lg font-serif leading-loose text-gray-400 whitespace-pre-wrap">{{ selectedChapter?.content }}</article></section>
-             <section class="flex-1 p-4 lg:p-8">
-                <article v-if="currentDisplayContent" class="prose prose-slate prose-lg font-serif leading-loose text-gray-800 whitespace-pre-wrap">{{ currentDisplayContent }}<span v-if="isTrimming" class="inline-block w-1.5 h-5 bg-teal-500 ml-1 animate-pulse align-middle"></span></article>
-                <div v-else class="flex flex-col items-center justify-center h-full text-gray-400">
-                   <Scissors class="w-8 h-8 mb-2 opacity-50" /><button @click="processChapter" class="text-xs text-teal-600 font-bold hover:underline">点击精简本章</button>
-                </div>
-             </section>
-          </div>
-          <div v-else class="max-w-2xl mx-auto p-8 lg:p-12 min-h-full">
-             <article v-if="viewMode === 'original' || currentDisplayContent" class="prose prose-slate prose-lg font-serif leading-loose text-gray-800 whitespace-pre-wrap">{{ viewMode === 'original' ? selectedChapter?.content : currentDisplayContent }}<span v-if="isTrimming" class="inline-block w-1.5 h-5 bg-teal-500 ml-1 animate-pulse align-middle"></span></article>
-             <div v-else class="flex flex-col items-center justify-center h-96 border-2 border-dashed border-gray-200 rounded-3xl text-gray-400">
-                <Scissors class="w-12 h-12 mb-4 opacity-20" /><p class="text-sm">尚未精简，点击上方工具栏按钮开始</p>
-                <div class="flex gap-4 mt-6">
-                  <button @click="processChapter" class="px-8 py-2.5 bg-teal-600 text-white rounded-full text-sm font-bold shadow-xl shadow-teal-600/30 active:scale-95 transition-all">立即精简</button>
-                  <button @click="startBatchTask" class="px-8 py-2.5 bg-slate-800 text-white rounded-full text-sm font-bold shadow-xl shadow-slate-800/20 active:scale-95 transition-all flex items-center gap-2"><Play class="w-4 h-4 text-teal-400" /> 精简全书</button>
-                </div>
-             </div>
-          </div>
-        </div>
-      </main>
-    </div>
   </div>
 </template>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
-article p { break-inside: avoid-column; margin-bottom: 1.5em; }
-[ref="pageContentRef"] { height: 100%; column-fill: auto; }
-select { border: none !important; outline: none !important; }
+.slide-up-enter-active, .slide-up-leave-active, 
+.slide-down-enter-active, .slide-down-leave-active { transition: transform 0.3s ease; }
+.slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+.slide-down-enter-from, .slide-down-leave-to { transform: translateY(-100%); }
+.pop-enter-active, .pop-leave-active { transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s; }
+.pop-enter-from, .pop-leave-to { transform: scale(0) rotate(-45deg); opacity: 0; }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 </style>

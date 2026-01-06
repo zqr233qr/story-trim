@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 
@@ -16,10 +17,22 @@ import (
 )
 
 func main() {
+	// 0. 解析配置路径优先级: 命令行参数 > 环境变量 > 默认值
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "path to config file")
+	flag.Parse()
+
+	if configPath == "" {
+		configPath = os.Getenv("CONFIG_PATH")
+	}
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+
 	// 1. 加载配置
-	cfg, err := config.LoadConfig("config.yaml")
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("failed to load config from %s: %v", configPath, err)
 	}
 
 	// 2. 初始化日志
