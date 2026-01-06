@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 	"github/zqr233qr/story-trim/internal/adapter/handler/apix"
 	"github/zqr233qr/story-trim/internal/core/domain"
 	"github/zqr233qr/story-trim/internal/core/port"
@@ -75,8 +76,15 @@ func (h *StoryHandler) ListPrompts(c *gin.Context) {
 }
 
 func (h *StoryHandler) GetBookDetail(c *gin.Context) {
-	bookID, _ := strconv.Atoi(c.Param("id"))
-	promptID, _ := strconv.Atoi(c.DefaultQuery("prompt_id", "2"))
+	bookID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		apix.Error(c, 400, errno.ParamErrCode, "Invalid book ID")
+		return
+	}
+	promptID, err := strconv.Atoi(c.DefaultQuery("prompt_id", "2"))
+	if err != nil {
+		promptID = 2
+	}
 	userID := c.GetUint("userID")
 
 	book, err := h.bookRepo.GetBookByID(c.Request.Context(), uint(bookID))
@@ -85,9 +93,22 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 		return
 	}
 
-	chapters, _ := h.bookRepo.GetChaptersByBookID(c.Request.Context(), book.ID)
-	trimmedIDs, _ := h.actionRepo.GetUserTrimmedIDs(c.Request.Context(), userID, book.ID, uint(promptID))
-	history, _ := h.actionRepo.GetReadingHistory(c.Request.Context(), userID, book.ID)
+	chapters, err := h.bookRepo.GetChaptersByBookID(c.Request.Context(), book.ID)
+	if err != nil {
+		log.Error().Err(err).Uint("book_id", book.ID).Msg("Failed to fetch chapters")
+		apix.Error(c, 500, errno.InternalServerErrCode)
+		return
+	}
+
+	trimmedIDs, err := h.actionRepo.GetUserTrimmedIDs(c.Request.Context(), userID, book.ID, uint(promptID))
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to fetch trimmed IDs, assuming none")
+	}
+
+	history, err := h.actionRepo.GetReadingHistory(c.Request.Context(), userID, book.ID)
+	if err != nil {
+		// History might be nil if not started
+	}
 
 	apix.Success(c, gin.H{
 		"book":            book,
@@ -98,8 +119,15 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 }
 
 func (h *StoryHandler) GetChapter(c *gin.Context) {
-	chapterID, _ := strconv.Atoi(c.Param("id"))
-	promptID, _ := strconv.Atoi(c.DefaultQuery("prompt_id", "2"))
+	chapterID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		apix.Error(c, 400, errno.ParamErrCode, "Invalid chapter ID")
+		return
+	}
+	promptID, err := strconv.Atoi(c.DefaultQuery("prompt_id", "2"))
+	if err != nil {
+		promptID = 2
+	}
 	userID := c.GetUint("userID")
 
 	chap, raw, trimmed, err := h.bookSvc.GetChapterWithTrim(c.Request.Context(), userID, uint(chapterID), uint(promptID))
@@ -110,9 +138,11 @@ func (h *StoryHandler) GetChapter(c *gin.Context) {
 
 	if userID > 0 {
 		go func() {
-			_ = h.actionRepo.UpsertReadingHistory(context.Background(), &domain.ReadingHistory{
+			if err := h.actionRepo.UpsertReadingHistory(context.Background(), &domain.ReadingHistory{
 				UserID: userID, BookID: chap.BookID, LastChapterID: chap.ID, LastPromptID: uint(promptID), UpdatedAt: time.Now(),
-			})
+			}); err != nil {
+				log.Warn().Err(err).Uint("user_id", userID).Uint("book_id", chap.BookID).Msg("Failed to update reading history")
+			}
 		}()
 	}
 

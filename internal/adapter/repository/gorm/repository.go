@@ -170,10 +170,10 @@ func (r *repository) SaveRawFile(ctx context.Context, file *domain.RawFile) erro
 
 // --- CacheRepository 实现 ---
 
-func (r *repository) GetTrimResult(ctx context.Context, md5 string, promptID uint, version string) (*domain.TrimResult, error) {
+func (r *repository) GetTrimResult(ctx context.Context, md5 string, promptID uint) (*domain.TrimResult, error) {
 	var t TrimResult
 	err := r.db.WithContext(ctx).
-		Where("content_md5 = ? AND prompt_id = ? AND prompt_version = ?", md5, promptID, version).
+		Where("content_md5 = ? AND prompt_id = ?", md5, promptID).
 		Order("level DESC").
 		First(&t).Error
 	if err != nil {
@@ -183,7 +183,6 @@ func (r *repository) GetTrimResult(ctx context.Context, md5 string, promptID uin
 		ID:             t.ID,
 		ContentMD5:     t.ContentMD5,
 		PromptID:       t.PromptID,
-		PromptVersion:  t.PromptVersion,
 		Level:          t.Level,
 		TrimmedContent: t.TrimmedContent,
 		CreatedAt:      t.CreatedAt,
@@ -194,7 +193,6 @@ func (r *repository) SaveTrimResult(ctx context.Context, res *domain.TrimResult)
 	dbRes := TrimResult{
 		ContentMD5:     res.ContentMD5,
 		PromptID:       res.PromptID,
-		PromptVersion:  res.PromptVersion,
 		Level:          res.Level,
 		TrimmedContent: res.TrimmedContent,
 		TrimWords:      res.TrimWords,
@@ -202,7 +200,7 @@ func (r *repository) SaveTrimResult(ctx context.Context, res *domain.TrimResult)
 		CreatedAt:      res.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "content_md5"}, {Name: "prompt_id"}, {Name: "prompt_version"}, {Name: "level"}},
+		Columns:   []clause.Column{{Name: "content_md5"}, {Name: "prompt_id"}, {Name: "level"}},
 		DoUpdates: clause.AssignmentColumns([]string{"trimmed_content", "trim_words", "trim_rate", "created_at"}),
 	}).Create(&dbRes).Error
 }
@@ -224,7 +222,6 @@ func (r *repository) GetSummaries(ctx context.Context, bookFP string, beforeInde
 			BookFingerprint: s.BookFingerprint,
 			ChapterIndex:    s.ChapterIndex,
 			Content:         s.Content,
-			Version:         s.Version,
 			CreatedAt:       s.CreatedAt,
 		})
 	}
@@ -236,12 +233,11 @@ func (r *repository) SaveSummary(ctx context.Context, summary *domain.RawSummary
 		BookFingerprint: summary.BookFingerprint,
 		ChapterIndex:    summary.ChapterIndex,
 		Content:         summary.Content,
-		Version:         summary.Version,
 		CreatedAt:       summary.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "book_fingerprint"}, {Name: "chapter_index"}},
-		DoUpdates: clause.AssignmentColumns([]string{"content", "version", "created_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"content", "created_at"}),
 	}).Create(&dbSummary).Error
 }
 
@@ -262,7 +258,6 @@ func (r *repository) GetEncyclopedia(ctx context.Context, bookFP string, beforeI
 		BookFingerprint: e.BookFingerprint,
 		RangeEnd:        e.RangeEnd,
 		Content:         e.Content,
-		Version:         e.Version,
 		CreatedAt:       e.CreatedAt,
 	}, nil
 }
@@ -272,7 +267,6 @@ func (r *repository) SaveEncyclopedia(ctx context.Context, enc *domain.SharedEnc
 		BookFingerprint: enc.BookFingerprint,
 		RangeEnd:        enc.RangeEnd,
 		Content:         enc.Content,
-		Version:         enc.Version,
 		CreatedAt:       enc.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&dbEnc).Error
@@ -425,11 +419,16 @@ func (r *repository) GetPromptByID(ctx context.Context, id uint) (*domain.Prompt
 		return nil, err
 	}
 	return &domain.Prompt{
-		ID:       p.ID,
-		Name:     p.Name,
-		Version:  p.Version,
-		Content:  p.Content,
-		IsSystem: p.IsSystem,
+		ID:                   p.ID,
+		Name:                 p.Name,
+		PromptContent:        p.PromptContent,
+		SummaryPromptContent: p.SummaryPromptContent,
+		IsSystem:             p.IsSystem,
+		Type:                 p.Type,
+		BoundaryRatioMin:     p.BoundaryRatioMin,
+		BoundaryRatioMax:     p.BoundaryRatioMax,
+		TargetRatioMin:       p.TargetRatioMin,
+		TargetRatioMax:       p.TargetRatioMax,
 	}, nil
 }
 
@@ -441,11 +440,11 @@ func (r *repository) ListSystemPrompts(ctx context.Context) ([]domain.Prompt, er
 	var res []domain.Prompt
 	for _, p := range dbPs {
 		res = append(res, domain.Prompt{
-			ID:       p.ID,
-			Name:     p.Name,
-			Version:  p.Version,
-			Content:  p.Content,
-			IsSystem: p.IsSystem,
+			ID:                   p.ID,
+			Name:                 p.Name,
+			PromptContent:        p.PromptContent,
+			SummaryPromptContent: p.SummaryPromptContent,
+			IsSystem:             p.IsSystem,
 		})
 	}
 	return res, nil

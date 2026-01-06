@@ -1,15 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
+	"text/template"
 	"time"
+
+	"github/zqr233qr/story-trim/internal/core/domain"
+	"github/zqr233qr/story-trim/internal/core/port"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-	"github/zqr233qr/story-trim/internal/core/domain"
-	"github/zqr233qr/story-trim/internal/core/port"
 )
 
 type workerService struct {
@@ -20,9 +23,16 @@ type workerService struct {
 	promptRepo port.PromptRepository
 	llm        port.LLMPort
 	cfg        *TrimConfig
+	tmplBatch  *template.Template
+	tmplSum    *template.Template
+	tmplTrim   *template.Template
 }
 
 func NewWorkerService(br port.BookRepository, cr port.CacheRepository, ar port.ActionRepository, tr port.TaskRepository, pr port.PromptRepository, llm port.LLMPort, cfg *TrimConfig) *workerService {
+	tmplBatch, _ := template.ParseFiles("pkg/config/trimAndSummaryPrompt.tmpl")
+	tmplSum, _ := template.ParseFiles("pkg/config/summaryOnlyPrompt.tmpl")
+	tmplTrim, _ := template.ParseFiles("pkg/config/trimPrompt.tmpl")
+
 	return &workerService{
 		bookRepo:   br,
 		cacheRepo:  cr,
@@ -31,20 +41,45 @@ func NewWorkerService(br port.BookRepository, cr port.CacheRepository, ar port.A
 		promptRepo: pr,
 		llm:        llm,
 		cfg:        cfg,
+		tmplBatch:  tmplBatch,
+		tmplSum:    tmplSum,
+		tmplTrim:   tmplTrim,
 	}
 }
 
 func (s *workerService) GenerateSummary(ctx context.Context, bookFP string, index int, md5 string, content string) {
-	jsonPrompt := "请概括本章剧情（200字内）。返回JSON: {\"summary\": \"你的摘要...\"}"
-	res, err := s.llm.ChatJSON(ctx, jsonPrompt, content)
-	if err != nil { return }
+	// 获取通用摘要配置 (Type=1)
+	summaryPrompt, err := s.promptRepo.GetPromptByID(ctx, 1)
+	if err != nil {
+		log.Warn().Msg("Summary config (ID=1) not found, using default fallback")
+		summaryPrompt = &domain.Prompt{SummaryPromptContent: "请生成本章剧情摘要，200字内。"}
+	}
 
-	summary := res.Summary
-	if summary == "" { summary = res.TrimmedContent }
+	data := struct {
+		SummaryPromptContent string
+		Summaries            string
+	}{
+		SummaryPromptContent: summaryPrompt.SummaryPromptContent,
+		Summaries:            "暂无", // 异步补全时暂时不带上下文，或者后续可以拉取
+	}
 
-	_ = s.cacheRepo.SaveSummary(ctx, &domain.RawSummary{
-		BookFingerprint: bookFP, ChapterIndex: index, Content: summary, Version: "v1.0", CreatedAt: time.Now(),
+	var buf bytes.Buffer
+	if s.tmplSum != nil {
+		_ = s.tmplSum.Execute(&buf, data)
+	}
+	
+	summary, err := s.llm.Chat(ctx, buf.String(), content)
+	if err != nil {
+		return
+	}
+
+	err = s.cacheRepo.SaveSummary(ctx, &domain.RawSummary{
+		BookFingerprint: bookFP, ChapterIndex: index, Content: summary, CreatedAt: time.Now(),
 	})
+	if err != nil {
+		log.Error().Err(err).Msg("Save Summary Failed")
+		return
+	}
 }
 
 func (s *workerService) StartBatchTrim(ctx context.Context, userID uint, bookID uint, promptID uint) (string, error) {
@@ -52,7 +87,9 @@ func (s *workerService) StartBatchTrim(ctx context.Context, userID uint, bookID 
 	task := &domain.Task{
 		ID: taskID, UserID: userID, BookID: bookID, Type: "batch_trim", Status: "pending", Progress: 0, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	if err := s.taskRepo.CreateTask(ctx, task); err != nil { return "", err }
+	if err := s.taskRepo.CreateTask(ctx, task); err != nil {
+		return "", err
+	}
 	go s.runBatchTrimTask(context.Background(), task, promptID)
 	return taskID, nil
 }
@@ -63,24 +100,62 @@ func (s *workerService) GetTaskStatus(ctx context.Context, taskID string) (*doma
 
 func (s *workerService) runBatchTrimTask(ctx context.Context, task *domain.Task, promptID uint) {
 	task.Status = "running"
-	_ = s.taskRepo.UpdateTask(ctx, task)
+	if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
+		log.Error().Err(err).Str("task_id", task.ID).Msg("Failed to update task status to running")
+		return
+	}
 
-	book, _ := s.bookRepo.GetBookByID(ctx, task.BookID)
-	chapters, _ := s.bookRepo.GetChaptersByBookID(ctx, task.BookID)
-	prompt, _ := s.promptRepo.GetPromptByID(ctx, promptID)
+	book, err := s.bookRepo.GetBookByID(ctx, task.BookID)
+	if err != nil {
+		log.Error().Err(err).Uint("book_id", task.BookID).Msg("Failed to get book for batch trim")
+		task.Status = "failed"
+		task.Error = err.Error()
+		_ = s.taskRepo.UpdateTask(ctx, task)
+		return
+	}
+
+	chapters, err := s.bookRepo.GetChaptersByBookID(ctx, task.BookID)
+	if err != nil {
+		log.Error().Err(err).Uint("book_id", task.BookID).Msg("Failed to get chapters")
+		task.Status = "failed"
+		task.Error = err.Error()
+		_ = s.taskRepo.UpdateTask(ctx, task)
+		return
+	}
+
+	prompt, err := s.promptRepo.GetPromptByID(ctx, promptID)
+	if err != nil {
+		log.Error().Err(err).Uint("prompt_id", promptID).Msg("Failed to get prompt")
+		task.Status = "failed"
+		task.Error = "prompt not found"
+		_ = s.taskRepo.UpdateTask(ctx, task)
+		return
+	}
+
+	// 获取通用摘要配置 (Type=1)
+	summaryPrompt, err := s.promptRepo.GetPromptByID(ctx, 1)
+	if err != nil {
+		log.Warn().Msg("Summary config (ID=1) not found, using default fallback")
+		summaryPrompt = &domain.Prompt{SummaryPromptContent: "请生成本章剧情摘要，200字内。"}
+	}
 
 	for i, chap := range chapters {
-		cache, err := s.cacheRepo.GetTrimResult(ctx, chap.ContentMD5, promptID, prompt.Version)
+		cache, err := s.cacheRepo.GetTrimResult(ctx, chap.ContentMD5, promptID)
 		if err == nil && cache != nil && cache.Level == 2 {
-			_ = s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
+			if err := s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
 				UserID: task.UserID, BookID: book.ID, ChapterID: chap.ID, PromptID: promptID, CreatedAt: time.Now(),
-			})
+			}); err != nil {
+				log.Warn().Err(err).Msg("Failed to record user trim during batch")
+			}
 		} else {
-			s.processSingleBatchChapter(ctx, task.UserID, book, chap, prompt, 2)
+			s.processSingleBatchChapter(ctx, task.UserID, book, chap, prompt, summaryPrompt, 2)
 		}
+
 		task.Progress = int(float64(i+1) / float64(len(chapters)) * 100)
 		task.UpdatedAt = time.Now()
-		_ = s.taskRepo.UpdateTask(ctx, task)
+		if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
+			log.Warn().Err(err).Str("task_id", task.ID).Msg("Failed to update task progress")
+		}
 		if (i+1)%s.cfg.EncyclopediaInterval == 0 {
 			s.UpdateEncyclopedia(ctx, book.Fingerprint, i+1)
 		}
@@ -89,65 +164,109 @@ func (s *workerService) runBatchTrimTask(ctx context.Context, task *domain.Task,
 	_ = s.taskRepo.UpdateTask(ctx, task)
 }
 
-func (s *workerService) processSingleBatchChapter(ctx context.Context, userID uint, book *domain.Book, chap domain.Chapter, prompt *domain.Prompt, targetLevel int) {
-	summaries, _ := s.cacheRepo.GetSummaries(ctx, book.Fingerprint, chap.Index, s.cfg.SummaryLimit)
-	encyclopedia, _ := s.cacheRepo.GetEncyclopedia(ctx, book.Fingerprint, chap.Index)
-	raw, _ := s.bookRepo.GetRawContent(ctx, chap.ContentMD5)
+func (s *workerService) processSingleBatchChapter(ctx context.Context, userID uint, book *domain.Book, chap domain.Chapter, prompt *domain.Prompt, sumPrompt *domain.Prompt, targetLevel int) {
+	summaries, err := s.cacheRepo.GetSummaries(ctx, book.Fingerprint, chap.Index, s.cfg.SummaryLimit)
+	if err != nil {
+		log.Warn().Err(err).Msg("Batch: Failed to get summaries")
+	}
 
+	encyclopedia, err := s.cacheRepo.GetEncyclopedia(ctx, book.Fingerprint, chap.Index)
+	if err != nil {
+		log.Warn().Err(err).Msg("Batch: Failed to get encyclopedia")
+	}
+
+	raw, err := s.bookRepo.GetRawContent(ctx, chap.ContentMD5)
+	if err != nil {
+		log.Error().Err(err).Str("md5", chap.ContentMD5).Msg("Batch: Failed to get raw content")
+		return
+	}
+
+	// 1. 准备模板数据
 	rawLen := len([]rune(raw.Content))
-	var minRate, maxRate float64
-	switch prompt.ID {
-	case 1: minRate, maxRate = 0.70, 0.85
-	case 3: minRate, maxRate = 0.15, 0.35
-	default: minRate, maxRate = 0.45, 0.65
+	boundaryRatioMin := prompt.BoundaryRatioMin
+	if boundaryRatioMin == 0 {
+		boundaryRatioMin = prompt.TargetRatioMin
 	}
-	minWords := int(float64(rawLen) * minRate)
-	maxWords := int(float64(rawLen) * maxRate)
-
-	template := strings.ReplaceAll(prompt.Content, "{MIN_WORDS}", fmt.Sprintf("%d", minWords))
-	template = strings.ReplaceAll(template, "{MAX_WORDS}", fmt.Sprintf("%d", maxWords))
-
-	var sb strings.Builder
-	sb.WriteString("### [核心编辑协议]\n")
-	sb.WriteString("- 对话红线：严禁改写或删减原文对话，必须原样保留对话字句。\n")
-	sb.WriteString("- 格式要求：请严格按照 XML 标签输出，不要输出任何 Markdown 代码块。\n")
-	sb.WriteString("  格式如下：\n")
-	sb.WriteString("  <content>\n  (这里是精简后的小说正文)\n  </content>\n\n")
-	sb.WriteString("  <summary>\n  (这里是本章剧情摘要)\n  </summary>\n")
-	sb.WriteString("- 指标要求：")
-	sb.WriteString(template)
-	sb.WriteString("\n\n")
-	
-	if encyclopedia != nil { sb.WriteString("### [全局百科]\n" + encyclopedia.Content + "\n\n") }
-	if len(summaries) > 0 {
-		sb.WriteString("### [前情提要]\n")
-		for _, sm := range summaries { sb.WriteString(sm.Content + "\n") }
+	boundaryRatioMax := prompt.BoundaryRatioMax
+	if boundaryRatioMax == 0 {
+		boundaryRatioMax = prompt.TargetRatioMax
 	}
 
-	log.Debug().Str("prompt", sb.String()).Int("idx", chap.Index).Msg("Batch Task: Assembled XML Prompt")
-	
-	// 使用纯文本 Chat 接口
-	resText, err := s.llm.Chat(ctx, sb.String(), raw.Content)
+	minWords := int(float64(rawLen) * boundaryRatioMin)
+	maxWords := int(float64(rawLen) * boundaryRatioMax)
+
+	targetMin := int(prompt.TargetRatioMin * 100)
+	targetMax := int(prompt.TargetRatioMax * 100)
+	targetRangeStr := fmt.Sprintf("%d-%d", targetMin, targetMax)
+	if targetMin == targetMax {
+		targetRangeStr = fmt.Sprintf("%d", targetMin)
+	}
+
+	data := struct {
+		WordsRange              string
+		TargetResidualRateRange string
+		PromptContent           string
+		SummaryPromptContent    string
+		Summaries               string
+		Encyclopedia            string
+	}{
+		WordsRange:              fmt.Sprintf("%d-%d", minWords, maxWords),
+		TargetResidualRateRange: targetRangeStr,
+		PromptContent:           prompt.PromptContent,
+		SummaryPromptContent:    sumPrompt.SummaryPromptContent,
+		Summaries:               formatSummaries(summaries),
+		Encyclopedia:            formatEncyclopedia(encyclopedia),
+	}
+
+	// 2. 渲染 Batch 模板
+	var buf bytes.Buffer
+	if s.tmplBatch == nil {
+		log.Error().Msg("Batch: Template not loaded")
+		return
+	}
+	if err := s.tmplBatch.Execute(&buf, data); err != nil {
+		log.Error().Err(err).Msg("Batch: Template render failed")
+		return
+	}
+	systemPrompt := buf.String()
+
+	// 3. 调用 LLM
+	resText, err := s.llm.Chat(ctx, systemPrompt, raw.Content)
 	if err != nil {
 		log.Error().Err(err).Int("idx", chap.Index).Msg("Batch Task: LLM Chat failed")
 		return
 	}
 
-	// 手动解析 XML 标签
+	// 4. 解析 XML
 	trimmedContent := extractTagContent(resText, "content")
 	summaryContent := extractTagContent(resText, "summary")
 
-	// 容错：如果解析失败，但内容很长，假设全部都是正文
+	// 5. 容错重试 (Fallback)
 	if trimmedContent == "" {
-		if len(resText) > len(raw.Content)/2 {
-			trimmedContent = resText
-		} else {
-			log.Warn().Int("idx", chap.Index).Str("raw_response", resText).Msg("Batch Task: Failed to parse XML output")
-			// 仍然保存，防止任务卡死，但标记一下？或者直接返回
-			return 
+		log.Warn().Int("idx", chap.Index).Msg("Batch: XML parse failed, falling back to separate calls")
+
+		// 5.1 获取正文 (使用 trimPrompt)
+		var trimBuf bytes.Buffer
+		if s.tmplTrim != nil {
+			_ = s.tmplTrim.Execute(&trimBuf, data)
+			trimmedContent, err = s.llm.Chat(ctx, trimBuf.String(), raw.Content)
+			if err != nil {
+				log.Error().Err(err).Msg("Fallback: Trim failed")
+				return
+			}
+		}
+
+		// 5.2 获取摘要 (使用 summaryOnlyPrompt)
+		var sumBuf bytes.Buffer
+		if s.tmplSum != nil {
+			_ = s.tmplSum.Execute(&sumBuf, data)
+			summaryContent, _ = s.llm.Chat(ctx, sumBuf.String(), raw.Content)
 		}
 	}
-	if summaryContent == "" { summaryContent = "摘要生成失败" }
+
+	if summaryContent == "" {
+		summaryContent = "摘要生成失败"
+	}
 
 	trimmedLen := len([]rune(trimmedContent))
 	rate := 0.0
@@ -156,44 +275,68 @@ func (s *workerService) processSingleBatchChapter(ctx context.Context, userID ui
 		rate = float64(int(rate*10000+0.5)) / 10000
 	}
 
-	_ = s.cacheRepo.SaveTrimResult(ctx, &domain.TrimResult{
+	if err := s.cacheRepo.SaveTrimResult(ctx, &domain.TrimResult{
 		ContentMD5:     chap.ContentMD5,
 		PromptID:       prompt.ID,
-		PromptVersion:  prompt.Version,
 		Level:          targetLevel,
 		TrimmedContent: trimmedContent,
 		TrimWords:      trimmedLen,
 		TrimRate:       rate,
 		CreatedAt:      time.Now(),
-	})
-	_ = s.cacheRepo.SaveSummary(ctx, &domain.RawSummary{
-		BookFingerprint: book.Fingerprint, ChapterIndex: chap.Index, Content: summaryContent, Version: "v1.0", CreatedAt: time.Now(),
-	})
-	_ = s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
+	}); err != nil {
+		log.Error().Err(err).Msg("Batch: Failed to save trim result")
+	}
+
+	if err := s.cacheRepo.SaveSummary(ctx, &domain.RawSummary{
+		BookFingerprint: book.Fingerprint, ChapterIndex: chap.Index, Content: summaryContent, CreatedAt: time.Now(),
+	}); err != nil {
+		log.Error().Err(err).Msg("Batch: Failed to save summary")
+	}
+
+	if err := s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
 		UserID: userID, BookID: book.ID, ChapterID: chap.ID, PromptID: prompt.ID, CreatedAt: time.Now(),
-	})
+	}); err != nil {
+		log.Warn().Err(err).Msg("Batch: Failed to record user trim")
+	}
 }
 
 func (s *workerService) UpdateEncyclopedia(ctx context.Context, bookFP string, endIdx int) {
-	old, _ := s.cacheRepo.GetEncyclopedia(ctx, bookFP, endIdx)
-	summaries, _ := s.cacheRepo.GetSummaries(ctx, bookFP, endIdx+1, s.cfg.EncyclopediaInterval)
-	if len(summaries) == 0 { return }
+	old, err := s.cacheRepo.GetEncyclopedia(ctx, bookFP, endIdx)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to fetch old encyclopedia, assuming nil")
+	}
+
+	summaries, err := s.cacheRepo.GetSummaries(ctx, bookFP, endIdx+1, s.cfg.EncyclopediaInterval)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch summaries for encyclopedia update")
+		return
+	}
+	if len(summaries) == 0 {
+		return
+	}
 	var summaryTexts []string
-	for _, sm := range summaries { summaryTexts = append(summaryTexts, sm.Content) }
+	for _, sm := range summaries {
+		summaryTexts = append(summaryTexts, sm.Content)
+	}
 	prompt := "你是一个文学设定分析员。请基于[旧百科]和[最新剧情摘要]，合并更新为最新的Markdown设定集。"
-	input := fmt.Sprintf("[旧百科]\n%s\n\n[新剧情摘要]\n%s", func() string { if old != nil { return old.Content }; return "暂无" }(), strings.Join(summaryTexts, "\n"))
-	
-	// 这里继续使用 ChatJSON，因为百科更新适合结构化思维
-	res, err := s.llm.ChatJSON(ctx, prompt, input)
-	if err != nil { return }
-	
-	// 注意：ChatJSON 返回 BatchResult，但我们只需要 Summary 字段（复用）或者 TrimmedContent
-	content := res.Summary
-	if content == "" { content = res.TrimmedContent }
-	
-	_ = s.cacheRepo.SaveEncyclopedia(ctx, &domain.SharedEncyclopedia{
-		BookFingerprint: bookFP, RangeEnd: endIdx, Content: content, Version: "v1.0", CreatedAt: time.Now(),
+	input := fmt.Sprintf("[旧百科]\n%s\n\n[新剧情摘要]\n%s", func() string {
+		if old != nil {
+			return old.Content
+		}
+		return "暂无"
+	}(), strings.Join(summaryTexts, "\n"))
+
+	content, err := s.llm.Chat(ctx, prompt, input)
+	if err != nil {
+		return
+	}
+
+	err = s.cacheRepo.SaveEncyclopedia(ctx, &domain.SharedEncyclopedia{
+		BookFingerprint: bookFP, RangeEnd: endIdx, Content: content, CreatedAt: time.Now(),
 	})
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to save encyclopedia")
+	}
 }
 
 // 辅助函数：提取 XML 标签内容

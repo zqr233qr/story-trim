@@ -1,6 +1,5 @@
 # Binaries
 bin/
-server
 story-trim
 
 # Config with secrets
@@ -27,3 +26,14 @@ tmp/
 *.tmp
 *_trimmed.txt
 test_novel.txt
+
+# db
+
+storytrim.db
+
+
+
+# Uploads
+
+uploads/
+server

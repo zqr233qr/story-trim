@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github/zqr233qr/story-trim/internal/core/domain"
 	"github/zqr233qr/story-trim/internal/core/port"
 	"github/zqr233qr/story-trim/pkg/utils"
+
 	"github.com/pkoukk/tiktoken-go"
+	"github.com/rs/zerolog/log"
 )
 
 type bookService struct {
@@ -62,23 +63,28 @@ func (s *bookService) UploadAndProcess(ctx context.Context, userID uint, filenam
 	}
 
 	// 初始化 Token 计数器
-	tkm, _ := tiktoken.GetEncoding("cl100k_base")
+	tkm, err := tiktoken.GetEncoding("cl100k_base")
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get tiktoken encoding, token counts will be 0")
+	}
 
 	var chapters []domain.Chapter
 	for _, sc := range splitChapters {
 		md5 := utils.GetContentFingerprint(sc.Content)
-		
+
 		tokenCount := 0
 		if tkm != nil {
 			tokenCount = len(tkm.Encode(sc.Content, nil, nil))
 		}
 
-		_ = s.bookRepo.SaveRawContent(ctx, &domain.RawContent{
+		if err := s.bookRepo.SaveRawContent(ctx, &domain.RawContent{
 			MD5:        md5,
 			Content:    sc.Content,
 			TokenCount: tokenCount,
 			CreatedAt:  time.Now(),
-		})
+		}); err != nil {
+			log.Warn().Err(err).Str("md5", md5).Msg("Failed to save raw content (might be duplicate)")
+		}
 
 		chapters = append(chapters, domain.Chapter{
 			Index: sc.Index, Title: sc.Title, ContentMD5: md5, CreatedAt: time.Now(),
@@ -90,9 +96,11 @@ func (s *bookService) UploadAndProcess(ctx context.Context, userID uint, filenam
 		return nil, err
 	}
 
-	_ = s.bookRepo.SaveRawFile(ctx, &domain.RawFile{
+	if err := s.bookRepo.SaveRawFile(ctx, &domain.RawFile{
 		BookID: book.ID, OriginalName: filename, StoragePath: storagePath, Size: int64(len(data)), CreatedAt: time.Now(),
-	})
+	}); err != nil {
+		log.Error().Err(err).Msg("Failed to save raw file record")
+	}
 
 	log.Info().Uint("bookID", book.ID).Msg("Upload and process successful")
 	return book, nil
@@ -114,7 +122,9 @@ func (s *bookService) GetChapterDetail(ctx context.Context, chapterID uint) (*do
 
 func (s *bookService) GetChapterWithTrim(ctx context.Context, userID uint, chapterID uint, promptID uint) (*domain.Chapter, *domain.RawContent, string, error) {
 	chap, raw, err := s.GetChapterDetail(ctx, chapterID)
-	if err != nil { return nil, nil, "", err }
+	if err != nil {
+		return nil, nil, "", err
+	}
 
 	var trimmedContent string
 	if userID > 0 {
@@ -122,16 +132,16 @@ func (s *bookService) GetChapterWithTrim(ctx context.Context, userID uint, chapt
 		if err == nil {
 			isProcessed := false
 			for _, id := range ids {
-				if id == chap.ID { isProcessed = true; break }
+				if id == chap.ID {
+					isProcessed = true
+					break
+				}
 			}
 
 			if isProcessed {
-				prompt, err := s.promptRepo.GetPromptByID(ctx, promptID)
-				if err == nil {
-					res, err := s.cacheRepo.GetTrimResult(ctx, chap.ContentMD5, promptID, prompt.Version)
-					if err == nil && res != nil {
-						trimmedContent = res.TrimmedContent
-					}
+				res, err := s.cacheRepo.GetTrimResult(ctx, chap.ContentMD5, promptID)
+				if err == nil && res != nil {
+					trimmedContent = res.TrimmedContent
 				}
 			}
 		}

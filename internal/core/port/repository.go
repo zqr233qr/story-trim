@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+
 	"github/zqr233qr/story-trim/internal/core/domain"
 )
 
@@ -18,20 +19,20 @@ type BookRepository interface {
 	GetChaptersByBookID(ctx context.Context, bookID uint) ([]domain.Chapter, error)
 	GetChapterByID(ctx context.Context, id uint) (*domain.Chapter, error)
 	GetBooksByUserID(ctx context.Context, userID uint) ([]domain.Book, error)
-	
+
 	SaveRawContent(ctx context.Context, content *domain.RawContent) error
 	GetRawContent(ctx context.Context, md5 string) (*domain.RawContent, error)
-	
+
 	SaveRawFile(ctx context.Context, file *domain.RawFile) error
 }
 
 type CacheRepository interface {
-	GetTrimResult(ctx context.Context, md5 string, promptID uint, version string) (*domain.TrimResult, error)
+	GetTrimResult(ctx context.Context, md5 string, promptID uint) (*domain.TrimResult, error)
 	SaveTrimResult(ctx context.Context, res *domain.TrimResult) error
-	
+
 	GetSummaries(ctx context.Context, bookFP string, beforeIndex int, limit int) ([]domain.RawSummary, error)
 	SaveSummary(ctx context.Context, summary *domain.RawSummary) error
-	
+
 	GetEncyclopedia(ctx context.Context, bookFP string, beforeIndex int) (*domain.SharedEncyclopedia, error)
 	SaveEncyclopedia(ctx context.Context, enc *domain.SharedEncyclopedia) error
 }
@@ -39,7 +40,7 @@ type CacheRepository interface {
 type ActionRepository interface {
 	UpsertReadingHistory(ctx context.Context, history *domain.ReadingHistory) error
 	GetReadingHistory(ctx context.Context, userID, bookID uint) (*domain.ReadingHistory, error)
-	
+
 	RecordUserTrim(ctx context.Context, action *domain.UserProcessedChapter) error
 	GetUserTrimmedIDs(ctx context.Context, userID, bookID, promptID uint) ([]uint, error)
 }

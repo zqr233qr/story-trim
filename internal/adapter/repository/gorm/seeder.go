@@ -2,39 +2,67 @@ package gorm
 
 import (
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func SeedPrompts(db *gorm.DB) error {
 	prompts := []Prompt{
+		// Type 1: Summary Config (Special)
 		{
 			ID:       1,
-			Name:     "轻度精简 (氛围版)",
-			Version:  "v4.0",
-			Content:  "目标剩余率：75% 左右（参考字数区间：{MIN_WORDS} - {MAX_WORDS} 字）。\n\n【编辑指令】\n1. **语感修饰**：优化并合并原文中过于琐碎、重复的短句；精减无实际语义的语气助词（如“的、了、吧、呢”的过度堆砌）。\n2. **全量保留**：全量保留所有对话内容、环境渲染、角色的独特神态描写以及烘托意境的关键细节。\n3. **沉浸式体验**：必须保持原作叙事节奏，严禁出现概括性或总结性语言。\n4. **底线约束**：精简后剩余率不应低于 70%。",
+			Name:     "Standard Summary Config",
+			Type:     1, // 摘要配置
 			IsSystem: true,
+			SummaryPromptContent: `1. **字数限制**：200 - 400 字。
+2. **内容重点**：
+   - 核心事件：发生了什么？
+   - 人物动态：主要角色做了什么决定？
+   - 信息增量：有什么新的设定或伏笔被揭示？
+3. **格式**：直接输出摘要内容，不要分点，不要使用 Markdown 标题。`,
 		},
+		// Type 0: Trim Configs
 		{
 			ID:       2,
-			Name:     "标准精简 (爽快版)",
-			Version:  "v4.0",
-			Content:  "目标剩余率：50% 左右（参考字数区间：{MIN_WORDS} - {MAX_WORDS} 字）。\n\n【编辑指令】\n1. **节奏提速**：将重复出现的旁观者反应合并为简练的一两句描写；对武学招式解说、地理环境背景进行脱水处理，保留核心信息并改写得更干练。\n2. **核心锁定**：保留所有剧情转折点、主角心理博弈、关键线索道具以及与 [全局百科] 呼应的所有设定。\n3. **严防剧透**：严禁将 [全局百科] 中提到但本章原文尚未发生的剧情提前泄露。\n4. **质量优先**：如果为了凑指标导致故事断层，请优先增加字数以保护逻辑。剩余率底线 40%。",
+			Name:     "标准沉浸模式",
+			Type:     0, // 精简配置
 			IsSystem: true,
+			TargetRatioMin: 0.50, TargetRatioMax: 0.60,
+			BoundaryRatioMin: 0.45, BoundaryRatioMax: 0.65,
+			PromptContent: `1. **去水去冗**：大幅删减无意义的重复描写、心理独白和环境堆砌。
+2. **场景整合**：将冗长的过场段落改写为简练的白描。
+3. **保留核心**：全量保留对话，保留推动剧情的关键动作和伏笔细节。`,
 		},
 		{
 			ID:       3,
-			Name:     "极简概括 (大纲版)",
-			Version:  "v4.0",
-			Content:  "目标剩余率：20% 左右（参考字数区间：{MIN_WORDS} - {MAX_WORDS} 字）。\n\n【编辑指令】\n1. **叙事脉络化**：将具体的动作描写转化为叙述性语言；环境描写仅保留地理位置变动；人物交互仅保留对主线有影响的对话核心。\n2. **干货保留**：必须保留等级提升、获得物品、重要角色变动、目的地变更等关键信息。\n3. **文学正文形式**：输出仍需保持小说正文的叙事感，禁止使用“第一点”、“总结”等非小说词汇。\n4. **极简底线**：剩余率不应低于 15%，确保最基本的逻辑链条完整。",
+			Name:     "轻度精简模式",
+			Type:     0,
 			IsSystem: true,
+			TargetRatioMin: 0.75, TargetRatioMax: 0.85,
+			BoundaryRatioMin: 0.70, BoundaryRatioMax: 0.90,
+			PromptContent: `1. **语感修饰**：优化并合并原文中过于琐碎、重复的短句；精减无实际语义的语气助词（如“的、了、吧、呢”的过度堆砌）。
+2. **全量保留**：全量保留所有对话内容、环境渲染、角色的独特神态描写以及烘托意境的关键细节。
+3. **最小干预**：除非是明显的废话，否则不要删除。`,
+		},
+		{
+			ID:       4,
+			Name:     "极简速读模式",
+			Type:     0,
+			IsSystem: true,
+			TargetRatioMin: 0.25, TargetRatioMax: 0.35,
+			BoundaryRatioMin: 0.20, BoundaryRatioMax: 0.40,
+			PromptContent: `1. **剧情优先**：只保留推动剧情发展的核心事件和关键对话。
+2. **大胆删除**：所有的环境描写、心理活动、次要人物的寒暄全部删除。
+3. **结构重组**：在不破坏时间线的前提下，紧凑叙事节奏。`,
 		},
 	}
 
 	for _, p := range prompts {
-		var exist Prompt
-		if err := db.First(&exist, p.ID).Error; err == nil {
-			db.Model(&exist).Updates(p)
-		} else {
-			db.Create(&p)
+		// Use ID as constraint for seeding
+		if err := db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			UpdateAll: true,
+		}).Create(&p).Error; err != nil {
+			return err
 		}
 	}
 	return nil
