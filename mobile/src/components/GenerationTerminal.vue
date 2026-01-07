@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { computed } from 'vue'
 
-const props = defineProps<{
-  show: boolean,
-  content: string,
-  title: string,
-  isDarkMode?: boolean
-}>()
+const props = defineProps({
+  show: Boolean,
+  content: String,
+  title: String,
+  isDarkMode: Boolean
+})
 
 const emit = defineEmits(['close'])
-const scrollIntoView = ref('')
 
-// Auto-scroll logic for Uni-app
-watch(() => props.content, async () => {
-  await nextTick()
-  scrollIntoView.value = 'bottom-marker'
+// 只显示最后一段内容，模拟“底部打印机”效果
+// 这样可以避免滚动逻辑，利用 flex-col-reverse 实现自动置底
+const displayContent = computed(() => {
+  const len = props.content.length
+  // 保持最后 1000 字符，前面截断
+  if (len < 1000) return props.content
+  return '... [前文已省略] ...\n' + props.content.slice(-1000)
 })
 </script>
 
@@ -23,51 +25,42 @@ watch(() => props.content, async () => {
         :class="show ? 'opacity-100' : 'opacity-0 invisible'">
     
     <!-- Backdrop -->
-    <view @click.stop="emit('close')" class="absolute inset-0 bg-black/40 backdrop-blur-[1px] pointer-events-auto"></view>
+    <view @click.stop="emit('close')" class="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"></view>
 
     <!-- Terminal Panel -->
     <view :class="[
-            isDarkMode ? 'bg-stone-950 border-t border-stone-800 text-stone-300' : 'bg-white border-t border-stone-200 text-stone-800',
+            isDarkMode ? 'bg-stone-950 border-t border-stone-800 text-stone-300' : 'bg-[#1e1e1e] border-t border-stone-700 text-stone-300',
             show ? 'translate-y-0' : 'translate-y-full'
           ]" 
-         class="absolute bottom-0 inset-x-0 w-full max-w-3xl mx-auto h-[70vh] rounded-t-2xl pointer-events-auto flex flex-col overflow-hidden shadow-2xl transition-transform duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
+         class="absolute bottom-0 inset-x-0 w-full max-w-3xl mx-auto h-[60vh] rounded-t-3xl pointer-events-auto flex flex-col overflow-hidden shadow-2xl transition-transform duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
       
       <!-- Header -->
-      <view class="h-12 flex items-center px-4 border-b shrink-0 relative" 
-           :class="isDarkMode ? 'border-stone-800 bg-stone-900/50' : 'border-stone-100 bg-stone-50/80'">
-        
-        <!-- Traffic Lights -->
-        <view class="flex items-center gap-2 mr-4 group select-none">
-          <view @click.stop="emit('close')" class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] flex items-center justify-center transition-opacity hover:opacity-80 active:opacity-60">
-            <text class="text-[8px] text-black/50 opacity-0 group-hover:opacity-100 transition-opacity">×</text>
-          </view>
-          <view class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123]"></view>
-          <view class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]"></view>
+      <view class="h-14 flex items-center justify-between px-6 border-b border-white/10 shrink-0 bg-white/5">
+        <view class="flex items-center gap-3">
+          <view class="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></view>
+          <text class="text-xs font-mono font-bold tracking-widest uppercase text-white/70">AI PROCESSING: {{ title }}</text>
         </view>
-
-        <view class="flex items-center gap-2 opacity-70">
-          <text class="text-xs font-mono font-bold tracking-widest uppercase">AI: {{ title }}</text>
+        <view @click.stop="emit('close')" class="p-2 -mr-2 active:opacity-50">
+          <text class="text-xl text-white/50">×</text>
         </view>
       </view>
 
-      <!-- Content Area -->
-      <scroll-view 
-        scroll-y 
-        :scroll-into-view="scrollIntoView" 
-        scroll-with-animation
-        class="flex-1 p-6 font-mono text-sm leading-relaxed whitespace-pre-wrap">
-        <text>{{ content }}</text>
-        <view class="inline-block w-2 h-4 bg-teal-500 align-middle ml-1"></view>
-        <view id="bottom-marker" class="h-10"></view>
-      </scroll-view>
+      <!-- Content Area (Printer Mode) -->
+      <view class="flex-1 p-6 font-mono text-sm leading-loose relative overflow-hidden flex flex-col-reverse">
+        
+        <!-- Text Container -->
+        <view class="whitespace-pre-wrap break-words">
+          <text>{{ displayContent }}</text>
+          <text class="inline-block w-2.5 h-5 bg-teal-500 align-text-bottom ml-1 animate-pulse">▋</text>
+        </view>
 
-      <!-- Gradient Fade Overlay -->
-      <view class="absolute bottom-0 inset-x-0 h-12 bg-gradient-to-t pointer-events-none"
-           :class="isDarkMode ? 'from-stone-950 to-transparent' : 'from-white to-transparent'"></view>
+        <!-- Top Fade Gradient -->
+        <view class="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-[#1e1e1e] to-transparent pointer-events-none"></view>
+      </view>
     </view>
   </view>
 </template>
 
 <style scoped>
-.cubic-bezier { transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+/* 强制深色模式风格，更像终端 */
 </style>

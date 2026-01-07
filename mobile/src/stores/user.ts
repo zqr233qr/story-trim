@@ -5,9 +5,13 @@ export const useUserStore = defineStore('user', () => {
   const token = ref(uni.getStorageSync('token') || '')
   const username = ref(uni.getStorageSync('username') || '')
 
-  const isLoggedIn = () => !!token.value
+  const isLoggedIn = () => {
+    // console.log('[UserStore] check login, token:', token.value)
+    return !!token.value
+  }
 
   const setLogin = (t: string, u: string) => {
+    console.log('[UserStore] setLogin:', u)
     token.value = t
     username.value = u
     uni.setStorageSync('token', t)
@@ -15,6 +19,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const logout = () => {
+    console.log('[UserStore] logout')
     token.value = ''
     username.value = ''
     uni.removeStorageSync('token')

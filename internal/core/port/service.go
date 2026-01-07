@@ -22,6 +22,7 @@ type BookService interface {
 
 type TrimService interface {
 	TrimChapterStream(ctx context.Context, userID uint, chapterID uint, promptID uint) (<-chan string, error)
+	TrimContentStream(ctx context.Context, userID uint, rawContent string, promptID uint) (<-chan string, error)
 }
 
 type WorkerService interface {

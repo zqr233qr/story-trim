@@ -33,10 +33,14 @@ const handleSubmit = async () => {
       errorMsg.value = res?.msg || '操作失败'
     }
   } catch (e: any) {
-    errorMsg.value = e.message || '网络错误'
+    errorMsg.value = '无法连接服务器，请检查网络或使用离线模式'
   } finally {
     loading.value = false
   }
+}
+
+const skipLogin = () => {
+  uni.reLaunch({ url: '/pages/shelf/shelf' })
 }
 </script>
 
@@ -46,7 +50,7 @@ const handleSubmit = async () => {
       <!-- Logo Area -->
       <view class="text-center mb-10">
         <view class="w-16 h-16 bg-stone-900 text-white rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-xl shadow-stone-200">
-          <text class="i-heroicons-book-open w-8 h-8 text-white"></text>
+          <text class="i-heroicons-book-open w-8 h-8 text-white">📖</text>
         </view>
         <view class="text-2xl font-bold text-stone-800 tracking-tight">StoryTrim</view>
         <view class="text-stone-400 text-sm mt-2">AI 驱动的极简阅读体验</view>
@@ -64,21 +68,21 @@ const handleSubmit = async () => {
 
         <button @click="handleSubmit" :disabled="loading" 
           class="w-full h-14 bg-stone-900 text-white rounded-xl font-bold shadow-lg flex justify-center items-center active:scale-95 transition-transform">
-          <text v-if="loading" class="animate-spin mr-2">...</text>
+          <text v-if="loading" class="animate-spin mr-2">⏳</text>
           <text>{{ isLogin ? '进入阅读' : '注册账号' }}</text>
         </button>
       </view>
 
-      <!-- Toggle -->
-      <view class="mt-8 text-center">
-        <text @click="isLogin = !isLogin" class="text-sm text-stone-400 hover:text-teal-600 font-medium">
+      <!-- Skip / Offline Option -->
+      <view class="mt-10 flex flex-col items-center gap-4">
+        <text @click="skipLogin" class="text-sm text-stone-500 border-b border-stone-300 pb-0.5 font-medium">
+          直接使用 (离线模式)
+        </text>
+        
+        <text @click="isLogin = !isLogin" class="text-xs text-stone-400">
           {{ isLogin ? '还没有账号？点击注册' : '已有账号？直接登录' }}
         </text>
       </view>
     </view>
   </view>
 </template>
-
-<style>
-/* 可以在这里添加一些针对小程序的样式补丁 */
-</style>

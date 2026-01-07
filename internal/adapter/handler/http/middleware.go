@@ -43,6 +43,32 @@ func AuthMiddleware(userSvc port.UserService) gin.HandlerFunc {
 	}
 }
 
+func SoftAuthMiddleware(userSvc port.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenStr := ""
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenStr = parts[1]
+			}
+		}
+
+		if tokenStr == "" {
+			tokenStr = c.Query("token")
+		}
+
+		if tokenStr != "" {
+			userID, err := userSvc.ValidateToken(tokenStr)
+			if err == nil {
+				c.Set("userID", userID)
+			}
+		}
+
+		c.Next()
+	}
+}
+
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")

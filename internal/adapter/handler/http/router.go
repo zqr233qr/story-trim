@@ -1,14 +1,15 @@
 package http
 
 import (
-	"github.com/gin-gonic/gin"
 	"github/zqr233qr/story-trim/internal/adapter/handler/http/v1"
 	"github/zqr233qr/story-trim/internal/core/port"
+
+	"github.com/gin-gonic/gin"
 )
 
-func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.TaskHandler, authH *v1.AuthHandler) *gin.Engine {
+func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.TaskHandler, authH *v1.AuthHandler, trimH *v1.TrimHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	
+
 	// 使用 New 而不是 Default，以完全控制中间件
 	r := gin.New()
 
@@ -27,6 +28,22 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 				auth.POST("/login", authH.Login)
 			}
 
+						// 可选鉴权接口 (Soft Auth)
+
+						optional := v1Group.Group("")
+
+						optional.Use(SoftAuthMiddleware(userSvc))
+
+						{
+
+							optional.GET("/prompts", storyH.ListPrompts) // 允许未登录获取 Prompt
+
+							optional.POST("/trim/stream/raw", trimH.StreamTrimRaw) // 无状态精简 (HTTP流)
+
+							optional.GET("/trim/ws/raw", trimH.StreamTrimRawWS) // 无状态精简 (WebSocket)
+
+						}
+
 			// 受保护接口 (Protected)
 			protected := v1Group.Group("")
 			protected.Use(AuthMiddleware(userSvc))
@@ -34,7 +51,7 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 				// Story 模块
 				protected.POST("/upload", storyH.Upload)
 				protected.GET("/books", storyH.ListBooks)
-				protected.GET("/prompts", storyH.ListPrompts)
+				// protected.GET("/prompts", storyH.ListPrompts) // Moved to optional
 				protected.GET("/books/:id", storyH.GetBookDetail)
 				protected.POST("/books/:id/progress", storyH.UpdateProgress)
 				protected.GET("/chapters/:id", storyH.GetChapter)

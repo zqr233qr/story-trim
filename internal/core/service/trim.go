@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"text/template"
@@ -93,7 +95,6 @@ func (s *trimService) TrimChapterStream(ctx context.Context, userID uint, chapte
 		return nil, err
 	}
 
-	// 组装带动态数值的提示词
 	systemPrompt := s.buildSystemPrompt(encyclopedia, summaries, prompt, raw.Content)
 
 	llmStream, err := s.llm.ChatStream(ctx, systemPrompt, raw.Content)
@@ -101,7 +102,43 @@ func (s *trimService) TrimChapterStream(ctx context.Context, userID uint, chapte
 		return nil, err
 	}
 
-	return s.wrapAndSaveStream(ctx, llmStream, userID, book, chap, promptID, level), nil
+	return s.wrapAndSaveStream(ctx, llmStream, userID, book, chap, chap.ContentMD5, promptID, level), nil
+}
+
+// TrimContentStream 无状态精简：直接根据内容哈希进行处理
+func (s *trimService) TrimContentStream(ctx context.Context, userID uint, rawContent string, promptID uint) (<-chan string, error) {
+	prompt, err := s.promptRepo.GetPromptByID(ctx, promptID)
+	if err != nil {
+		return nil, err
+	}
+
+	md5 := s.calculateMD5(rawContent)
+
+	// 2. 查缓存
+	cache, err := s.cacheRepo.GetTrimResult(ctx, md5, promptID)
+	if err == nil && cache != nil {
+		return s.mockStreaming(cache.TrimmedContent), nil
+	}
+
+	// 3. 确保原文入库 (RawContent)
+	go func() {
+		// s.bookRepo.SaveRawContent(...) // 需要 repo 支持
+	}()
+
+	// 4. 组装 Prompt
+	systemPrompt := s.buildSystemPrompt(nil, nil, prompt, rawContent)
+
+	llmStream, err := s.llm.ChatStream(ctx, systemPrompt, rawContent)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.wrapAndSaveStream(ctx, llmStream, userID, nil, nil, md5, promptID, 0), nil
+}
+
+func (s *trimService) calculateMD5(content string) string {
+	hash := md5.Sum([]byte(content))
+	return hex.EncodeToString(hash[:])
 }
 
 func (s *trimService) calculateLevel(summaryCount int, hasEncyclopedia bool) int {
@@ -119,7 +156,6 @@ func (s *trimService) calculateLevel(summaryCount int, hasEncyclopedia bool) int
 }
 
 func (s *trimService) buildSystemPrompt(enc *domain.SharedEncyclopedia, summaries []domain.RawSummary, prompt *domain.Prompt, rawContent string) string {
-	// 1. 计算字数与比率
 	rawLen := len([]rune(rawContent))
 
 	boundaryRatioMin := prompt.BoundaryRatioMin
@@ -137,7 +173,6 @@ func (s *trimService) buildSystemPrompt(enc *domain.SharedEncyclopedia, summarie
 		targetRangeStr = fmt.Sprintf("%d", targetMin)
 	}
 
-	// 2. 准备模板数据
 	data := struct {
 		WordsRange             string
 		TargetResidualRateRange string
@@ -152,7 +187,6 @@ func (s *trimService) buildSystemPrompt(enc *domain.SharedEncyclopedia, summarie
 		Encyclopedia:            formatEncyclopedia(enc),
 	}
 
-	// 3. 渲染模板
 	if s.tmpl == nil {
 		return "System Error: Template not loaded"
 	}
@@ -185,7 +219,7 @@ func (s *trimService) mockStreaming(content string) <-chan string {
 	return ch
 }
 
-func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string, userID uint, book *domain.Book, chap *domain.Chapter, pID uint, level int) <-chan string {
+func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string, userID uint, book *domain.Book, chap *domain.Chapter, contentMD5 string, pID uint, level int) <-chan string {
 	output := make(chan string)
 	go func() {
 		defer close(output)
@@ -197,24 +231,34 @@ func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string
 
 		final := full.String()
 		if final != "" {
-			raw, _ := s.bookRepo.GetRawContent(ctx, chap.ContentMD5)
-			rawLen := len([]rune(raw.Content))
+			// 如果是无状态模式，我们无法查 RawContent 表获取原文长度，只能假设
+			// 或者，我们在 TrimContentStream 里把原文也传进来？不需要，直接用 contentMD5 存即可
+			// 为了计算 rate，我们可能需要原文长度。
+			// 简单起见，如果 chap 为 nil，我们就不算 rate 了，或者默认 0
+			
 			trimmedLen := len([]rune(final))
-
 			rate := 0.0
-			if rawLen > 0 {
-				rate = float64(trimmedLen) / float64(rawLen)
-				rate = float64(int(rate*10000+0.5)) / 10000
+			
+			// 如果 chap 不为空，去查原文算 rate
+			if chap != nil {
+				raw, _ := s.bookRepo.GetRawContent(ctx, contentMD5)
+				if raw != nil {
+					rawLen := len([]rune(raw.Content))
+					if rawLen > 0 {
+						rate = float64(trimmedLen) / float64(rawLen)
+						rate = float64(int(rate*10000+0.5)) / 10000
+					}
+				}
 			}
 
 			log.Info().
-				Str("md5", chap.ContentMD5).
+				Str("md5", contentMD5).
 				Int("trimmed_words", trimmedLen).
 				Float64("trim_rate", rate).
 				Msg("Streaming trim completed")
 
 			if err := s.cacheRepo.SaveTrimResult(ctx, &domain.TrimResult{
-				ContentMD5:     chap.ContentMD5,
+				ContentMD5:     contentMD5,
 				PromptID:       pID,
 				Level:          level,
 				TrimmedContent: final,
@@ -222,17 +266,20 @@ func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string
 				TrimRate:       rate,
 				CreatedAt:      time.Now(),
 			}); err != nil {
-				log.Error().Err(err).Str("md5", chap.ContentMD5).Msg("Failed to save trim result")
+				log.Error().Err(err).Str("md5", contentMD5).Msg("Failed to save trim result")
 			}
 
-			if userID > 0 {
+			if userID > 0 && book != nil && chap != nil {
 				if err := s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
 					UserID: userID, BookID: book.ID, ChapterID: chap.ID, PromptID: pID, CreatedAt: time.Now(),
 				}); err != nil {
 					log.Warn().Err(err).Uint("user_id", userID).Msg("Failed to record user trim action")
 				}
 			}
-			go s.workerSvc.GenerateSummary(context.Background(), book.Fingerprint, chap.Index, chap.ContentMD5, final)
+            
+            if book != nil && chap != nil {
+			    go s.workerSvc.GenerateSummary(context.Background(), book.Fingerprint, chap.Index, contentMD5, final)
+            }
 		}
 	}()
 	return output

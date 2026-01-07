@@ -1,0 +1,175 @@
+// #ifdef APP-PLUS
+// 匹配章节标题：(行首或换行符) + 空白(可选) + 第xxx章 + (非换行符的内容)
+const CHAPTER_HEADER_REGEX = /(?:^|\n)\s*(第[0-9一二三四五六七八九十百千万]+[章回节][^\r\n]*)/g;
+const CHUNK_SIZE = 1024 * 1024; // 1MB
+
+export interface ParsedChapter {
+  index: number;
+  title: string;
+  content: string;
+  md5: string;
+  length: number;
+}
+
+export interface ParseResult {
+  title: string;
+  totalChapters: number;
+  fingerprint: string;
+  chapters: ParsedChapter[];
+}
+
+// 极速采样 Hash (只计算头中尾各100字符)
+function fastHash(str: string): string {
+  const len = str.length;
+  if (len < 500) {
+    // 短文本全量算
+    let hash = 0;
+    for (let i = 0; i < len; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(16);
+  }
+  
+  // 长文本采样
+  let sample = str.substring(0, 100) + 
+               str.substring(Math.floor(len/2), Math.floor(len/2) + 100) + 
+               str.substring(len - 100);
+               
+  let hash = 0;
+  for (let i = 0; i < sample.length; i++) {
+    hash = ((hash << 5) - hash) + sample.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16);
+}
+
+export const parser = {
+  async parseFile(filePath: string, fileName: string, onProgress?: (p: number) => void): Promise<ParseResult> {
+    console.log('[Parser] V4 Loaded - FastHash Mode');
+    return new Promise((resolve, reject) => {
+      plus.io.resolveLocalFileSystemURL(filePath, (entry) => {
+        entry.file(async (file) => {
+          const reader = new plus.io.FileReader();
+          const fileSize = file.size;
+          let offset = 0;
+          
+          let chapters: ParsedChapter[] = [];
+          let currentTitle = '序章';
+          let currentBuffer: string[] = []; 
+          let chapterIndex = 0;
+          let fingerprint = '';
+
+          const commitChapter = (title: string, buffer: string[]) => {
+            const content = buffer.join(''); 
+            // 允许空章，但至少要有内容
+            if (content.length === 0 && buffer.length === 0) return;
+
+            const md5 = fastHash(content); 
+            
+            if (chapterIndex === 1 || (chapterIndex === 0 && !fingerprint)) {
+              fingerprint = md5;
+            }
+
+            chapters.push({
+              index: chapterIndex++,
+              title: title,
+              content: content,
+              md5: md5,
+              length: content.length
+            });
+          };
+
+          const readNextChunk = () => {
+            const startRead = Date.now();
+            if (onProgress) {
+              onProgress(Math.floor((offset / fileSize) * 80));
+            }
+
+            if (offset >= fileSize) {
+              console.log(`[Parser] Finished. Total chapters: ${chapters.length}`);
+              commitChapter(currentTitle, currentBuffer);
+              if (onProgress) onProgress(80);
+              resolve({
+                title: fileName.replace(/\.txt$/i, ''),
+                totalChapters: chapters.length,
+                fingerprint: fingerprint || 'unknown',
+                chapters: chapters
+              });
+              return;
+            }
+
+            const end = Math.min(offset + CHUNK_SIZE, fileSize);
+            const slice = file.slice(offset, end);
+            
+            reader.onloadend = (e) => {
+              const readTime = Date.now() - startRead;
+              
+              const text = e.target.result as string;
+              
+              let validEnd = text.length;
+              if (end < fileSize) {
+                validEnd = text.lastIndexOf('\n');
+                if (validEnd <= 0) validEnd = text.length; 
+              }
+
+              const validChunk = text.substring(0, validEnd);
+              
+              const matchStart = Date.now();
+              // 使用 matchAll 快速查找章节头
+              const matches = [...validChunk.matchAll(CHAPTER_HEADER_REGEX)];
+              const matchTime = Date.now() - matchStart;
+              
+              console.log(`[Parser] Chunk: ${offset/1024}KB. Read: ${readTime}ms. Regex: ${matchTime}ms. Matches: ${matches.length}`);
+
+              if (matches.length === 0) {
+                currentBuffer.push(validChunk);
+              } else {
+                const firstMatch = matches[0];
+                if (firstMatch.index! > 0) {
+                  currentBuffer.push(validChunk.substring(0, firstMatch.index));
+                }
+                
+                commitChapter(currentTitle, currentBuffer);
+                
+                for (let i = 0; i < matches.length - 1; i++) {
+                  const m = matches[i];
+                  const nextM = matches[i + 1];
+                  const title = m[1].trim();
+                  const start = m.index! + m[0].length;
+                  const end = nextM.index!;
+                  const content = validChunk.substring(start, end);
+                  commitChapter(title, [content]);
+                }
+                
+                const lastMatch = matches[matches.length - 1];
+                currentTitle = lastMatch[1].trim();
+                const lastContentStart = lastMatch.index! + lastMatch.length;
+                currentBuffer = [validChunk.substring(lastContentStart)];
+              }
+
+              offset += validEnd;
+              if (validEnd === 0 && end < fileSize) offset += CHUNK_SIZE;
+
+              setTimeout(readNextChunk, 0); 
+            };
+            
+            reader.readAsText(slice, 'utf-8');
+          };
+
+          readNextChunk();
+
+        }, (e) => reject(e));
+      }, (e) => reject(e));
+    });
+  }
+};
+// #endif
+
+// #ifndef APP-PLUS
+export const parser = {
+  async parseFile(filePath: string, fileName: string): Promise<any> {
+    return { title: fileName, chapters: [] };
+  }
+}
+// #endif

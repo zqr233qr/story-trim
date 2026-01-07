@@ -1,5 +1,5 @@
 // 基础配置
-// 重要：真机调试时，请将下方 IP 替换为你电脑的局域网 IP (可通过 ifconfig 查看)
+// 重要：真机调试时，请将下方 IP 替换为你电脑的局域网 IP
 const LOCAL_IP = '192.168.3.178'; 
 
 let BASE_URL = '/api/v1';
@@ -34,10 +34,9 @@ const request = <T>(options: UniApp.RequestOptions): Promise<Response<T>> => {
         'Authorization': token ? `Bearer ${token}` : '',
       },
       success: (res) => {
-        console.log('[API Response]', res.statusCode, res.data);
+        // console.log('[API Response]', res.statusCode);
         if (res.statusCode === 401) {
           uni.removeStorageSync('token');
-          uni.reLaunch({ url: '/pages/login/login' });
           reject(new Error('Unauthorized'));
         } else {
           resolve(res.data as Response<T>);
@@ -51,13 +50,12 @@ const request = <T>(options: UniApp.RequestOptions): Promise<Response<T>> => {
   });
 };
 
-// --- 类型定义 (直接从 web 项目同步) ---
-
+// --- 类型定义 ---
 export interface User { id: number; username: string; token?: string; }
 export interface Book { id: number; title: string; total_chapters: number; fingerprint: string; created_at: string; }
 export interface Chapter { 
   id: number; book_id: number; index: number; title: string; 
-  content?: string; trimmed_content?: string; trimmed_prompt_ids?: number[]; 
+  content?: string; trimmed_content?: string; trimmed_prompt_ids?: number[]; md5?: string;
 }
 export interface ReadingHistory { last_chapter_id: number; last_prompt_id: number; }
 export interface BookDetail { book: Book; chapters: Chapter[]; trimmed_ids: number[]; reading_history?: ReadingHistory; }
@@ -65,7 +63,6 @@ export interface Prompt { id: number; name: string; description?: string; is_def
 export interface Task { id: string; type: string; status: string; progress: number; error?: string; }
 
 // --- API 方法 ---
-
 export const api = {
   login: (data: any) => request<{ token: string }>({ url: '/auth/login', method: 'POST', data }),
   register: (data: any) => request<void>({ url: '/auth/register', method: 'POST', data }),
@@ -110,7 +107,7 @@ export const api = {
     });
   },
 
-  // SSE/WS 流式解析适配器
+  // 1. 基于 ChapterID 的流式 (SSE/WS)
   trimStream: async (
     chapterId: number,
     promptId: number,
@@ -121,13 +118,12 @@ export const api = {
     const token = uni.getStorageSync('token');
     
     // #ifdef H5
-    const url = `${BASE_URL}/trim/stream`;
-    const body = JSON.stringify({ chapter_id: chapterId, prompt_id: promptId });
+    // H5 直接用 Fetch SSE
     try {
-      const response = await fetch(url, {
+      const response = await fetch(`${BASE_URL}/trim/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body
+        body: JSON.stringify({ chapter_id: chapterId, prompt_id: promptId })
       });
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No body');
@@ -151,16 +147,54 @@ export const api = {
     // #endif
 
     // #ifndef H5
-    // App 和 小程序使用 WebSocket
-    // 注意：ws 协议需要根据 http/https 自动切换
+    // App 端使用 WebSocket
     const wsBase = BASE_URL.replace('http', 'ws');
     const wsUrl = `${wsBase}/trim/ws?token=${token}&chapter_id=${chapterId}&prompt_id=${promptId}`;
+    const socketTask = uni.connectSocket({ url: wsUrl, complete: () => {} });
+    socketTask.onMessage((res) => {
+      try {
+        const p = JSON.parse(res.data as string);
+        if (p.error) { onError(p.error); socketTask.close({}); } 
+        else if (p.c) { onData(p.c); }
+      } catch (e) {}
+    });
+    socketTask.onClose(() => { onDone(); });
+    socketTask.onError(() => { onError('WebSocket Error'); });
+    // #endif
+  },
+
+  // 2. 基于 RawContent 的流式 (无状态, 支持离线混合模式)
+  trimStreamRaw: (
+    content: string,
+    promptId: number,
+    onData: (text: string) => void,
+    onError: (err: string) => void,
+    onDone: () => void
+  ) => {
+    const token = uni.getStorageSync('token');
     
-    console.log('[WS Connect]', wsUrl);
+    // 优先使用 WebSocket，兼容所有平台且支持流式
+    // 注意：ws 协议需要根据 http/https 自动切换
+    let wsBase = BASE_URL.replace('http', 'ws');
+    // 如果 BASE_URL 是相对路径 (H5 dev)，补全 host
+    if (wsBase.startsWith('/')) {
+        const loc = window.location;
+        wsBase = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + wsBase;
+    }
+    
+    const wsUrl = `${wsBase}/trim/ws/raw?token=${token}`;
+    console.log('[WS Connect Raw]', wsUrl);
     
     const socketTask = uni.connectSocket({
       url: wsUrl,
       complete: () => {}
+    });
+
+    socketTask.onOpen(() => {
+        console.log('[WS Open] Sending payload...')
+        socketTask.send({
+            data: JSON.stringify({ content: content, prompt_id: promptId })
+        });
     });
 
     socketTask.onMessage((res) => {
@@ -176,12 +210,13 @@ export const api = {
     });
 
     socketTask.onClose(() => {
+      console.log('[WS Close]');
       onDone();
     });
 
     socketTask.onError((err) => {
+      console.error('[WS Error]', err);
       onError('WebSocket Error');
     });
-    // #endif
   }
 };

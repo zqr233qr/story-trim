@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
-onLaunch(() => {
+import { useBookStore } from "./stores/book";
+
+const bookStore = useBookStore();
+
+onLaunch(async () => {
   console.log("App Launch");
+  // 初始化本地数据库
+  // #ifdef APP-PLUS
+  await bookStore.init();
+  // #endif
 });
 onShow(() => {
   console.log("App Show");

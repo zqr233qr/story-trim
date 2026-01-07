@@ -70,9 +70,10 @@ func main() {
 	storyHandler := v1.NewStoryHandler(repo, repo, repo, bookSvc, trimSvc)
 	taskHandler := v1.NewTaskHandler(workerSvc)
 	authHandler := v1.NewAuthHandler(userSvc)
+	trimHandler := v1.NewTrimHandler(trimSvc)
 
 	// 7. 启动路由
-	r := http.NewRouter(userSvc, storyHandler, taskHandler, authHandler)
+	r := http.NewRouter(userSvc, storyHandler, taskHandler, authHandler, trimHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {
