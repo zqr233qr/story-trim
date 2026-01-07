@@ -1,0 +1,31 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/shelf/shelf",
+      "style": {
+        "navigationBarTitleText": "我的书架",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/reader/reader",
+      "style": {
+        "navigationBarTitleText": "阅读器",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "StoryTrim",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  }
+}

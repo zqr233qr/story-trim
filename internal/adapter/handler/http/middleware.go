@@ -11,21 +11,27 @@ import (
 
 func AuthMiddleware(userSvc port.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		tokenStr := ""
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			apix.Error(c, 401, errno.AuthErrCode, "Authorization header required")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenStr = parts[1]
+			}
+		}
+
+		// 如果 Header 没带，尝试从 Query 中获取 (用于 WebSocket)
+		if tokenStr == "" {
+			tokenStr = c.Query("token")
+		}
+
+		if tokenStr == "" {
+			apix.Error(c, 401, errno.AuthErrCode, "Authentication required")
 			c.Abort()
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			apix.Error(c, 401, errno.AuthErrCode, "Invalid authorization format")
-			c.Abort()
-			return
-		}
-
-		userID, err := userSvc.ValidateToken(parts[1])
+		userID, err := userSvc.ValidateToken(tokenStr)
 		if err != nil {
 			apix.Error(c, 401, errno.AuthErrCode, "Invalid or expired token")
 			c.Abort()

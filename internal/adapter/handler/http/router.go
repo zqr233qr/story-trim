@@ -36,9 +36,12 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 				protected.GET("/books", storyH.ListBooks)
 				protected.GET("/prompts", storyH.ListPrompts)
 				protected.GET("/books/:id", storyH.GetBookDetail)
+				protected.POST("/books/:id/progress", storyH.UpdateProgress)
 				protected.GET("/chapters/:id", storyH.GetChapter)
 				protected.GET("/chapters/:id/trim", storyH.GetChapterTrim)
+				protected.POST("/chapters/batch", storyH.GetBatchChapters)
 				protected.POST("/trim/stream", storyH.TrimStream)
+				protected.GET("/trim/ws", storyH.TrimStreamWS)
 
 				// Task 模块
 				protected.POST("/tasks/batch-trim", taskH.StartBatchTrim)

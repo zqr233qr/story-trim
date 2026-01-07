@@ -151,3 +151,49 @@ func (s *bookService) GetTrimmedContent(ctx context.Context, userID uint, chapte
 func (s *bookService) ListUserBooks(ctx context.Context, userID uint) ([]domain.Book, error) {
 	return s.bookRepo.GetBooksByUserID(ctx, userID)
 }
+
+func (s *bookService) GetChaptersBatch(ctx context.Context, userID uint, ids []uint, promptID uint) ([]port.BatchChapterResp, error) {
+	chaps, err := s.bookRepo.GetChaptersByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// 提前获取用户已精简列表，用于批量判定缓存
+	var trimmedMap = make(map[uint]bool)
+	if userID > 0 && promptID > 0 && len(chaps) > 0 {
+		tIDs, _ := s.actionRepo.GetUserTrimmedIDs(ctx, userID, chaps[0].BookID, promptID)
+		for _, tid := range tIDs {
+			trimmedMap[tid] = true
+		}
+	}
+
+	var resp []port.BatchChapterResp
+	for _, c := range chaps {
+		item := port.BatchChapterResp{ID: c.ID}
+		// 获取原文
+		raw, err := s.bookRepo.GetRawContent(ctx, c.ContentMD5)
+		if err == nil {
+			item.Content = raw.Content
+		}
+
+		// 获取精简版 (如果已精简且请求了 promptID)
+		if trimmedMap[c.ID] {
+			res, err := s.cacheRepo.GetTrimResult(ctx, c.ContentMD5, promptID)
+			if err == nil && res != nil {
+				item.TrimmedContent = res.TrimmedContent
+			}
+		}
+		resp = append(resp, item)
+	}
+	return resp, nil
+}
+
+func (s *bookService) UpdateReadingProgress(ctx context.Context, userID uint, bookID uint, chapterID uint, promptID uint) error {
+	return s.actionRepo.UpsertReadingHistory(ctx, &domain.ReadingHistory{
+		UserID:        userID,
+		BookID:        bookID,
+		LastChapterID: chapterID,
+		LastPromptID:  promptID,
+		UpdatedAt:     time.Now(),
+	})
+}

@@ -1,18 +1,24 @@
 package v1
 
 import (
-	"context"
 	"io"
+	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	"github/zqr233qr/story-trim/internal/adapter/handler/apix"
 	"github/zqr233qr/story-trim/internal/core/domain"
 	"github/zqr233qr/story-trim/internal/core/port"
 	"github/zqr233qr/story-trim/pkg/errno"
 )
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // 允许跨域
+	},
+}
 
 type StoryHandler struct {
 	bookRepo   port.BookRepository
@@ -81,6 +87,8 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 		apix.Error(c, 400, errno.ParamErrCode, "Invalid book ID")
 		return
 	}
+	log.Info().Int("book_id", bookID).Msg("[API] GetBookDetail")
+
 	promptID, err := strconv.Atoi(c.DefaultQuery("prompt_id", "2"))
 	if err != nil {
 		promptID = 2
@@ -142,6 +150,8 @@ func (h *StoryHandler) GetChapter(c *gin.Context) {
 		apix.Error(c, 400, errno.ParamErrCode, "Invalid chapter ID")
 		return
 	}
+	log.Info().Int("chapter_id", chapterID).Msg("[API] GetChapter")
+
 	userID := c.GetUint("userID")
 
 	chap, raw, err := h.bookSvc.GetChapterDetail(c.Request.Context(), uint(chapterID))
@@ -157,16 +167,6 @@ func (h *StoryHandler) GetChapter(c *gin.Context) {
 		if err == nil {
 			availablePromptIDs = ids
 		}
-	}
-
-	if userID > 0 {
-		go func() {
-			if err := h.actionRepo.UpsertReadingHistory(context.Background(), &domain.ReadingHistory{
-				UserID: userID, BookID: chap.BookID, LastChapterID: chap.ID, LastPromptID: 0, UpdatedAt: time.Now(),
-			}); err != nil {
-				log.Warn().Err(err).Uint("user_id", userID).Uint("book_id", chap.BookID).Msg("Failed to update reading history")
-			}
-		}()
 	}
 
 	apix.Success(c, gin.H{
@@ -187,6 +187,8 @@ func (h *StoryHandler) GetChapterTrim(c *gin.Context) {
 		apix.Error(c, 400, errno.ParamErrCode, "Invalid prompt ID")
 		return
 	}
+	log.Info().Int("chapter_id", chapterID).Int("prompt_id", promptID).Msg("[API] GetChapterTrim")
+
 	userID := c.GetUint("userID")
 
 	content, err := h.bookSvc.GetTrimmedContent(c.Request.Context(), userID, uint(chapterID), uint(promptID))
@@ -195,11 +197,56 @@ func (h *StoryHandler) GetChapterTrim(c *gin.Context) {
 		return
 	}
 
-	// 如果内容为空，仍然返回成功，只是 trimmed_content 为 null 或空
 	apix.Success(c, gin.H{
 		"prompt_id":       promptID,
 		"trimmed_content": content,
 	})
+}
+
+func (h *StoryHandler) UpdateProgress(c *gin.Context) {
+	bookID, _ := strconv.Atoi(c.Param("id"))
+	var req struct {
+		ChapterID uint `json:"chapter_id" binding:"required"`
+		PromptID  uint `json:"prompt_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apix.Error(c, 400, errno.ParamErrCode)
+		return
+	}
+	log.Info().Int("book_id", bookID).Uint("chapter_id", req.ChapterID).Uint("prompt_id", req.PromptID).Msg("[API] UpdateProgress")
+
+	userID := c.GetUint("userID")
+	err := h.bookSvc.UpdateReadingProgress(c.Request.Context(), userID, uint(bookID), req.ChapterID, req.PromptID)
+	if err != nil {
+		apix.Error(c, 500, errno.InternalServerErrCode)
+		return
+	}
+	apix.Success(c, nil)
+}
+
+func (h *StoryHandler) GetBatchChapters(c *gin.Context) {
+	var req struct {
+		ChapterIDs []uint `json:"chapter_ids" binding:"required"`
+		PromptID   uint   `json:"prompt_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apix.Error(c, 400, errno.ParamErrCode)
+		return
+	}
+	log.Info().Uints("chapter_ids", req.ChapterIDs).Uint("prompt_id", req.PromptID).Msg("[API] GetBatchChapters")
+
+	if len(req.ChapterIDs) > 10 {
+		apix.Error(c, 400, errno.ParamErrCode, "Too many chapters, max 10")
+		return
+	}
+
+	userID := c.GetUint("userID")
+	resp, err := h.bookSvc.GetChaptersBatch(c.Request.Context(), userID, req.ChapterIDs, req.PromptID)
+	if err != nil {
+		apix.Error(c, 500, errno.InternalServerErrCode)
+		return
+	}
+	apix.Success(c, resp)
 }
 
 func (h *StoryHandler) TrimStream(c *gin.Context) {
@@ -228,4 +275,41 @@ func (h *StoryHandler) TrimStream(c *gin.Context) {
 		}
 		return false
 	})
+}
+
+func (h *StoryHandler) TrimStreamWS(c *gin.Context) {
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to upgrade to websocket")
+		return
+	}
+	defer conn.Close()
+
+	// 1. 获取参数
+	chapterID, _ := strconv.Atoi(c.Query("chapter_id"))
+	promptID, _ := strconv.Atoi(c.Query("prompt_id"))
+	log.Info().Int("chapter_id", chapterID).Int("prompt_id", promptID).Msg("[WS] TrimStream Connect")
+
+	userID := c.GetUint("userID")
+
+	if chapterID == 0 || promptID == 0 {
+		conn.WriteJSON(gin.H{"error": "invalid parameters"})
+		return
+	}
+
+	// 2. 调用服务获取流
+	stream, err := h.trimSvc.TrimChapterStream(c.Request.Context(), userID, uint(chapterID), uint(promptID))
+	if err != nil {
+		conn.WriteJSON(gin.H{"error": err.Error()})
+		return
+	}
+
+	// 3. 推送数据
+	for msg := range stream {
+		err := conn.WriteJSON(gin.H{"c": msg})
+		if err != nil {
+			log.Warn().Err(err).Msg("WS client disconnected")
+			break
+		}
+	}
 }

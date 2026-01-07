@@ -8,8 +8,8 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const isLogin = ref(true)
-const username = ref('')
-const password = ref('')
+const username = ref('zqr')
+const password = ref('123456')
 const loading = ref(false)
 const errorMsg = ref('')
 

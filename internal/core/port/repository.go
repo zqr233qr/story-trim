@@ -18,6 +18,7 @@ type BookRepository interface {
 	GetBookByFingerprint(ctx context.Context, fp string) (*domain.Book, error)
 	GetChaptersByBookID(ctx context.Context, bookID uint) ([]domain.Chapter, error)
 	GetChapterByID(ctx context.Context, id uint) (*domain.Chapter, error)
+	GetChaptersByIDs(ctx context.Context, ids []uint) ([]domain.Chapter, error)
 	GetBooksByUserID(ctx context.Context, userID uint) ([]domain.Book, error)
 
 	SaveRawContent(ctx context.Context, content *domain.RawContent) error

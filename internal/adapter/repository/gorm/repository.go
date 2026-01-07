@@ -113,6 +113,25 @@ func (r *repository) GetChapterByID(ctx context.Context, id uint) (*domain.Chapt
 	}, nil
 }
 
+func (r *repository) GetChaptersByIDs(ctx context.Context, ids []uint) ([]domain.Chapter, error) {
+	var dbChaps []Chapter
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&dbChaps).Error; err != nil {
+		return nil, err
+	}
+	var res []domain.Chapter
+	for _, c := range dbChaps {
+		res = append(res, domain.Chapter{
+			ID:         c.ID,
+			BookID:     c.BookID,
+			Index:      c.Index,
+			Title:      c.Title,
+			ContentMD5: c.ContentMD5,
+			CreatedAt:  c.CreatedAt,
+		})
+	}
+	return res, nil
+}
+
 func (r *repository) GetBooksByUserID(ctx context.Context, userID uint) ([]domain.Book, error) {
 	var dbBooks []Book
 	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Find(&dbBooks).Error
