@@ -85,6 +85,12 @@ export const api = {
   getBatchChapters: (chapterIds: number[], promptId?: number) => 
     request<{ id: number, content: string, trimmed_content: string }[]>({ url: '/chapters/batch', method: 'POST', data: { chapter_ids: chapterIds, prompt_id: promptId } }),
 
+  startBatchTrim: (bookId: number, promptId: number) => 
+    request<{ task_id: string }>({ url: '/tasks/batch-trim', method: 'POST', data: { book_id: bookId, prompt_id: promptId } }),
+
+  getTaskStatus: (taskId: string) => 
+    request<Task>({ url: `/tasks/${taskId}`, method: 'GET' }),
+
   upload: (filePath: string, fileName: string) => {
     return new Promise<Response<Book>>((resolve, reject) => {
       // #ifdef APP-PLUS

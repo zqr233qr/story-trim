@@ -9,7 +9,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	"github/zqr233qr/story-trim/internal/adapter/handler/apix"
-	"github/zqr233qr/story-trim/internal/core/domain"
 	"github/zqr233qr/story-trim/internal/core/port"
 	"github/zqr233qr/story-trim/pkg/errno"
 )
@@ -89,10 +88,6 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 	}
 	log.Info().Int("book_id", bookID).Msg("[API] GetBookDetail")
 
-	promptID, err := strconv.Atoi(c.DefaultQuery("prompt_id", "2"))
-	if err != nil {
-		promptID = 2
-	}
 	userID := c.GetUint("userID")
 
 	book, err := h.bookRepo.GetBookByID(c.Request.Context(), uint(bookID))
@@ -101,6 +96,7 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 		return
 	}
 
+	// 1. 获取章节
 	chapters, err := h.bookRepo.GetChaptersByBookID(c.Request.Context(), book.ID)
 	if err != nil {
 		log.Error().Err(err).Uint("book_id", book.ID).Msg("Failed to fetch chapters")
@@ -108,39 +104,43 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 		return
 	}
 
-	trimmedIDs, err := h.actionRepo.GetUserTrimmedIDs(c.Request.Context(), userID, book.ID, uint(promptID))
+	// 2. 获取该书所有章节的所有精简记录
+	modeMap, err := h.actionRepo.GetAllBookTrimmedPromptIDs(c.Request.Context(), userID, book.ID)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to fetch trimmed IDs, assuming none")
+		log.Warn().Err(err).Msg("Failed to fetch all trimmed mappings")
+	}
+
+	// 3. 填充章节元数据
+	for i := range chapters {
+		if ids, ok := modeMap[chapters[i].ID]; ok {
+			chapters[i].TrimmedPromptIDs = ids
+		} else {
+			chapters[i].TrimmedPromptIDs = []uint{}
+		}
+	}
+
+	// 4. 计算全本已就绪的模式 (定义：处理超过 90% 的章节即为全本就绪)
+	var bookTrimmedIDs []uint
+	modeStats := make(map[uint]int)
+	for _, ids := range modeMap {
+		for _, id := range ids {
+			modeStats[id]++
+		}
+	}
+	total := len(chapters)
+	for id, count := range modeStats {
+		if count >= total*9/10 || count >= total-1 { // 允许容错 1 章或 90%
+			bookTrimmedIDs = append(bookTrimmedIDs, id)
+		}
 	}
 
 	history, err := h.actionRepo.GetReadingHistory(c.Request.Context(), userID, book.ID)
-	if err != nil || history == nil {
-		history = &domain.ReadingHistory{
-			UserID: userID,
-			BookID: book.ID,
-		}
-	}
-
-	if history.LastPromptID == 0 {
-		prompts, err := h.promptRepo.ListSystemPrompts(c.Request.Context())
-		if err == nil {
-			for _, p := range prompts {
-				if p.IsDefault {
-					history.LastPromptID = p.ID
-					break
-				}
-			}
-			if history.LastPromptID == 0 && len(prompts) > 0 {
-				history.LastPromptID = prompts[0].ID
-			}
-		}
-	}
-
+	// ...
 	apix.Success(c, gin.H{
-		"book":            book,
-		"chapters":        chapters,
-		"trimmed_ids":     trimmedIDs,
-		"reading_history": history,
+		"book":             book,
+		"chapters":         chapters,
+		"book_trimmed_ids": bookTrimmedIDs, // 书籍维度的全本就绪模式
+		"reading_history":  history,
 	})
 }
 

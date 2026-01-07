@@ -335,8 +335,46 @@ const handleTerminalClose = () => {
   showNotification('AI 精简将在后台继续...')
 }
 
-const handleStartProcess = async (modeId: string | number) => {
+// 全本异步任务轮询
+const watchBatchTask = (taskId: string, bookName: string) => {
+  const timer = setInterval(async () => {
+    try {
+      const res = await api.getTaskStatus(taskId)
+      if (res.code === 0) {
+        if (res.data.status === 'success') {
+          clearInterval(timer)
+          showNotification(`全本精简完成！《${bookName}》已就绪`)
+          // 刷新书籍元数据（获取最新的 trimmed_prompt_ids 标记）
+          bookStore.fetchBookDetail(activeBook.value!.id)
+        } else if (res.data.status === 'failed') {
+          clearInterval(timer)
+          showNotification(`全本精简失败，请稍后重试`)
+        }
+      }
+    } catch (e) {
+      clearInterval(timer)
+    }
+  }, 10000) // 10秒一轮询，极低频
+}
+
+const handleStartProcess = async (modeId: string | number, isBatch: boolean = false) => {
   const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
+  
+  if (isBatch) {
+    showBatchModal.value = false
+    showNotification('已启动全书处理，AI 正在后台处理中...')
+    try {
+      const res = await api.startBatchTrim(activeBook.value!.id, promptId)
+      if (res.code === 0) {
+        watchBatchTask(res.data.task_id, activeBook.value!.title)
+      }
+    } catch (e) {
+      showNotification('任务启动失败')
+    }
+    return
+  }
+
+  // 单章逻辑保持不变
   const isTrimmed = activeChapter.value?.trimmed_prompt_ids?.some(id => Number(id) === promptId)
   if (isTrimmed) {
     showConfigModal.value = false
@@ -525,8 +563,8 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     </view>
 
     <!-- Modals -->
-    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :is-dark-mode="isDarkMode" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
-    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :is-dark-mode="isDarkMode" @close="showBatchModal = false" @confirm="handleStartProcess" />
+    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :is-dark-mode="isDarkMode" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
+    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :is-dark-mode="isDarkMode" @close="showBatchModal = false" @confirm="(id) => handleStartProcess(id, true)" />
     <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :is-dark-mode="isDarkMode" @close="showConfigModal = false" @start="handleStartProcess" />
     <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :is-dark-mode="isDarkMode" :page-mode="pageMode" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:is-dark-mode="isDarkMode = $event" @update:page-mode="pageMode = $event" />
     <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :is-dark-mode="isDarkMode" @close="handleTerminalClose" />

@@ -349,6 +349,26 @@ func (r *repository) GetChapterTrimmedPromptIDs(ctx context.Context, userID, boo
 	return ids, err
 }
 
+func (r *repository) GetAllBookTrimmedPromptIDs(ctx context.Context, userID, bookID uint) (map[uint][]uint, error) {
+	type result struct {
+		ChapterID uint
+		PromptID  uint
+	}
+	var rows []result
+	err := r.db.WithContext(ctx).Model(&UserProcessedChapter{}).
+		Where("user_id = ? AND book_id = ?", userID, bookID).
+		Select("chapter_id, prompt_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	res := make(map[uint][]uint)
+	for _, row := range rows {
+		res[row.ChapterID] = append(res[row.ChapterID], row.PromptID)
+	}
+	return res, nil
+}
+
 // --- UserRepository 实现 ---
 
 func (r *repository) Create(ctx context.Context, user *domain.User) error {

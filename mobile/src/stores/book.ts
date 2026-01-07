@@ -12,12 +12,14 @@ export interface Chapter extends ApiChapter {
   trimmed_prompt_ids: number[]; // Local cache of available trims
 }
 
-export interface Book extends ApiBook {
-  progress: number;
-  status: 'new' | 'processing' | 'ready';
-  activeModeId?: string;
-  activeChapterIndex: number;
-  chapters: Chapter[];
+export interface Book {
+  id: number
+  title: string
+  status: 'new' | 'processing' | 'ready'
+  activeModeId?: string
+  book_trimmed_ids?: number[]
+  chapters: Chapter[]
+  activeChapterIndex: number
 }
 
 export const useBookStore = defineStore('book', () => {
@@ -46,8 +48,9 @@ export const useBookStore = defineStore('book', () => {
     try {
       const res = await api.getBooks()
       if (res.code === 0) {
-        // Map API Book to UI Book
-        books.value = res.data.map(b => ({
+        // Map API Book to UI Book (Add null check for res.data)
+        const data = res.data || []
+        books.value = data.map(b => ({
           ...b,
           progress: 0,
           status: 'ready',
@@ -102,8 +105,10 @@ export const useBookStore = defineStore('book', () => {
           ...c,
           modes: {},
           isLoaded: false,
-          trimmed_prompt_ids: []
+          trimmed_prompt_ids: c.trimmed_prompt_ids || []
         }))
+        
+        book.book_trimmed_ids = data.book_trimmed_ids || []
         
         // Restore history
         if (data.reading_history) {

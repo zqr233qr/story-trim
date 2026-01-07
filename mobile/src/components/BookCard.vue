@@ -6,39 +6,40 @@ const props = defineProps<{ book: Book }>()
 const emit = defineEmits(['click'])
 
 const statusText = computed(() => {
-  const map: Record<string, string> = { 'new': '未处理', 'processing': '处理中', 'ready': '已精简' }
+  const map: Record<string, string> = { 'new': '新书籍', 'processing': '处理中', 'ready': '已就绪' }
   return map[props.book.status] || props.book.status
 })
 </script>
 
 <template>
-  <div @click="emit('click')" class="bg-white p-4 rounded-xl shadow-sm border border-stone-100 flex items-center gap-4 active:scale-[0.98] transition-transform cursor-pointer hover:shadow-md">
+  <view @click="emit('click')" class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 flex gap-4 active:scale-[0.98] transition-transform mb-3">
     <!-- Cover Placeholder -->
-    <div class="w-12 h-16 bg-stone-100 rounded flex items-center justify-center text-[10px] text-stone-300 font-serif shrink-0">
-      封面
-    </div>
+    <view class="w-16 h-20 bg-stone-50 rounded-lg flex items-center justify-center border border-stone-100 shrink-0 shadow-inner">
+      <text class="text-[10px] text-stone-300 font-serif">BOOK</text>
+    </view>
 
-    <div class="flex-1 min-w-0">
-      <div class="flex justify-between items-start">
-        <h4 class="font-bold text-stone-800 truncate text-sm sm:text-base">{{ book.title }}</h4>
-        
-        <!-- Status Badge -->
-        <div class="flex items-center gap-1.5 bg-stone-50 px-2 py-1 rounded-full border border-stone-100 shrink-0">
-          <div :class="{
+    <view class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+      <view>
+        <view class="flex justify-between items-start gap-2">
+          <text class="font-bold text-stone-800 truncate text-base">{{ book.title }}</text>
+          <view v-if="book.book_trimmed_ids?.length" class="flex items-center gap-0.5 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 shrink-0">
+            <text class="text-[10px] text-teal-600 font-bold">🪄 AI</text>
+          </view>
+        </view>
+        <text class="text-xs text-stone-400 mt-1 block truncate">共 {{ book.total_chapters || 0 }} 章节</text>
+      </view>
+      
+      <view class="flex items-center justify-between">
+        <view class="flex items-center gap-1.5">
+          <view :class="{
             'bg-teal-500': book.status === 'ready',
             'bg-yellow-400 animate-pulse': book.status === 'processing',
             'bg-stone-300': book.status === 'new'
-          }" class="w-1.5 h-1.5 rounded-full"></div>
-          <span class="text-[10px] text-stone-500 font-medium">{{ statusText }}</span>
-        </div>
-      </div>
-      
-      <p class="text-xs text-stone-400 mt-1 truncate">{{ book.lastChapter }}</p>
-      
-      <!-- Progress Bar -->
-      <div class="w-full bg-stone-100 h-1 mt-3 rounded-full overflow-hidden">
-        <div class="bg-stone-300 h-full rounded-full transition-all duration-500" :style="{ width: book.progress + '%' }"></div>
-      </div>
-    </div>
-  </div>
+          }" class="w-1.5 h-1.5 rounded-full"></view>
+          <text class="text-[10px] text-stone-500 font-medium">{{ statusText }}</text>
+        </view>
+        <!-- Optional: Reading Progress Info -->
+      </view>
+    </view>
+  </view>
 </template>

@@ -45,6 +45,7 @@ type ActionRepository interface {
 	RecordUserTrim(ctx context.Context, action *domain.UserProcessedChapter) error
 	GetUserTrimmedIDs(ctx context.Context, userID, bookID, promptID uint) ([]uint, error)
 	GetChapterTrimmedPromptIDs(ctx context.Context, userID, bookID, chapterID uint) ([]uint, error)
+	GetAllBookTrimmedPromptIDs(ctx context.Context, userID, bookID uint) (map[uint][]uint, error)
 }
 
 type TaskRepository interface {

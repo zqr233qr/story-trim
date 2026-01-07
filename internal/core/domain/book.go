@@ -16,12 +16,13 @@ type Book struct {
 
 // Chapter 章节实体
 type Chapter struct {
-	ID         uint      `json:"id"`
-	BookID     uint      `json:"book_id"`
-	Index      int       `json:"index"`
-	Title      string    `json:"title"`
-	ContentMD5 string    `json:"content_md5"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID               uint      `json:"id"`
+	BookID           uint      `json:"book_id"`
+	Index            int       `json:"index"`
+	Title            string    `json:"title"`
+	ContentMD5       string    `json:"content_md5"`
+	TrimmedPromptIDs []uint    `json:"trimmed_prompt_ids" gorm:"-"` // 运行时字段，标记该章已有的精简模式
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // RawFile 原始文件归档

@@ -5,10 +5,17 @@ const props = defineProps<{
   show: boolean,
   chapters: any[],
   activeChapterIndex: number,
+  activeModeId?: string,
   isDarkMode?: boolean
 }>()
 
 const emit = defineEmits(['close', 'select'])
+
+const hasTrimmedContent = (chapter: any) => {
+  if (!props.activeModeId || props.activeModeId === 'original') return false
+  const targetId = Number(props.activeModeId)
+  return chapter.trimmed_prompt_ids?.includes(targetId)
+}
 </script>
 
 <template>
@@ -38,8 +45,9 @@ const emit = defineEmits(['close', 'select'])
               ? (isDarkMode ? 'bg-teal-900/20 text-teal-400 border-l-4 border-teal-500' : 'bg-teal-50 text-teal-700 border-l-4 border-teal-500') 
               : (isDarkMode ? 'text-stone-400' : 'text-stone-600')
           ]"
-          class="px-4 py-4 text-sm rounded-r-lg mb-1 transition-all">
-          <text class="truncate block">{{ chap.title }}</text>
+          class="px-4 py-4 text-sm rounded-r-lg mb-1 transition-all flex items-center justify-between">
+          <text class="truncate block flex-1">{{ chap.title }}</text>
+          <text v-if="hasTrimmedContent(chap)" class="text-[10px] ml-2 opacity-80">🪄</text>
         </view>
       </scroll-view>
     </view>
