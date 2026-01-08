@@ -324,13 +324,16 @@ func (r *repository) GetReadingHistory(ctx context.Context, userID, bookID uint)
 
 func (r *repository) RecordUserTrim(ctx context.Context, action *domain.UserProcessedChapter) error {
 	dbAction := UserProcessedChapter{
-		UserID:    action.UserID,
-		BookID:    action.BookID,
-		ChapterID: action.ChapterID,
-		PromptID:  action.PromptID,
-		CreatedAt: action.CreatedAt,
+		UserID:     action.UserID,
+		BookID:     action.BookID,
+		ChapterID:  action.ChapterID,
+		PromptID:   action.PromptID,
+		ContentMD5: action.ContentMD5,
+		CreatedAt:  action.CreatedAt,
 	}
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&dbAction).Error
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		DoUpdates: clause.AssignmentColumns([]string{"created_at"}),
+	}).Create(&dbAction).Error
 }
 
 func (r *repository) GetUserTrimmedIDs(ctx context.Context, userID, bookID, promptID uint) ([]uint, error) {
@@ -368,6 +371,30 @@ func (r *repository) GetAllBookTrimmedPromptIDs(ctx context.Context, userID, boo
 	}
 	return res, nil
 }
+
+func (r *repository) GetTrimmedPromptIDsByMD5s(ctx context.Context, userID uint, md5s []string) (map[string][]uint, error) {
+	type result struct {
+		ContentMD5 string
+		PromptID   uint
+	}
+	var rows []result
+	if len(md5s) == 0 {
+		return make(map[string][]uint), nil
+	}
+	err := r.db.WithContext(ctx).Model(&UserProcessedChapter{}).
+		Where("user_id = ? AND content_md5 IN ?", userID, md5s).
+		Select("content_md5, prompt_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	res := make(map[string][]uint)
+	for _, row := range rows {
+		res[row.ContentMD5] = append(res[row.ContentMD5], row.PromptID)
+	}
+	return res, nil
+}
+
 
 // --- UserRepository 实现 ---
 

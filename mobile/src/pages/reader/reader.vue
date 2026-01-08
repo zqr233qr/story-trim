@@ -401,7 +401,7 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
   
   // 调用无状态流式接口
   // console.log('[Reader] Starting stream request...')
-  api.trimStreamRaw(rawContent, promptId, 
+  api.trimStreamRaw(rawContent, promptId, activeChapter.value?.md5, 
     (text) => { 
       streamingContent.value += text 
     }, 
@@ -497,6 +497,24 @@ const toggleMagic = () => {
 
 const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 'start') => {
   if (index < 0 || index >= activeBook.value!.chapters.length) return
+  
+  // 检查目标章节是否支持当前模式
+  if (isMagicActive.value) {
+    const targetChapter = activeBook.value!.chapters[index]
+    const modeId = activeBook.value!.activeModeId
+    
+    console.log('[Debug] Check Mode Keep:', modeId, 'Target Trimmed:', targetChapter.trimmed_prompt_ids)
+
+    const hasTrimmed = targetChapter.trimmed_prompt_ids?.some(id => id.toString() === modeId || id === Number(modeId))
+    if (!hasTrimmed) {
+       console.log('[Debug] Mode Keep Failed -> Reset to original')
+       showNotification('该章暂无精简内容，已切回原文')
+       isMagicActive.value = false
+    } else {
+       console.log('[Debug] Mode Keep Success')
+    }
+  }
+
   isTextTransitioning.value = true
   clearTimeout(progressTimer)
   clearTimeout(preloadTimer)

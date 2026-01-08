@@ -1,4 +1,6 @@
 // #ifdef APP-PLUS
+import SparkMD5 from 'spark-md5';
+
 // 匹配章节标题：(行首或换行符) + 空白(可选) + 第xxx章 + (非换行符的内容)
 const CHAPTER_HEADER_REGEX = /(?:^|\n)\s*(第[0-9一二三四五六七八九十百千万]+[章回节][^\r\n]*)/g;
 const CHUNK_SIZE = 1024 * 1024; // 1MB
@@ -18,35 +20,9 @@ export interface ParseResult {
   chapters: ParsedChapter[];
 }
 
-// 极速采样 Hash (只计算头中尾各100字符)
-function fastHash(str: string): string {
-  const len = str.length;
-  if (len < 500) {
-    // 短文本全量算
-    let hash = 0;
-    for (let i = 0; i < len; i++) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash).toString(16);
-  }
-  
-  // 长文本采样
-  let sample = str.substring(0, 100) + 
-               str.substring(Math.floor(len/2), Math.floor(len/2) + 100) + 
-               str.substring(len - 100);
-               
-  let hash = 0;
-  for (let i = 0; i < sample.length; i++) {
-    hash = ((hash << 5) - hash) + sample.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16);
-}
-
 export const parser = {
   async parseFile(filePath: string, fileName: string, onProgress?: (p: number) => void): Promise<ParseResult> {
-    console.log('[Parser] V4 Loaded - FastHash Mode');
+    console.log('[Parser] V5 Loaded - Standard MD5 Mode');
     return new Promise((resolve, reject) => {
       plus.io.resolveLocalFileSystemURL(filePath, (entry) => {
         entry.file(async (file) => {
@@ -65,7 +41,7 @@ export const parser = {
             // 允许空章，但至少要有内容
             if (content.length === 0 && buffer.length === 0) return;
 
-            const md5 = fastHash(content); 
+            const md5 = SparkMD5.hash(content); 
             
             if (chapterIndex === 1 || (chapterIndex === 0 && !fingerprint)) {
               fingerprint = md5;

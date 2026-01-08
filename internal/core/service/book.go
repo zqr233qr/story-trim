@@ -197,3 +197,13 @@ func (s *bookService) UpdateReadingProgress(ctx context.Context, userID uint, bo
 		UpdatedAt:     time.Now(),
 	})
 }
+
+func (s *bookService) RegisterTrimStatusByMD5(ctx context.Context, userID uint, md5 string, promptID uint) error {
+	return s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
+		UserID:     userID,
+		PromptID:   promptID,
+		ContentMD5: md5,
+		CreatedAt:  time.Now(),
+	})
+}
+

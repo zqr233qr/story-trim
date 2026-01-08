@@ -8,6 +8,8 @@ let BASE_URL = '/api/v1';
 BASE_URL = `http://${LOCAL_IP}:8080/api/v1`;
 // #endif
 
+const WS_BASE_URL = BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+
 if (import.meta.env.PROD) {
   BASE_URL = '/api/v1';
 }
@@ -76,36 +78,11 @@ export const api = {
     request<{ prompt_id: number, trimmed_content: string }>({ url: `/chapters/${id}/trim`, method: 'GET', data: { prompt_id: promptId } }),
   getPrompts: () => request<Prompt[]>({ url: '/prompts', method: 'GET' }),
 
-  updateProgress: (bookId: number, chapterId: number, promptId: number) => 
-    request<void>({ url: `/books/${bookId}/progress`, method: 'POST', data: { chapter_id: chapterId, prompt_id: promptId } }),
-
-  getBatchChapters: (chapterIds: number[], promptId?: number) => 
-    request<{ id: number, content: string, trimmed_content: string }[]>({ url: '/chapters/batch', method: 'POST', data: { chapter_ids: chapterIds, prompt_id: promptId } }),
-
-  startBatchTrim: (bookId: number, promptId: number) => 
-    request<{ task_id: string }>({ url: '/tasks/batch-trim', method: 'POST', data: { book_id: bookId, prompt_id: promptId } }),
-
-  getTaskStatus: (taskId: string) => 
-    request<Task>({ url: `/tasks/${taskId}`, method: 'GET' }),
-
-  upload: (filePath: string, fileName: string) => {
-    return new Promise<Response<Book>>((resolve, reject) => {
-      // #ifdef APP-PLUS
-      if (typeof plus === 'undefined') {
-        reject(new Error('plus is not defined'));
-        return;
-      }
-      // #endif
-      uni.uploadFile({
-        url: BASE_URL + '/upload',
-        filePath: filePath,
-        name: 'file',
-        header: { 'Authorization': `Bearer ${uni.getStorageSync('token')}` },
-        success: (res) => resolve(JSON.parse(res.data)),
-        fail: (err) => reject(err)
-      });
-    });
-  },
+  syncTrimmedStatus: (md5s: string[]) => request<{ trimmed_map: Record<string, number[]> }>({ 
+    url: '/sync/trimmed_status', 
+    method: 'POST', 
+    data: { md5s } 
+  }),
 
   // 1. 基于 ChapterID 的流式 (SSE/WS)
   trimStream: async (
@@ -164,38 +141,22 @@ export const api = {
   },
 
   // 2. 基于 RawContent 的流式 (无状态, 支持离线混合模式)
-  trimStreamRaw: (
-    content: string,
-    promptId: number,
-    onData: (text: string) => void,
-    onError: (err: string) => void,
-    onDone: () => void
-  ) => {
-    const token = uni.getStorageSync('token');
+  trimStreamRaw(content: string, promptId: number, md5: string | undefined, onData: (chunk: string) => void, onError: (err: string) => void, onDone: () => void) {
+    const rawToken = uni.getStorageSync('token')
+    const token = rawToken || ''
     
-    // 优先使用 WebSocket，兼容所有平台且支持流式
-    // 注意：ws 协议需要根据 http/https 自动切换
-    let wsBase = BASE_URL.replace('http', 'ws');
-    // 如果 BASE_URL 是相对路径 (H5 dev)，补全 host
-    if (wsBase.startsWith('/')) {
-        const loc = window.location;
-        wsBase = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + wsBase;
-    }
-    
-    const wsUrl = `${wsBase}/trim/ws/raw?token=${token}`;
-    console.log('[WS Connect Raw]', wsUrl);
-    
+    // 使用 WebSocket 替代 XHR
     const socketTask = uni.connectSocket({
-      url: wsUrl,
-      complete: () => {}
+      url: `${WS_BASE_URL}/trim/ws/raw?token=${token}`,
+      complete: ()=> {}
     });
 
     socketTask.onOpen(() => {
-        console.log('[WS Open] Sending payload...')
-        socketTask.send({
-            data: JSON.stringify({ content: content, prompt_id: promptId })
-        });
-    });
+      console.log('[WS Open] Sending payload...')
+      socketTask.send({
+        data: JSON.stringify({ content, prompt_id: promptId, md5 })
+      })
+    })
 
     socketTask.onMessage((res) => {
       try {

@@ -130,6 +130,25 @@ export const useBookStore = defineStore('book', () => {
             modes: {}
           }))
         }
+
+        // --- 同步云端精简状态 ---
+        if (activeBook.value && chapters.length > 0) {
+          const md5s = chapters.map(c => c.md5).filter(m => !!m);
+          try {
+            const syncRes = await api.syncTrimmedStatus(md5s);
+            if (syncRes.code === 0 && syncRes.data.trimmed_map) {
+              const tMap = syncRes.data.trimmed_map;
+              activeBook.value.chapters.forEach(c => {
+                if (c.md5 && tMap[c.md5]) {
+                  // 合并云端状态
+                  const remoteIds = tMap[c.md5].map(id => Number(id));
+                  c.trimmed_prompt_ids = [...new Set([...c.trimmed_prompt_ids, ...remoteIds])];
+                }
+              });
+            }
+          } catch (e) { console.warn('[Store] Sync trim status failed', e) }
+        }
+
         if (chapters.length > 0) {
           // 预加载第一章
           await fetchChapter(bookId, Number(chapters[0].id))

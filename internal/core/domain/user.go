@@ -14,12 +14,13 @@ type User struct {
 
 // UserProcessedChapter 用户的精简足迹
 type UserProcessedChapter struct {
-	ID        uint      `json:"id"`
-	UserID    uint      `json:"user_id"`
-	BookID    uint      `json:"book_id"`
-	ChapterID uint      `json:"chapter_id"`
-	PromptID  uint      `json:"prompt_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         uint      `json:"id"`
+	UserID     uint      `json:"user_id"`
+	BookID     uint      `json:"book_id"`
+	ChapterID  uint      `json:"chapter_id"`
+	PromptID   uint      `json:"prompt_id"`
+	ContentMD5 string    `json:"content_md5"` // 新增：基于内容的唯一标识
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // ReadingHistory 用户的阅读进度

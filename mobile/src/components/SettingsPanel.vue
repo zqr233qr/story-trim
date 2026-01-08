@@ -41,19 +41,6 @@ const getModeName = (id: string) => {
       
       <view class="w-12 h-1 bg-stone-200 rounded-full mx-auto mb-6"></view>
 
-      <!-- Mode Switcher -->
-      <view class="mb-8">
-        <view class="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">AI 阅读层</view>
-        <scroll-view scroll-x class="w-full whitespace-nowrap">
-          <view v-for="modeKey in modes" :key="modeKey"
-            @click="emit('update:activeMode', modeKey)"
-            :class="activeMode === modeKey ? 'bg-teal-500 text-white border-transparent shadow-md' : (isDarkMode ? 'bg-stone-800 text-stone-400 border-stone-700' : 'bg-white text-stone-600 border-stone-200')"
-            class="px-4 py-2 rounded-full text-xs font-medium border inline-block mr-3 transition-all">
-            {{ getModeName(modeKey) }}
-          </view>
-        </scroll-view>
-      </view>
-
       <!-- Font Size -->
       <view class="mb-8">
         <view class="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">字号</view>

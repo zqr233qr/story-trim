@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"io"
 	"net/http"
 
@@ -18,17 +19,20 @@ var wsUpgrader = websocket.Upgrader{
 
 type TrimHandler struct {
 	trimService port.TrimService
+	bookService port.BookService
 }
 
-func NewTrimHandler(ts port.TrimService) *TrimHandler {
+func NewTrimHandler(ts port.TrimService, bs port.BookService) *TrimHandler {
 	return &TrimHandler{
 		trimService: ts,
+		bookService: bs,
 	}
 }
 
 type TrimRawRequest struct {
 	Content  string `json:"content" binding:"required"`
 	PromptID uint   `json:"prompt_id" binding:"required"`
+	MD5      string `json:"md5"`
 }
 
 // StreamTrimRawWS 无状态 WebSocket 精简接口
@@ -64,6 +68,11 @@ func (h *TrimHandler) StreamTrimRawWS(c *gin.Context) {
 		if err := ws.WriteJSON(gin.H{"c": text}); err != nil {
 			break
 		}
+	}
+	
+	// 5. 记录状态 (异步)
+	if req.MD5 != "" && userID > 0 {
+		go h.bookService.RegisterTrimStatusByMD5(context.Background(), userID, req.MD5, req.PromptID)
 	}
 	
 	// 发送结束信号(可选，客户端通过 Close 判断)

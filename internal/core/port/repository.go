@@ -46,6 +46,7 @@ type ActionRepository interface {
 	GetUserTrimmedIDs(ctx context.Context, userID, bookID, promptID uint) ([]uint, error)
 	GetChapterTrimmedPromptIDs(ctx context.Context, userID, bookID, chapterID uint) ([]uint, error)
 	GetAllBookTrimmedPromptIDs(ctx context.Context, userID, bookID uint) (map[uint][]uint, error)
+	GetTrimmedPromptIDsByMD5s(ctx context.Context, userID uint, md5s []string) (map[string][]uint, error)
 }
 
 type TaskRepository interface {

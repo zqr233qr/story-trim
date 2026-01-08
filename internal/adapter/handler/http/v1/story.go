@@ -80,6 +80,34 @@ func (h *StoryHandler) ListPrompts(c *gin.Context) {
 	apix.Success(c, prompts)
 }
 
+func (h *StoryHandler) SyncTrimmedStatus(c *gin.Context) {
+	var req struct {
+		MD5s []string `json:"md5s" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apix.Error(c, 400, errno.ParamErrCode)
+		return
+	}
+
+	userID := uint(0)
+	if val, exists := c.Get("userID"); exists {
+		userID = val.(uint)
+	}
+
+	if userID == 0 {
+		apix.Success(c, gin.H{"trimmed_map": map[string][]uint{}})
+		return
+	}
+
+	modeMap, err := h.actionRepo.GetTrimmedPromptIDsByMD5s(c.Request.Context(), userID, req.MD5s)
+	if err != nil {
+		apix.Error(c, 500, errno.InternalServerErrCode)
+		return
+	}
+
+	apix.Success(c, gin.H{"trimmed_map": modeMap})
+}
+
 func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 	bookID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -105,25 +133,52 @@ func (h *StoryHandler) GetBookDetail(c *gin.Context) {
 	}
 
 	// 2. 获取该书所有章节的所有精简记录
-	modeMap, err := h.actionRepo.GetAllBookTrimmedPromptIDs(c.Request.Context(), userID, book.ID)
+	modeMapByID, err := h.actionRepo.GetAllBookTrimmedPromptIDs(c.Request.Context(), userID, book.ID)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to fetch all trimmed mappings")
+		log.Warn().Err(err).Msg("Failed to fetch all trimmed mappings by ID")
+	}
+	
+	// 新增：基于 MD5 查询
+	md5s := make([]string, 0, len(chapters))
+	for _, c := range chapters {
+		if c.ContentMD5 != "" {
+			md5s = append(md5s, c.ContentMD5)
+		}
+	}
+	modeMapByMD5, err := h.actionRepo.GetTrimmedPromptIDsByMD5s(c.Request.Context(), userID, md5s)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to fetch all trimmed mappings by MD5")
 	}
 
 	// 3. 填充章节元数据
 	for i := range chapters {
-		if ids, ok := modeMap[chapters[i].ID]; ok {
-			chapters[i].TrimmedPromptIDs = ids
-		} else {
-			chapters[i].TrimmedPromptIDs = []uint{}
+		ids := []uint{}
+		// 兼容旧逻辑
+		if val, ok := modeMapByID[chapters[i].ID]; ok {
+			ids = append(ids, val...)
 		}
+		// 新逻辑
+		if val, ok := modeMapByMD5[chapters[i].ContentMD5]; ok {
+			ids = append(ids, val...)
+		}
+		
+		// 去重
+		idMap := make(map[uint]bool)
+		uniqIDs := []uint{}
+		for _, id := range ids {
+			if !idMap[id] {
+				idMap[id] = true
+				uniqIDs = append(uniqIDs, id)
+			}
+		}
+		chapters[i].TrimmedPromptIDs = uniqIDs
 	}
 
 	// 4. 计算全本已就绪的模式 (定义：处理超过 90% 的章节即为全本就绪)
 	var bookTrimmedIDs []uint
 	modeStats := make(map[uint]int)
-	for _, ids := range modeMap {
-		for _, id := range ids {
+	for i := range chapters {
+		for _, id := range chapters[i].TrimmedPromptIDs {
 			modeStats[id]++
 		}
 	}

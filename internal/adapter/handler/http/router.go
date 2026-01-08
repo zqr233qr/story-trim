@@ -42,6 +42,8 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 
 							optional.GET("/trim/ws/raw", trimH.StreamTrimRawWS) // 无状态精简 (WebSocket)
 
+							optional.POST("/sync/trimmed_status", storyH.SyncTrimmedStatus)
+
 						}
 
 			// 受保护接口 (Protected)

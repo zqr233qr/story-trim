@@ -76,12 +76,13 @@ type SharedEncyclopedia struct {
 }
 
 type UserProcessedChapter struct {
-	ID        uint `gorm:"primaryKey"`
-	UserID    uint `gorm:"uniqueIndex:idx_user_trim"`
-	BookID    uint `gorm:"uniqueIndex:idx_user_trim"`
-	ChapterID uint `gorm:"uniqueIndex:idx_user_trim"`
-	PromptID  uint `gorm:"uniqueIndex:idx_user_trim"`
-	CreatedAt time.Time
+	ID         uint   `gorm:"primaryKey"`
+	UserID     uint   `gorm:"uniqueIndex:idx_user_trim;uniqueIndex:idx_user_md5_trim"`
+	BookID     uint   `gorm:"uniqueIndex:idx_user_trim"`
+	ChapterID  uint   `gorm:"uniqueIndex:idx_user_trim"`
+	PromptID   uint   `gorm:"uniqueIndex:idx_user_trim;uniqueIndex:idx_user_md5_trim"`
+	ContentMD5 string `gorm:"uniqueIndex:idx_user_md5_trim;size:32"`
+	CreatedAt  time.Time
 }
 
 type ReadingHistory struct {
