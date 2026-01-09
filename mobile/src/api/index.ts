@@ -79,9 +79,15 @@ export const api = {
   getPrompts: () => request<Prompt[]>({ url: '/prompts', method: 'GET' }),
 
   syncTrimmedStatus: (md5s: string[]) => request<{ trimmed_map: Record<string, number[]> }>({ 
-    url: '/sync/trimmed_status', 
+    url: '/contents/sync-status', 
     method: 'POST', 
     data: { md5s } 
+  }),
+
+  syncLocalBook: (data: { book_name: string; book_md5: string; chapters: any[] }) => request<{ book_id: number; chapters_map: Record<string, number> }>({
+    url: '/books/sync-local',
+    method: 'POST',
+    data
   }),
 
   // 1. 基于 ChapterID 的流式 (SSE/WS)

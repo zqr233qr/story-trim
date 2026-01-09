@@ -61,7 +61,7 @@ func (s *bookService) ImportBookFile(ctx context.Context, userID uint, filename 
 
 	for _, sc := range splitChapters {
 		chapterMD5 := utils.GetContentFingerprint(sc.Content)
-		
+
 		tokenCount := 0
 		if tkm != nil {
 			tokenCount = len(tkm.Encode(sc.Content, nil, nil))
@@ -90,7 +90,7 @@ func (s *bookService) ImportBookFile(ctx context.Context, userID uint, filename 
 	return book, nil
 }
 
-func (s *bookService) SyncLocalBook(ctx context.Context, userID uint, bookName, bookMD5 string, chapters []port.LocalBookChapter) (*port.SyncLocalBookResp, error) {
+func (s *bookService) SyncLocalBook(ctx context.Context, userID uint, bookName, bookMD5 string, totalChapters int, chapters []port.LocalBookChapter) (*port.SyncLocalBookResp, error) {
 	if len(chapters) == 0 {
 		return nil, fmt.Errorf("no chapters to sync")
 	}
@@ -109,23 +109,25 @@ func (s *bookService) SyncLocalBook(ctx context.Context, userID uint, bookName, 
 		}
 
 		book = &domain.Book{
-			UserID:      userID,
-			BookMD5:     bookMD5,
-			Fingerprint: fp,
-			Title:       bookName,
-			CreatedAt:   time.Now(),
+			UserID:        userID,
+			BookMD5:       bookMD5,
+			Fingerprint:   fp,
+			Title:         bookName,
+			TotalChapters: totalChapters, // Set total chapters
+			CreatedAt:     time.Now(),
+		}
+	} else {
+		// Update TotalChapters if larger
+		if totalChapters > book.TotalChapters {
+			// TODO: Update Book Metadata in Repo
+			// For now we assume CreateBook handles initial creation correctly
 		}
 	}
 
 	tkm, _ := tiktoken.GetEncoding("cl100k_base")
 	var domainChaps []domain.Chapter
-	maxIndex := -1
 
 	for _, c := range chapters {
-		if c.Index > maxIndex {
-			maxIndex = c.Index
-		}
-
 		tokenCount := 0
 		if tkm != nil {
 			tokenCount = len(tkm.Encode(c.Content, nil, nil))
@@ -148,7 +150,7 @@ func (s *bookService) SyncLocalBook(ctx context.Context, userID uint, bookName, 
 	}
 
 	if book.ID == 0 {
-		book.TotalChapters = maxIndex + 1
+		// book.TotalChapters = maxIndex + 1 // Removed
 		if err := s.bookRepo.CreateBook(ctx, book, domainChaps); err != nil {
 			return nil, fmt.Errorf("create book failed: %w", err)
 		}

@@ -10,6 +10,7 @@ export interface LocalBook {
   platform: PlatformType;
   cover?: string;           // 封面图片(可选)
   createdAt: number;
+  syncState?: number;       // 0: Local, 1: Synced, 2: CloudOnly
 }
 
 export interface LocalChapter {

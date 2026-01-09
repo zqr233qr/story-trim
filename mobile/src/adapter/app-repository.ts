@@ -6,26 +6,37 @@ import type { LocalBook, LocalChapter, TrimmedContent } from '../core/types';
 export class AppRepository implements IBookRepository {
   async init(): Promise<void> {
     await db.open();
+    
+    // 1. Books Table
+    // sync_state: 0=Local, 1=Synced, 2=CloudOnly
     await db.execute(`
       CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
+        cloud_id INTEGER DEFAULT 0,
+        book_md5 TEXT,
         fingerprint TEXT,
+        title TEXT,
         total_chapters INTEGER,
         process_status TEXT,
+        sync_state INTEGER DEFAULT 0,
         created_at INTEGER
       )
     `);
+
+    // 2. Chapters Table
     await db.execute(`
       CREATE TABLE IF NOT EXISTS chapters (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         book_id INTEGER,
+        cloud_id INTEGER DEFAULT 0,
         chapter_index INTEGER,
         title TEXT,
         content TEXT,
         md5 TEXT
       )
     `);
+
+    // 3. Trimmed Content Table (Local Cache / Tier 3)
     await db.execute(`
       CREATE TABLE IF NOT EXISTS trimmed_content (
         source_md5 TEXT,
@@ -35,6 +46,16 @@ export class AppRepository implements IBookRepository {
         PRIMARY KEY (source_md5, prompt_id)
       )
     `);
+  }
+
+  // --- Sync Helpers ---
+  
+  async updateBookCloudInfo(localId: number, cloudId: number, syncState: number): Promise<void> {
+    await db.execute('UPDATE books SET cloud_id = ?, sync_state = ? WHERE id = ?', [cloudId, syncState, localId]);
+  }
+  
+  async updateChapterCloudId(localId: number, cloudId: number): Promise<void> {
+    await db.execute('UPDATE chapters SET cloud_id = ? WHERE id = ?', [cloudId, localId]);
   }
 
   async getBooks(): Promise<LocalBook[]> {
@@ -47,7 +68,8 @@ export class AppRepository implements IBookRepository {
       totalChapters: r.total_chapters,
       processStatus: r.process_status,
       platform: 'app',
-      createdAt: r.created_at
+      createdAt: r.created_at,
+      syncState: r.sync_state || 0
     }));
   }
 
@@ -62,7 +84,8 @@ export class AppRepository implements IBookRepository {
       totalChapters: r.total_chapters,
       processStatus: r.process_status,
       platform: 'app',
-      createdAt: r.created_at
+      createdAt: r.created_at,
+      syncState: r.sync_state || 0
     };
   }
 
@@ -143,6 +166,22 @@ export class AppRepository implements IBookRepository {
       title: r.title,
       md5: r.md5,
       wordCount: 0 // TODO
+    }));
+  }
+
+  async getChaptersBatch(bookId: number | string, offset: number, limit: number): Promise<LocalChapter[]> {
+    const rows = await db.select<any>(
+        'SELECT id, chapter_index, title, md5, content FROM chapters WHERE book_id = ? ORDER BY chapter_index ASC LIMIT ? OFFSET ?', 
+        [bookId, limit, offset]
+    );
+    return rows.map(r => ({
+      id: r.id,
+      bookId: bookId,
+      index: r.chapter_index,
+      title: r.title,
+      md5: r.md5,
+      content: r.content,
+      wordCount: r.content ? r.content.length : 0
     }));
   }
 

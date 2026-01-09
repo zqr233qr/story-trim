@@ -14,6 +14,7 @@ export interface BookUI extends Book {
   activeChapterIndex: number
   activeModeId?: string
   book_trimmed_ids?: number[]
+  sync_state?: number // 0: Local, 1: Synced, 2: CloudOnly
 }
 
 export const useBookStore = defineStore('book', () => {
@@ -22,6 +23,7 @@ export const useBookStore = defineStore('book', () => {
   const prompts = ref<Prompt[]>([])
   const isLoading = ref(false)
   const uploadProgress = ref(0)
+  const syncProgress = ref(0)
 
   // 初始化数据库
   const init = async () => {
@@ -45,7 +47,8 @@ export const useBookStore = defineStore('book', () => {
         status: b.processStatus,
         progress: 0,
         activeChapterIndex: 0,
-        chapters: []
+        chapters: [],
+        sync_state: b.syncState || 0 // 映射 sync_state
       }))
       // #endif
 
@@ -247,16 +250,80 @@ export const useBookStore = defineStore('book', () => {
   const fetchBatchChapters = async (ids: number[], promptId: number) => {}
   const updateProgress = async (bookId: number, chapterId: number, promptId: number) => {}
 
+  // 上传书籍元数据建立同步 (App端)
+  const syncBookToCloud = async (bookId: number) => {
+    // #ifdef APP-PLUS
+    const book = await repo.getBook(bookId);
+    if (!book || book.platform !== 'app') return;
+    
+    // 不要一次性获取所有章节，而是分批读取数据库
+    const total = book.totalChapters;
+    if (total === 0) return;
+
+    syncProgress.value = 1; 
+    let cloudBookId = 0;
+    const BATCH_SIZE = 20; // 调小一点，确保含内容的包不超限
+    let syncedCount = 0;
+
+    try {
+      while (syncedCount < total) {
+        const chunk = await repo.getChaptersBatch(bookId, syncedCount, BATCH_SIZE);
+        if (chunk.length === 0) break;
+
+        const payload = {
+            book_name: book.title,
+            book_md5: book.fingerprint, 
+            total_chapters: total,
+            chapters: chunk.map(c => ({
+                index: c.index,
+                title: c.title,
+                md5: c.md5,
+                content: c.content || '',
+                word_count: c.wordCount || 0
+            }))
+        };
+
+        const res = await api.syncLocalBook(payload);
+        if (res.code === 0 && res.data) {
+            cloudBookId = res.data.book_id;
+            const map = res.data.chapters_map || {};
+            
+            for (const c of chunk) {
+                if (c.md5 && map[c.md5]) {
+                    await repo.updateChapterCloudId(Number(c.id), map[c.md5]);
+                }
+            }
+        } else {
+            throw new Error(res.msg || 'Sync failed');
+        }
+
+        syncedCount += chunk.length;
+        syncProgress.value = Math.floor((syncedCount / total) * 100);
+      }
+
+      if (cloudBookId > 0) {
+         await repo.updateBookCloudInfo(bookId, cloudBookId, 1);
+         console.log('[Sync] Book synced to cloud:', cloudBookId);
+      }
+    } catch (e) {
+        console.error('[Sync] Failed:', e);
+        throw e;
+    } finally {
+        setTimeout(() => { syncProgress.value = 0 }, 1000);
+    }
+    // #endif
+  }
+
   const activeChapter = computed(() => {
     if (!activeBook.value) return null
     return activeBook.value.chapters[activeBook.value.activeChapterIndex]
   })
 
   return {
-    books, activeBook, prompts, isLoading, uploadProgress, activeChapter,
+    books, activeBook, prompts, isLoading, uploadProgress, syncProgress, activeChapter,
     init, fetchBooks, addBook, fetchBookDetail, fetchChapter,
-    createBookRecord, insertChapters, saveChapterTrim, // 导出新方法
+    createBookRecord, insertChapters, saveChapterTrim,
     setActiveBook, setChapter, fetchPrompts,
-    fetchChapterTrim, fetchBatchChapters, updateProgress
+    fetchChapterTrim, fetchBatchChapters, updateProgress, syncBookToCloud
   }
 })

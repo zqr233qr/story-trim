@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github/zqr233qr/story-trim/internal/adapter/handler/apix"
 	"github/zqr233qr/story-trim/internal/core/port"
@@ -21,6 +23,7 @@ type authRequest struct {
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
+	fmt.Println("[Auth] Register request received")
 	var req authRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apix.Error(c, 400, errno.ParamErrCode)

@@ -52,9 +52,10 @@ func (h *StoryHandler) ListPrompts(c *gin.Context) {
 // SyncLocalBook 将客户端本地解析的书籍内容同步到云端
 func (h *StoryHandler) SyncLocalBook(c *gin.Context) {
 	var req struct {
-		BookName string                  `json:"book_name" binding:"required"`
-		BookMD5  string                  `json:"book_md5" binding:"required"`
-		Chapters []port.LocalBookChapter `json:"chapters" binding:"required"`
+		BookName      string                  `json:"book_name" binding:"required"`
+		BookMD5       string                  `json:"book_md5" binding:"required"`
+		TotalChapters int                     `json:"total_chapters"`
+		Chapters      []port.LocalBookChapter `json:"chapters" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apix.Error(c, 400, errno.ParamErrCode)
@@ -62,7 +63,7 @@ func (h *StoryHandler) SyncLocalBook(c *gin.Context) {
 	}
 
 	userID := c.GetUint("userID")
-	resp, err := h.bookSvc.SyncLocalBook(c.Request.Context(), userID, req.BookName, req.BookMD5, req.Chapters)
+	resp, err := h.bookSvc.SyncLocalBook(c.Request.Context(), userID, req.BookName, req.BookMD5, req.TotalChapters, req.Chapters)
 	if err != nil {
 		apix.Error(c, 500, errno.InternalServerErrCode, err.Error())
 		return

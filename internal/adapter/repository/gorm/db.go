@@ -7,9 +7,9 @@ import (
 )
 
 func InitDB(path string) (*gorm.DB, error) {
-	// 配置 GORM 日志为 Silent，彻底关闭 SQL 打印
+	// 开启 SQL 日志以便调试
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
 		return nil, err

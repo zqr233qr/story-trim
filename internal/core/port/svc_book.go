@@ -51,7 +51,7 @@ type ContentTrimResp struct {
 
 type BookService interface {
 	// SyncLocalBook 将客户端本地解析的书籍内容同步到云端
-	SyncLocalBook(ctx context.Context, userID uint, bookName, bookMD5 string, chapters []LocalBookChapter) (*SyncLocalBookResp, error)
+	SyncLocalBook(ctx context.Context, userID uint, bookName, bookMD5 string, totalChapters int, chapters []LocalBookChapter) (*SyncLocalBookResp, error)
 	// ImportBookFile 通过上传物理文件导入书籍并自动分章
 	ImportBookFile(ctx context.Context, userID uint, filename string, data []byte) (*domain.Book, error)
 	// ListUserBooks 获取用户的书籍列表

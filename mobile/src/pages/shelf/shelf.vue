@@ -119,6 +119,20 @@ const triggerUpload = () => {
   renderTrigger.value++
 }
 
+const handleSyncBook = async (book: any) => {
+  uni.showLoading({ title: '正在同步至云端...' })
+  try {
+    await bookStore.syncBookToCloud(book.id)
+    uni.showToast({ title: '同步成功', icon: 'success' })
+    // 重新拉取列表以更新 UI 状态
+    await bookStore.fetchBooks()
+  } catch (e) {
+    uni.showToast({ title: '同步失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
 const handleLogout = () => {
   userStore.logout()
   uni.reLaunch({ url: '/pages/login/login' })
@@ -160,7 +174,9 @@ const handleLogout = () => {
       </view>
       
       <view class="flex flex-col">
-        <BookCard v-for="book in bookStore.books" :key="book.id" :book="book" @click="handleBookClick(book)" />
+        <BookCard v-for="book in bookStore.books" :key="book.id" :book="book" 
+          @click="handleBookClick(book)" 
+          @sync="handleSyncBook(book)" />
         
         <view v-if="bookStore.books.length === 0" class="py-20 text-center">
           <text class="text-stone-300 text-sm italic">书架空空如也</text>
@@ -174,6 +190,15 @@ const handleLogout = () => {
         <view class="w-12 h-12 border-4 border-teal-100 border-t-teal-500 rounded-full animate-spin mb-4"></view>
         <text class="font-bold text-lg mb-1">{{ bookStore.uploadProgress }}%</text>
         <text class="text-xs text-stone-400">正在本地解析...</text>
+      </view>
+    </view>
+
+    <!-- Sync Progress Modal -->
+    <view v-if="bookStore.syncProgress > 0" class="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center">
+      <view class="bg-white p-6 rounded-2xl w-64 flex flex-col items-center">
+        <view class="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin mb-4"></view>
+        <text class="font-bold text-lg mb-1">{{ bookStore.syncProgress }}%</text>
+        <text class="text-xs text-stone-400">正在同步至云端...</text>
       </view>
     </view>
   </scroll-view>

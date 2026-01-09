@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { Book } from '../stores/book'
 
 const props = defineProps<{ book: Book }>()
-const emit = defineEmits(['click'])
+const emit = defineEmits(['click', 'sync'])
 
 const statusText = computed(() => {
   const map: Record<string, string> = { 'new': '新书籍', 'processing': '处理中', 'ready': '已就绪' }
@@ -22,8 +22,18 @@ const statusText = computed(() => {
       <view>
         <view class="flex justify-between items-start gap-2">
           <text class="font-bold text-stone-800 truncate text-base">{{ book.title }}</text>
-          <view v-if="book.book_trimmed_ids?.length" class="flex items-center gap-0.5 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 shrink-0">
-            <text class="text-[10px] text-teal-600 font-bold">🪄 AI</text>
+          <view class="flex items-center gap-2 shrink-0">
+            <!-- Sync Status Indicator -->
+            <view v-if="book.sync_state === 0" @click.stop="emit('sync')" class="bg-stone-100 hover:bg-stone-200 p-1 rounded-md transition-colors">
+              <text class="text-[14px]">☁️</text>
+            </view>
+            <view v-else-if="book.sync_state === 1" class="p-1">
+              <text class="text-[10px] text-green-500 font-bold">✓</text>
+            </view>
+
+            <view v-if="book.book_trimmed_ids?.length" class="flex items-center gap-0.5 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
+              <text class="text-[10px] text-teal-600 font-bold">🪄 AI</text>
+            </view>
           </view>
         </view>
         <text class="text-xs text-stone-400 mt-1 block truncate">共 {{ book.total_chapters || 0 }} 章节</text>
