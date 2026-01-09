@@ -6,8 +6,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/sashabaranov/go-openai"
 	"github/zqr233qr/story-trim/internal/core/port"
+
+	"github.com/sashabaranov/go-openai"
 )
 
 type openAIProvider struct {
@@ -28,7 +29,7 @@ func NewOpenAIProvider(baseURL, apiKey, model string) *openAIProvider {
 }
 
 // ChatStream 实现模式1：交互式流式输出
-func (p *openAIProvider) ChatStream(ctx context.Context, system, user string) (<-chan string, error) {
+func (p *openAIProvider) ChatStream(ctx context.Context, system, user string) (<-chan string, *openai.Usage, error) {
 	req := openai.ChatCompletionRequest{
 		Model: p.model,
 		Messages: []openai.ChatCompletionMessage{
@@ -40,7 +41,7 @@ func (p *openAIProvider) ChatStream(ctx context.Context, system, user string) (<
 
 	stream, err := p.client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ch := make(chan string)
@@ -70,11 +71,12 @@ func (p *openAIProvider) ChatStream(ctx context.Context, system, user string) (<
 		}
 	}()
 
-	return ch, nil
+	// 注意：流式输出在完成前无法获取准确 Usage，此处返回 nil 或在 service 层累加
+	return ch, nil, nil
 }
 
-// ChatJSON 实现模式2：后台任务结构化返回 (Legacy JSON Mode)
-func (p *openAIProvider) ChatJSON(ctx context.Context, system, user string) (*port.BatchResult, error) {
+// ChatJSON 实现模式2：后台任务结构化返回
+func (p *openAIProvider) ChatJSON(ctx context.Context, system, user string) (*port.BatchResult, *openai.Usage, error) {
 	req := openai.ChatCompletionRequest{
 		Model: p.model,
 		Messages: []openai.ChatCompletionMessage{
@@ -87,19 +89,23 @@ func (p *openAIProvider) ChatJSON(ctx context.Context, system, user string) (*po
 	}
 
 	resp, err := p.client.CreateChatCompletion(ctx, req)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 
-	if len(resp.Choices) == 0 { return nil, errors.New("empty response from llm") }
+	if len(resp.Choices) == 0 {
+		return nil, nil, errors.New("empty response from llm")
+	}
 
 	var res port.BatchResult
 	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &res); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &res, nil
+	return &res, &resp.Usage, nil
 }
 
 // Chat 实现模式3：普通文本对话
-func (p *openAIProvider) Chat(ctx context.Context, system, user string) (string, error) {
+func (p *openAIProvider) Chat(ctx context.Context, system, user string) (string, *openai.Usage, error) {
 	req := openai.ChatCompletionRequest{
 		Model: p.model,
 		Messages: []openai.ChatCompletionMessage{
@@ -109,9 +115,13 @@ func (p *openAIProvider) Chat(ctx context.Context, system, user string) (string,
 	}
 
 	resp, err := p.client.CreateChatCompletion(ctx, req)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", nil, err
+	}
 
-	if len(resp.Choices) == 0 { return "", errors.New("empty response from llm") }
+	if len(resp.Choices) == 0 {
+		return "", nil, errors.New("empty response from llm")
+	}
 
-	return resp.Choices[0].Message.Content, nil
+	return resp.Choices[0].Message.Content, &resp.Usage, nil
 }

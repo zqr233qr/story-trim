@@ -7,8 +7,8 @@ import (
 type User struct {
 	ID           uint      `json:"id"`
 	Username     string    `json:"username"`
-	PasswordHash string    `json:"-"` // 永远不返回密码哈希
-	Role         string    `json:"role"`
+	OpenID       string    `json:"open_id,omitempty"`
+	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -19,7 +19,7 @@ type UserProcessedChapter struct {
 	BookID     uint      `json:"book_id"`
 	ChapterID  uint      `json:"chapter_id"`
 	PromptID   uint      `json:"prompt_id"`
-	ContentMD5 string    `json:"content_md5"` // 新增：基于内容的唯一标识
+	ChapterMD5 string    `json:"chapter_md5"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 

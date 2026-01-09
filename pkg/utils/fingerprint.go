@@ -19,3 +19,8 @@ func GetContentFingerprint(content string) string {
 	hash := md5.Sum([]byte(normalized))
 	return hex.EncodeToString(hash[:])
 }
+
+func CalculateMD5(content string) string {
+	hash := md5.Sum([]byte(content))
+	return hex.EncodeToString(hash[:])
+}

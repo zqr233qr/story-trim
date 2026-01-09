@@ -12,180 +12,254 @@ import (
 	"github/zqr233qr/story-trim/pkg/utils"
 
 	"github.com/pkoukk/tiktoken-go"
-	"github.com/rs/zerolog/log"
 )
 
 type bookService struct {
 	bookRepo   port.BookRepository
-	cacheRepo  port.CacheRepository
 	actionRepo port.ActionRepository
+	cacheRepo  port.CacheRepository // 重新引入 cacheRepo
 	promptRepo port.PromptRepository
-	storage    port.StoragePort
 	splitter   port.SplitterPort
 }
 
-func NewBookService(br port.BookRepository, cr port.CacheRepository, ar port.ActionRepository, pr port.PromptRepository, st port.StoragePort, sp port.SplitterPort) *bookService {
+func NewBookService(br port.BookRepository, ar port.ActionRepository, cr port.CacheRepository, pr port.PromptRepository, sp port.SplitterPort) *bookService {
 	return &bookService{
 		bookRepo:   br,
-		cacheRepo:  cr,
 		actionRepo: ar,
+		cacheRepo:  cr,
 		promptRepo: pr,
-		storage:    st,
 		splitter:   sp,
 	}
-}
-
-func (s *bookService) UploadAndProcess(ctx context.Context, userID uint, filename string, data []byte) (*domain.Book, error) {
-	log.Info().Str("filename", filename).Uint("userID", userID).Msg("Starting upload process")
-
-	storagePath, err := s.storage.Save(ctx, filename, data)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to archive original file")
-		return nil, fmt.Errorf("failed to save file: %w", err)
-	}
-
-	title := strings.TrimSuffix(filename, filepath.Ext(filename))
-	splitChapters := s.splitter.Split(string(data))
-	if len(splitChapters) == 0 {
-		log.Error().Msg("Regex split failed to find any chapters")
-		return nil, fmt.Errorf("no chapters found in file")
-	}
-
-	firstChapContent := splitChapters[0].Content
-	bookFingerprint := utils.GetContentFingerprint(firstChapContent)
-
-	book := &domain.Book{
-		UserID:        userID,
-		Fingerprint:   bookFingerprint,
-		Title:         title,
-		TotalChapters: len(splitChapters),
-		CreatedAt:     time.Now(),
-	}
-
-	// 初始化 Token 计数器
-	tkm, err := tiktoken.GetEncoding("cl100k_base")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get tiktoken encoding, token counts will be 0")
-	}
-
-	var chapters []domain.Chapter
-	for _, sc := range splitChapters {
-		md5 := utils.GetContentFingerprint(sc.Content)
-
-		tokenCount := 0
-		if tkm != nil {
-			tokenCount = len(tkm.Encode(sc.Content, nil, nil))
-		}
-
-		if err := s.bookRepo.SaveRawContent(ctx, &domain.RawContent{
-			MD5:        md5,
-			Content:    sc.Content,
-			TokenCount: tokenCount,
-			CreatedAt:  time.Now(),
-		}); err != nil {
-			log.Warn().Err(err).Str("md5", md5).Msg("Failed to save raw content (might be duplicate)")
-		}
-
-		chapters = append(chapters, domain.Chapter{
-			Index: sc.Index, Title: sc.Title, ContentMD5: md5, CreatedAt: time.Now(),
-		})
-	}
-
-	if err := s.bookRepo.CreateBook(ctx, book, chapters); err != nil {
-		log.Error().Err(err).Msg("Failed to create book records")
-		return nil, err
-	}
-
-	if err := s.bookRepo.SaveRawFile(ctx, &domain.RawFile{
-		BookID: book.ID, OriginalName: filename, StoragePath: storagePath, Size: int64(len(data)), CreatedAt: time.Now(),
-	}); err != nil {
-		log.Error().Err(err).Msg("Failed to save raw file record")
-	}
-
-	log.Info().Uint("bookID", book.ID).Msg("Upload and process successful")
-	return book, nil
-}
-
-func (s *bookService) GetChapterDetail(ctx context.Context, chapterID uint) (*domain.Chapter, *domain.RawContent, error) {
-	chap, err := s.bookRepo.GetChapterByID(ctx, chapterID)
-	if err != nil {
-		log.Error().Err(err).Uint("chapterID", chapterID).Msg("Chapter not found")
-		return nil, nil, err
-	}
-	content, err := s.bookRepo.GetRawContent(ctx, chap.ContentMD5)
-	if err != nil {
-		log.Error().Err(err).Str("md5", chap.ContentMD5).Msg("Raw content missing")
-		return nil, nil, err
-	}
-	return chap, content, nil
-}
-
-func (s *bookService) GetTrimmedContent(ctx context.Context, userID uint, chapterID uint, promptID uint) (string, error) {
-	chap, err := s.bookRepo.GetChapterByID(ctx, chapterID)
-	if err != nil {
-		return "", err
-	}
-
-	if userID > 0 {
-		ids, err := s.actionRepo.GetUserTrimmedIDs(ctx, userID, chap.BookID, promptID)
-		if err == nil {
-			isProcessed := false
-			for _, id := range ids {
-				if id == chap.ID {
-					isProcessed = true
-					break
-				}
-			}
-
-			if isProcessed {
-				res, err := s.cacheRepo.GetTrimResult(ctx, chap.ContentMD5, promptID)
-				if err == nil && res != nil {
-					return res.TrimmedContent, nil
-				}
-			}
-		}
-	}
-	return "", nil
 }
 
 func (s *bookService) ListUserBooks(ctx context.Context, userID uint) ([]domain.Book, error) {
 	return s.bookRepo.GetBooksByUserID(ctx, userID)
 }
 
-func (s *bookService) GetChaptersBatch(ctx context.Context, userID uint, ids []uint, promptID uint) ([]port.BatchChapterResp, error) {
+func (s *bookService) ImportBookFile(ctx context.Context, userID uint, filename string, data []byte) (*domain.Book, error) {
+	title := strings.TrimSuffix(filename, filepath.Ext(filename))
+	bookMD5 := utils.CalculateMD5(string(data))
+
+	splitChapters := s.splitter.Split(string(data))
+	if len(splitChapters) == 0 {
+		return nil, fmt.Errorf("failed to split chapters")
+	}
+
+	bookFingerprint := utils.GetContentFingerprint(splitChapters[0].Content)
+
+	book := &domain.Book{
+		UserID:        userID,
+		BookMD5:       bookMD5,
+		Fingerprint:   bookFingerprint,
+		Title:         title,
+		TotalChapters: len(splitChapters),
+		CreatedAt:     time.Now(),
+	}
+
+	tkm, _ := tiktoken.GetEncoding("cl100k_base")
+	var chapters []domain.Chapter
+
+	for _, sc := range splitChapters {
+		chapterMD5 := utils.GetContentFingerprint(sc.Content)
+		
+		tokenCount := 0
+		if tkm != nil {
+			tokenCount = len(tkm.Encode(sc.Content, nil, nil))
+		}
+
+		_ = s.bookRepo.SaveRawContent(ctx, &domain.ChapterContent{
+			ChapterMD5: chapterMD5,
+			Content:    sc.Content,
+			WordsCount: len([]rune(sc.Content)),
+			TokenCount: tokenCount,
+			CreatedAt:  time.Now(),
+		})
+
+		chapters = append(chapters, domain.Chapter{
+			Index:      sc.Index,
+			Title:      sc.Title,
+			ChapterMD5: chapterMD5,
+			CreatedAt:  time.Now(),
+		})
+	}
+
+	if err := s.bookRepo.CreateBook(ctx, book, chapters); err != nil {
+		return nil, err
+	}
+
+	return book, nil
+}
+
+func (s *bookService) SyncLocalBook(ctx context.Context, userID uint, bookName, bookMD5 string, chapters []port.LocalBookChapter) (*port.SyncLocalBookResp, error) {
+	if len(chapters) == 0 {
+		return nil, fmt.Errorf("no chapters to sync")
+	}
+
+	book, err := s.bookRepo.GetBookByMD5(ctx, userID, bookMD5)
+	if err != nil {
+		fp := ""
+		for _, c := range chapters {
+			if c.Index == 0 {
+				fp = c.MD5
+				break
+			}
+		}
+		if fp == "" {
+			fp = chapters[0].MD5
+		}
+
+		book = &domain.Book{
+			UserID:      userID,
+			BookMD5:     bookMD5,
+			Fingerprint: fp,
+			Title:       bookName,
+			CreatedAt:   time.Now(),
+		}
+	}
+
+	tkm, _ := tiktoken.GetEncoding("cl100k_base")
+	var domainChaps []domain.Chapter
+	maxIndex := -1
+
+	for _, c := range chapters {
+		if c.Index > maxIndex {
+			maxIndex = c.Index
+		}
+
+		tokenCount := 0
+		if tkm != nil {
+			tokenCount = len(tkm.Encode(c.Content, nil, nil))
+		}
+
+		_ = s.bookRepo.SaveRawContent(ctx, &domain.ChapterContent{
+			ChapterMD5: c.MD5,
+			Content:    c.Content,
+			WordsCount: c.WordsCount,
+			TokenCount: tokenCount,
+			CreatedAt:  time.Now(),
+		})
+
+		domainChaps = append(domainChaps, domain.Chapter{
+			Index:      c.Index,
+			Title:      c.Title,
+			ChapterMD5: c.MD5,
+			CreatedAt:  time.Now(),
+		})
+	}
+
+	if book.ID == 0 {
+		book.TotalChapters = maxIndex + 1
+		if err := s.bookRepo.CreateBook(ctx, book, domainChaps); err != nil {
+			return nil, fmt.Errorf("create book failed: %w", err)
+		}
+	} else {
+		if err := s.bookRepo.UpsertChapters(ctx, book.ID, domainChaps); err != nil {
+			return nil, fmt.Errorf("upsert chapters failed: %w", err)
+		}
+	}
+
+	dbChaps, _ := s.bookRepo.GetChaptersByBookID(ctx, book.ID)
+	md5ToCloudID := make(map[string]uint)
+	for _, dc := range dbChaps {
+		md5ToCloudID[dc.ChapterMD5] = dc.ID
+	}
+
+	var mappings []port.ChapterMapping
+	for _, c := range chapters {
+		if cloudID, ok := md5ToCloudID[c.MD5]; ok {
+			mappings = append(mappings, port.ChapterMapping{
+				LocalID: c.LocalID,
+				CloudID: cloudID,
+			})
+		}
+	}
+
+	return &port.SyncLocalBookResp{
+		BookID:          book.ID,
+		ChapterMappings: mappings,
+	}, nil
+}
+
+func (s *bookService) GetBookDetailByID(ctx context.Context, userID uint, bookID uint) (*port.BookDetailResp, error) {
+	book, err := s.bookRepo.GetBookByID(ctx, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("book not found: %w", err)
+	}
+
+	chapters, err := s.bookRepo.GetChaptersByBookID(ctx, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch chapters: %w", err)
+	}
+
+	trimmedMap, err := s.actionRepo.GetAllBookTrimmedPromptIDs(ctx, userID, bookID)
+	if err != nil {
+		trimmedMap = make(map[uint][]uint)
+	}
+
+	history, _ := s.actionRepo.GetReadingHistory(ctx, userID, bookID)
+
+	return &port.BookDetailResp{
+		Book:           *book,
+		Chapters:       chapters,
+		TrimmedMap:     trimmedMap,
+		ReadingHistory: history,
+	}, nil
+}
+
+func (s *bookService) GetChaptersContent(ctx context.Context, userID uint, ids []uint) ([]port.ChapterContentResp, error) {
+	chaps, err := s.bookRepo.GetChaptersByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch chapters: %w", err)
+	}
+
+	var res []port.ChapterContentResp
+	for _, c := range chaps {
+		raw, err := s.bookRepo.GetRawContent(ctx, c.ChapterMD5)
+		if err != nil {
+			continue
+		}
+		res = append(res, port.ChapterContentResp{
+			ChapterID:  c.ID,
+			ChapterMD5: c.ChapterMD5,
+			Content:    raw.Content,
+		})
+	}
+	return res, nil
+}
+
+func (s *bookService) GetChaptersTrimmed(ctx context.Context, userID uint, ids []uint, promptID uint) ([]port.ChapterTrimResp, error) {
 	chaps, err := s.bookRepo.GetChaptersByIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	// 提前获取用户已精简列表，用于批量判定缓存
-	var trimmedMap = make(map[uint]bool)
-	if userID > 0 && promptID > 0 && len(chaps) > 0 {
-		tIDs, _ := s.actionRepo.GetUserTrimmedIDs(ctx, userID, chaps[0].BookID, promptID)
-		for _, tid := range tIDs {
-			trimmedMap[tid] = true
-		}
-	}
-
-	var resp []port.BatchChapterResp
+	var res []port.ChapterTrimResp
 	for _, c := range chaps {
-		item := port.BatchChapterResp{ID: c.ID}
-		// 获取原文
-		raw, err := s.bookRepo.GetRawContent(ctx, c.ContentMD5)
-		if err == nil {
-			item.Content = raw.Content
+		trim, err := s.cacheRepo.GetTrimResult(ctx, c.ChapterMD5, promptID)
+		if err == nil && trim != nil {
+			res = append(res, port.ChapterTrimResp{
+				ChapterID:      c.ID,
+				PromptID:       promptID,
+				TrimmedContent: trim.TrimmedContent,
+			})
 		}
-
-		// 获取精简版 (如果已精简且请求了 promptID)
-		if trimmedMap[c.ID] {
-			res, err := s.cacheRepo.GetTrimResult(ctx, c.ContentMD5, promptID)
-			if err == nil && res != nil {
-				item.TrimmedContent = res.TrimmedContent
-			}
-		}
-		resp = append(resp, item)
 	}
-	return resp, nil
+	return res, nil
+}
+
+func (s *bookService) GetContentsTrimmed(ctx context.Context, userID uint, md5s []string, promptID uint) ([]port.ContentTrimResp, error) {
+	var res []port.ContentTrimResp
+	for _, md5 := range md5s {
+		trim, err := s.cacheRepo.GetTrimResult(ctx, md5, promptID)
+		if err == nil && trim != nil {
+			res = append(res, port.ContentTrimResp{
+				ChapterMD5:     md5,
+				PromptID:       promptID,
+				TrimmedContent: trim.TrimmedContent,
+			})
+		}
+	}
+	return res, nil
 }
 
 func (s *bookService) UpdateReadingProgress(ctx context.Context, userID uint, bookID uint, chapterID uint, promptID uint) error {
@@ -202,8 +276,7 @@ func (s *bookService) RegisterTrimStatusByMD5(ctx context.Context, userID uint, 
 	return s.actionRepo.RecordUserTrim(ctx, &domain.UserProcessedChapter{
 		UserID:     userID,
 		PromptID:   promptID,
-		ContentMD5: md5,
+		ChapterMD5: md5,
 		CreatedAt:  time.Now(),
 	})
 }
-

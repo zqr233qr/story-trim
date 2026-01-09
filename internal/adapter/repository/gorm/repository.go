@@ -24,6 +24,7 @@ func (r *repository) CreateBook(ctx context.Context, book *domain.Book, chapters
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbBook := Book{
 			UserID:        book.UserID,
+			BookMD5:       book.BookMD5,
 			Fingerprint:   book.Fingerprint,
 			Title:         book.Title,
 			TotalChapters: book.TotalChapters,
@@ -40,12 +41,35 @@ func (r *repository) CreateBook(ctx context.Context, book *domain.Book, chapters
 				BookID:     book.ID,
 				Index:      ch.Index,
 				Title:      ch.Title,
-				ContentMD5: ch.ContentMD5,
+				ChapterMD5: ch.ChapterMD5,
 				CreatedAt:  ch.CreatedAt,
 			})
 		}
-		return tx.CreateInBatches(dbChaps, 100).Error
+		if len(dbChaps) > 0 {
+			return tx.CreateInBatches(dbChaps, 100).Error
+		}
+		return nil
 	})
+}
+
+func (r *repository) UpsertChapters(ctx context.Context, bookID uint, chapters []domain.Chapter) error {
+	var dbChaps []Chapter
+	for _, ch := range chapters {
+		dbChaps = append(dbChaps, Chapter{
+			BookID:     bookID,
+			Index:      ch.Index,
+			Title:      ch.Title,
+			ChapterMD5: ch.ChapterMD5,
+			CreatedAt:  ch.CreatedAt,
+		})
+	}
+	if len(dbChaps) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "book_id"}, {Name: "index"}},
+		DoUpdates: clause.AssignmentColumns([]string{"title", "chapter_md5"}),
+	}).CreateInBatches(dbChaps, 100).Error
 }
 
 func (r *repository) GetBookByID(ctx context.Context, id uint) (*domain.Book, error) {
@@ -56,6 +80,7 @@ func (r *repository) GetBookByID(ctx context.Context, id uint) (*domain.Book, er
 	return &domain.Book{
 		ID:            b.ID,
 		UserID:        b.UserID,
+		BookMD5:       b.BookMD5,
 		Fingerprint:   b.Fingerprint,
 		Title:         b.Title,
 		TotalChapters: b.TotalChapters,
@@ -72,6 +97,24 @@ func (r *repository) GetBookByFingerprint(ctx context.Context, fp string) (*doma
 	return &domain.Book{
 		ID:            b.ID,
 		UserID:        b.UserID,
+		BookMD5:       b.BookMD5,
+		Fingerprint:   b.Fingerprint,
+		Title:         b.Title,
+		TotalChapters: b.TotalChapters,
+		CreatedAt:     b.CreatedAt,
+	}, nil
+}
+
+func (r *repository) GetBookByMD5(ctx context.Context, userID uint, md5 string) (*domain.Book, error) {
+	var b Book
+	err := r.db.WithContext(ctx).Where("user_id = ? AND book_md5 = ?", userID, md5).First(&b).Error
+	if err != nil {
+		return nil, err
+	}
+	return &domain.Book{
+		ID:            b.ID,
+		UserID:        b.UserID,
+		BookMD5:       b.BookMD5,
 		Fingerprint:   b.Fingerprint,
 		Title:         b.Title,
 		TotalChapters: b.TotalChapters,
@@ -91,7 +134,7 @@ func (r *repository) GetChaptersByBookID(ctx context.Context, bookID uint) ([]do
 			BookID:     c.BookID,
 			Index:      c.Index,
 			Title:      c.Title,
-			ContentMD5: c.ContentMD5,
+			ChapterMD5: c.ChapterMD5,
 			CreatedAt:  c.CreatedAt,
 		})
 	}
@@ -108,7 +151,7 @@ func (r *repository) GetChapterByID(ctx context.Context, id uint) (*domain.Chapt
 		BookID:     c.BookID,
 		Index:      c.Index,
 		Title:      c.Title,
-		ContentMD5: c.ContentMD5,
+		ChapterMD5: c.ChapterMD5,
 		CreatedAt:  c.CreatedAt,
 	}, nil
 }
@@ -125,7 +168,7 @@ func (r *repository) GetChaptersByIDs(ctx context.Context, ids []uint) ([]domain
 			BookID:     c.BookID,
 			Index:      c.Index,
 			Title:      c.Title,
-			ContentMD5: c.ContentMD5,
+			ChapterMD5: c.ChapterMD5,
 			CreatedAt:  c.CreatedAt,
 		})
 	}
@@ -143,6 +186,7 @@ func (r *repository) GetBooksByUserID(ctx context.Context, userID uint) ([]domai
 		res = append(res, domain.Book{
 			ID:            b.ID,
 			UserID:        b.UserID,
+			BookMD5:       b.BookMD5,
 			Fingerprint:   b.Fingerprint,
 			Title:         b.Title,
 			TotalChapters: b.TotalChapters,
@@ -152,39 +196,29 @@ func (r *repository) GetBooksByUserID(ctx context.Context, userID uint) ([]domai
 	return res, nil
 }
 
-func (r *repository) SaveRawContent(ctx context.Context, content *domain.RawContent) error {
-	dbContent := RawContent{
-		MD5:        content.MD5,
+func (r *repository) SaveRawContent(ctx context.Context, content *domain.ChapterContent) error {
+	dbContent := ChapterContent{
+		ChapterMD5: content.ChapterMD5,
 		Content:    content.Content,
+		WordsCount: content.WordsCount,
 		TokenCount: content.TokenCount,
 		CreatedAt:  content.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&dbContent).Error
 }
 
-func (r *repository) GetRawContent(ctx context.Context, md5 string) (*domain.RawContent, error) {
-	var c RawContent
-	if err := r.db.WithContext(ctx).First(&c, "md5 = ?", md5).Error; err != nil {
+func (r *repository) GetRawContent(ctx context.Context, md5 string) (*domain.ChapterContent, error) {
+	var c ChapterContent
+	if err := r.db.WithContext(ctx).First(&c, "chapter_md5 = ?", md5).Error; err != nil {
 		return nil, err
 	}
-	return &domain.RawContent{
-		MD5:        c.MD5,
+	return &domain.ChapterContent{
+		ChapterMD5: c.ChapterMD5,
 		Content:    c.Content,
+		WordsCount: c.WordsCount,
 		TokenCount: c.TokenCount,
 		CreatedAt:  c.CreatedAt,
 	}, nil
-}
-
-func (r *repository) SaveRawFile(ctx context.Context, file *domain.RawFile) error {
-	dbFile := RawFile{
-		BookID:       file.BookID,
-		OriginalName: file.OriginalName,
-		StoragePath:  file.StoragePath,
-		FileHash:     file.FileHash,
-		Size:         file.Size,
-		CreatedAt:    file.CreatedAt,
-	}
-	return r.db.WithContext(ctx).Create(&dbFile).Error
 }
 
 // --- CacheRepository 实现 ---
@@ -192,7 +226,7 @@ func (r *repository) SaveRawFile(ctx context.Context, file *domain.RawFile) erro
 func (r *repository) GetTrimResult(ctx context.Context, md5 string, promptID uint) (*domain.TrimResult, error) {
 	var t TrimResult
 	err := r.db.WithContext(ctx).
-		Where("content_md5 = ? AND prompt_id = ?", md5, promptID).
+		Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID).
 		Order("level DESC").
 		First(&t).Error
 	if err != nil {
@@ -200,32 +234,44 @@ func (r *repository) GetTrimResult(ctx context.Context, md5 string, promptID uin
 	}
 	return &domain.TrimResult{
 		ID:             t.ID,
-		ContentMD5:     t.ContentMD5,
+		ChapterMD5:     t.ChapterMD5,
 		PromptID:       t.PromptID,
 		Level:          t.Level,
 		TrimmedContent: t.TrimmedContent,
+		TrimWords:      t.TrimWords,
+		TrimRate:       t.TrimRate,
+		ConsumeToken:   t.ConsumeToken,
 		CreatedAt:      t.CreatedAt,
 	}, nil
 }
 
 func (r *repository) SaveTrimResult(ctx context.Context, res *domain.TrimResult) error {
 	dbRes := TrimResult{
-		ContentMD5:     res.ContentMD5,
+		ChapterMD5:     res.ChapterMD5,
 		PromptID:       res.PromptID,
 		Level:          res.Level,
 		TrimmedContent: res.TrimmedContent,
 		TrimWords:      res.TrimWords,
 		TrimRate:       res.TrimRate,
+		ConsumeToken:   res.ConsumeToken,
 		CreatedAt:      res.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "content_md5"}, {Name: "prompt_id"}, {Name: "level"}},
-		DoUpdates: clause.AssignmentColumns([]string{"trimmed_content", "trim_words", "trim_rate", "created_at"}),
+		Columns:   []clause.Column{{Name: "chapter_md5"}, {Name: "prompt_id"}, {Name: "level"}},
+		UpdateAll: true,
 	}).Create(&dbRes).Error
 }
 
-func (r *repository) GetSummaries(ctx context.Context, bookFP string, beforeIndex int, limit int) ([]domain.RawSummary, error) {
-	var dbSummaries []RawSummary
+func (r *repository) IsExistSummary(ctx context.Context, md5 string) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&ChapterSummary{}).Where("chapter_md5 = ?", md5).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *repository) GetSummaries(ctx context.Context, bookFP string, beforeIndex int, limit int) ([]domain.ChapterSummary, error) {
+	var dbSummaries []ChapterSummary
 	err := r.db.WithContext(ctx).
 		Where("book_fingerprint = ? AND chapter_index < ?", bookFP, beforeIndex).
 		Order("chapter_index DESC").
@@ -234,29 +280,34 @@ func (r *repository) GetSummaries(ctx context.Context, bookFP string, beforeInde
 	if err != nil {
 		return nil, err
 	}
-	var res []domain.RawSummary
+	var res []domain.ChapterSummary
 	for _, s := range dbSummaries {
-		res = append(res, domain.RawSummary{
+		res = append(res, domain.ChapterSummary{
 			ID:              s.ID,
+			ChapterMD5:      s.ChapterMD5,
 			BookFingerprint: s.BookFingerprint,
 			ChapterIndex:    s.ChapterIndex,
 			Content:         s.Content,
+			ConsumeToken:    s.ConsumeToken,
 			CreatedAt:       s.CreatedAt,
 		})
 	}
 	return res, nil
 }
 
-func (r *repository) SaveSummary(ctx context.Context, summary *domain.RawSummary) error {
-	dbSummary := RawSummary{
+func (r *repository) SaveSummary(ctx context.Context, summary *domain.ChapterSummary) error {
+	dbSummary := ChapterSummary{
+		ChapterMD5:      summary.ChapterMD5,
+		BookID:          summary.BookID,
 		BookFingerprint: summary.BookFingerprint,
 		ChapterIndex:    summary.ChapterIndex,
 		Content:         summary.Content,
+		ConsumeToken:    summary.ConsumeToken,
 		CreatedAt:       summary.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "book_fingerprint"}, {Name: "chapter_index"}},
-		DoUpdates: clause.AssignmentColumns([]string{"content", "created_at"}),
+		Columns:   []clause.Column{{Name: "chapter_md5"}},
+		DoNothing: true,
 	}).Create(&dbSummary).Error
 }
 
@@ -328,7 +379,7 @@ func (r *repository) RecordUserTrim(ctx context.Context, action *domain.UserProc
 		BookID:     action.BookID,
 		ChapterID:  action.ChapterID,
 		PromptID:   action.PromptID,
-		ContentMD5: action.ContentMD5,
+		ChapterMD5: action.ChapterMD5,
 		CreatedAt:  action.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
@@ -374,7 +425,7 @@ func (r *repository) GetAllBookTrimmedPromptIDs(ctx context.Context, userID, boo
 
 func (r *repository) GetTrimmedPromptIDsByMD5s(ctx context.Context, userID uint, md5s []string) (map[string][]uint, error) {
 	type result struct {
-		ContentMD5 string
+		ChapterMD5 string
 		PromptID   uint
 	}
 	var rows []result
@@ -382,19 +433,18 @@ func (r *repository) GetTrimmedPromptIDsByMD5s(ctx context.Context, userID uint,
 		return make(map[string][]uint), nil
 	}
 	err := r.db.WithContext(ctx).Model(&UserProcessedChapter{}).
-		Where("user_id = ? AND content_md5 IN ?", userID, md5s).
-		Select("content_md5, prompt_id").Scan(&rows).Error
+		Where("user_id = ? AND chapter_md5 IN ?", userID, md5s).
+		Select("chapter_md5, prompt_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 
 	res := make(map[string][]uint)
 	for _, row := range rows {
-		res[row.ContentMD5] = append(res[row.ContentMD5], row.PromptID)
+		res[row.ChapterMD5] = append(res[row.ChapterMD5], row.PromptID)
 	}
 	return res, nil
 }
-
 
 // --- UserRepository 实现 ---
 
@@ -402,7 +452,6 @@ func (r *repository) Create(ctx context.Context, user *domain.User) error {
 	dbUser := User{
 		Username:     user.Username,
 		PasswordHash: user.PasswordHash,
-		Role:         user.Role,
 		CreatedAt:    user.CreatedAt,
 	}
 	if err := r.db.WithContext(ctx).Create(&dbUser).Error; err != nil {
@@ -421,7 +470,6 @@ func (r *repository) GetByID(ctx context.Context, id uint) (*domain.User, error)
 		ID:           u.ID,
 		Username:     u.Username,
 		PasswordHash: u.PasswordHash,
-		Role:         u.Role,
 		CreatedAt:    u.CreatedAt,
 	}, nil
 }
@@ -435,7 +483,6 @@ func (r *repository) GetByUsername(ctx context.Context, username string) (*domai
 		ID:           u.ID,
 		Username:     u.Username,
 		PasswordHash: u.PasswordHash,
-		Role:         u.Role,
 		CreatedAt:    u.CreatedAt,
 	}, nil
 }
@@ -450,7 +497,6 @@ func (r *repository) CreateTask(ctx context.Context, task *domain.Task) error {
 		Type:      task.Type,
 		Status:    task.Status,
 		Progress:  task.Progress,
-		Meta:      task.Meta,
 		CreatedAt: task.CreatedAt,
 		UpdatedAt: task.UpdatedAt,
 	}
@@ -478,7 +524,6 @@ func (r *repository) GetTaskByID(ctx context.Context, id string) (*domain.Task, 
 		Type:      t.Type,
 		Status:    t.Status,
 		Progress:  t.Progress,
-		Meta:      t.Meta,
 		Error:     t.Error,
 		CreatedAt: t.CreatedAt,
 		UpdatedAt: t.UpdatedAt,
@@ -523,4 +568,14 @@ func (r *repository) ListSystemPrompts(ctx context.Context) ([]domain.Prompt, er
 		})
 	}
 	return res, nil
+}
+
+func (r *repository) GetSummaryPrompt(ctx context.Context) (*domain.Prompt, error) {
+	var p Prompt
+	if err := r.db.WithContext(ctx).Where("type = ?", 1).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &domain.Prompt{
+		SummaryPromptContent: p.SummaryPromptContent,
+	}, nil
 }

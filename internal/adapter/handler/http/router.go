@@ -10,62 +10,46 @@ import (
 func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.TaskHandler, authH *v1.AuthHandler, trimH *v1.TrimHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
-	// 使用 New 而不是 Default，以完全控制中间件
 	r := gin.New()
-
-	// 必须第一个应用 CORS
 	r.Use(CORSMiddleware())
 	r.Use(gin.Recovery())
 
-	api := r.Group("/api")
+	api := r.Group("/api/v1")
 	{
-		v1Group := api.Group("/v1")
+		// 1. 公开接口 (Public)
+		auth := api.Group("/auth")
 		{
-			// 公开接口 (Public)
-			auth := v1Group.Group("/auth")
-			{
-				auth.POST("/register", authH.Register)
-				auth.POST("/login", authH.Login)
-			}
+			auth.POST("/register", authH.Register)
+			auth.POST("/login", authH.Login)
+		}
+		
+		// 获取精简模式列表 (无需登录)
+		api.GET("/common/prompts", storyH.ListPrompts)
 
-						// 可选鉴权接口 (Soft Auth)
+		// 2. 受保护接口 (Protected - 需登录)
+		protected := api.Group("")
+		protected.Use(AuthMiddleware(userSvc))
+		{
+			// 书籍资源管理
+			protected.GET("/books", storyH.ListBooks)
+			protected.GET("/books/:id", storyH.GetBookDetailByID)
+			protected.POST("/books/sync-local", storyH.SyncLocalBook)
+			protected.POST("/books/import-file", storyH.ImportBookFile)
+			protected.POST("/books/:id/progress", storyH.UpdateReadingProgress)
 
-						optional := v1Group.Group("")
+			// 内容与章节同步
+			protected.POST("/contents/sync-status", storyH.SyncTrimmedStatusByMD5)
+			protected.POST("/chapters/sync-status", storyH.SyncTrimmedStatusByID)
+			protected.POST("/chapters/content", storyH.GetChaptersContent)
+			protected.POST("/chapters/trim", storyH.GetChaptersTrimmed)
+			protected.POST("/contents/trim", storyH.GetContentsTrimmed)
 
-						optional.Use(SoftAuthMiddleware(userSvc))
-
-						{
-
-							optional.GET("/prompts", storyH.ListPrompts) // 允许未登录获取 Prompt
-
-							optional.POST("/trim/stream/raw", trimH.StreamTrimRaw) // 无状态精简 (HTTP流)
-
-							optional.GET("/trim/ws/raw", trimH.StreamTrimRawWS) // 无状态精简 (WebSocket)
-
-							optional.POST("/sync/trimmed_status", storyH.SyncTrimmedStatus)
-
-						}
-
-			// 受保护接口 (Protected)
-			protected := v1Group.Group("")
-			protected.Use(AuthMiddleware(userSvc))
-			{
-				// Story 模块
-				protected.POST("/upload", storyH.Upload)
-				protected.GET("/books", storyH.ListBooks)
-				// protected.GET("/prompts", storyH.ListPrompts) // Moved to optional
-				protected.GET("/books/:id", storyH.GetBookDetail)
-				protected.POST("/books/:id/progress", storyH.UpdateProgress)
-				protected.GET("/chapters/:id", storyH.GetChapter)
-				protected.GET("/chapters/:id/trim", storyH.GetChapterTrim)
-				protected.POST("/chapters/batch", storyH.GetBatchChapters)
-				protected.POST("/trim/stream", storyH.TrimStream)
-				protected.GET("/trim/ws", storyH.TrimStreamWS)
-
-				// Task 模块
-				protected.POST("/tasks/batch-trim", taskH.StartBatchTrim)
-				protected.GET("/tasks/:id", taskH.GetTaskStatus)
-			}
+			// AI 精简流 (WS)
+			protected.GET("/trim/stream/by-md5", trimH.TrimStreamByMD5)
+			protected.GET("/trim/stream/by-id", trimH.TrimStreamByChapterID)
+			
+			// 异步任务
+			protected.POST("/tasks/full-trim", taskH.SubmitFullTrimTask)
 		}
 	}
 

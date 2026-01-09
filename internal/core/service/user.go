@@ -43,7 +43,6 @@ func (s *userService) Register(ctx context.Context, username, password string) e
 	user := &domain.User{
 		Username:     username,
 		PasswordHash: string(hash),
-		Role:         "user",
 		CreatedAt:    time.Now(),
 	}
 	return s.userRepo.Create(ctx, user)
