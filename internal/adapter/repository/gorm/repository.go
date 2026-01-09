@@ -68,7 +68,7 @@ func (r *repository) UpsertChapters(ctx context.Context, bookID uint, chapters [
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "book_id"}, {Name: "index"}},
-		DoUpdates: clause.AssignmentColumns([]string{"title", "chapter_md5"}),
+		DoNothing: true,
 	}).CreateInBatches(dbChaps, 100).Error
 }
 
@@ -205,6 +205,27 @@ func (r *repository) SaveRawContent(ctx context.Context, content *domain.Chapter
 		CreatedAt:  content.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&dbContent).Error
+}
+
+func (r *repository) BatchSaveRawContents(ctx context.Context, contents []*domain.ChapterContent) error {
+	if len(contents) == 0 {
+		return nil
+	}
+
+	var dbContents []ChapterContent
+	for _, c := range contents {
+		dbContents = append(dbContents, ChapterContent{
+			ChapterMD5: c.ChapterMD5,
+			Content:    c.Content,
+			WordsCount: c.WordsCount,
+			TokenCount: c.TokenCount,
+			CreatedAt:  c.CreatedAt,
+		})
+	}
+
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(dbContents, 100).Error
 }
 
 func (r *repository) GetRawContent(ctx context.Context, md5 string) (*domain.ChapterContent, error) {

@@ -14,6 +14,14 @@ type LocalBookChapter struct {
 	Index      int    `json:"index"`
 }
 
+type SyncLocalBookReq struct {
+	BookName      string             `json:"book_name" binding:"required"`
+	BookMD5       string             `json:"book_md5" binding:"required"`
+	CloudBookID   uint               `json:"cloud_book_id"`
+	TotalChapters int                `json:"total_chapters"`
+	Chapters      []LocalBookChapter `json:"chapters" binding:"required"`
+}
+
 type SyncLocalBookResp struct {
 	BookID          uint             `json:"book_id"`
 	ChapterMappings []ChapterMapping `json:"chapter_mappings"`
@@ -51,7 +59,7 @@ type ContentTrimResp struct {
 
 type BookService interface {
 	// SyncLocalBook 将客户端本地解析的书籍内容同步到云端
-	SyncLocalBook(ctx context.Context, userID uint, bookName, bookMD5 string, totalChapters int, chapters []LocalBookChapter) (*SyncLocalBookResp, error)
+	SyncLocalBook(ctx context.Context, req *SyncLocalBookReq, userID uint) (*SyncLocalBookResp, error)
 	// ImportBookFile 通过上传物理文件导入书籍并自动分章
 	ImportBookFile(ctx context.Context, userID uint, filename string, data []byte) (*domain.Book, error)
 	// ListUserBooks 获取用户的书籍列表

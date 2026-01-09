@@ -17,6 +17,7 @@ export interface ParseResult {
   title: string;
   totalChapters: number;
   fingerprint: string;
+  bookMD5: string;
   chapters: ParsedChapter[];
 }
 
@@ -35,7 +36,8 @@ export const parser = {
           let currentBuffer: string[] = []; 
           let chapterIndex = 0;
           let fingerprint = '';
-
+          const spark = new SparkMD5.ArrayBuffer(); // 用于计算全文 MD5
+          
           const commitChapter = (title: string, buffer: string[]) => {
             const content = buffer.join(''); 
             // 允许空章，但至少要有内容
@@ -66,10 +68,13 @@ export const parser = {
               console.log(`[Parser] Finished. Total chapters: ${chapters.length}`);
               commitChapter(currentTitle, currentBuffer);
               if (onProgress) onProgress(80);
+              const bookMD5 = spark.end();
+              console.log('[Parser] Book MD5:', bookMD5);
               resolve({
                 title: fileName.replace(/\.txt$/i, ''),
                 totalChapters: chapters.length,
                 fingerprint: fingerprint || 'unknown',
+                bookMD5: bookMD5,
                 chapters: chapters
               });
               return;
@@ -78,10 +83,15 @@ export const parser = {
             const end = Math.min(offset + CHUNK_SIZE, fileSize);
             const slice = file.slice(offset, end);
             
-            reader.onloadend = (e) => {
+            reader.onload = (e) => {
               const readTime = Date.now() - startRead;
               
-              const text = e.target.result as string;
+              const arrayBuffer = e.target.result as ArrayBuffer;
+              
+              spark.append(arrayBuffer);
+              
+              const decoder = new TextDecoder('utf-8');
+              const text = decoder.decode(arrayBuffer);
               
               let validEnd = text.length;
               if (end < fileSize) {
@@ -92,7 +102,6 @@ export const parser = {
               const validChunk = text.substring(0, validEnd);
               
               const matchStart = Date.now();
-              // 使用 matchAll 快速查找章节头
               const matches = [...validChunk.matchAll(CHAPTER_HEADER_REGEX)];
               const matchTime = Date.now() - matchStart;
               
@@ -130,7 +139,12 @@ export const parser = {
               setTimeout(readNextChunk, 0); 
             };
             
-            reader.readAsText(slice, 'utf-8');
+            reader.onerror = (e) => {
+              console.error('[Parser] Error reading file:', e);
+              reject(e);
+            };
+            
+            reader.readAsArrayBuffer(slice);
           };
 
           readNextChunk();

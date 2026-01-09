@@ -11,6 +11,9 @@ export interface IBookRepository {
   addBook(filePath: string, fileName: string, onProgress?: (p: number) => void): Promise<LocalBook>;
   deleteBook(id: number | string): Promise<void>;
 
+  // --- 云端同步 ---
+  syncBookFromCloud(cloudBook: CloudBook): Promise<void>;
+
   // --- 章节 ---
   getChapters(bookId: number | string): Promise<LocalChapter[]>;
   getChapterContent(bookId: number | string, chapterId: number | string): Promise<string>;
@@ -23,4 +26,13 @@ export interface IBookRepository {
   
   // --- 进度 ---
   updateProgress(bookId: number | string, chapterId: number | string): Promise<void>;
+}
+
+export interface CloudBook {
+  id: number;
+  book_md5?: string;
+  fingerprint: string;
+  title: string;
+  total_chapters: number;
+  created_at: string;
 }

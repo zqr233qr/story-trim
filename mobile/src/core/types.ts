@@ -1,16 +1,19 @@
 export type PlatformType = 'app' | 'mp' | 'h5';
 
 export interface LocalBook {
-  id: number | string;      // 统一ID (App端是number, MP端是string)
+  id: number | string;
   title: string;
-  fingerprint: string;      // 书籍指纹 (第一章归一化MD5)
+  fingerprint: string;
+  bookMD5?: string;
+  cloudId?: number;
+  syncedCount?: number;
   totalChapters: number;
   lastReadChapterId?: number | string;
   processStatus: 'new' | 'processing' | 'ready';
   platform: PlatformType;
-  cover?: string;           // 封面图片(可选)
+  cover?: string;
   createdAt: number;
-  syncState?: number;       // 0: Local, 1: Synced, 2: CloudOnly
+  syncState?: number;
 }
 
 export interface LocalChapter {
@@ -19,7 +22,8 @@ export interface LocalChapter {
   index: number;
   title: string;
   content?: string;         // 列表查询时为空，详情查询时有值
-  wordCount: number;
+  words_count: number;      // 字数（与服务端保持一致）
+  length?: number;          // 原始长度（RenderJS传递）
   md5: string;              // 章节归一化MD5
   trimmedPromptIds?: number[];
 }
@@ -30,4 +34,39 @@ export interface TrimmedContent {
   promptId: number;
   content: string;
   createdAt: number;
+}
+
+// 扩展类型：用于云端API响应
+export interface CloudBook {
+  id: number;
+  title: string;
+  total_chapters: number;
+  fingerprint: string;
+  created_at: string;
+}
+
+export interface CloudChapter {
+  id: number;
+  book_id: number;
+  index: number;
+  title: string;
+  chapter_md5?: string;
+  md5?: string;
+  cloud_id?: number;      // 云端章节ID
+}
+
+// 统一的 Book 和 Chapter 接口（兼容 Local 和 Cloud）
+export interface Book extends CloudBook {
+  syncState?: number;       // 0: Local, 1: Synced, 2: CloudOnly
+  chapters?: Chapter[];
+  activeChapterIndex?: number;
+  activeModeId?: string;
+}
+
+export interface Chapter extends CloudChapter {
+  content?: string;
+  trimmed_content?: string;
+  trimmed_prompt_ids?: number[];
+  isLoaded?: boolean;
+  modes?: Record<string, string[]>;
 }

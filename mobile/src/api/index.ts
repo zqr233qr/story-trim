@@ -2,7 +2,7 @@
 // 重要：真机调试时，请将下方 IP 替换为你电脑的局域网 IP
 const LOCAL_IP = '192.168.3.178'; 
 
-let BASE_URL = '/api/v1';
+export let BASE_URL = '/api/v1';
 
 // #ifndef H5
 BASE_URL = `http://${LOCAL_IP}:8080/api/v1`;
@@ -22,7 +22,7 @@ export interface Response<T> {
 }
 
 // 核心请求方法封装 (适配 Uni-app)
-const request = <T>(options: UniApp.RequestOptions): Promise<Response<T>> => {
+export const request = <T>(options: UniApp.RequestOptions): Promise<Response<T>> => {
   const token = uni.getStorageSync('token');
   const finalUrl = BASE_URL + options.url;
   console.log('[API Request]', options.method || 'GET', finalUrl);
@@ -54,7 +54,7 @@ const request = <T>(options: UniApp.RequestOptions): Promise<Response<T>> => {
 
 // --- 类型定义 ---
 export interface User { id: number; username: string; token?: string; }
-export interface Book { id: number; title: string; total_chapters: number; fingerprint: string; created_at: string; }
+export interface Book { id: number; title: string; total_chapters: number; fingerprint: string; created_at: string; book_md5?: string; }
 export interface Chapter { 
   id: number; book_id: number; index: number; title: string; 
   content?: string; trimmed_content?: string; trimmed_prompt_ids?: number[]; md5?: string;
@@ -84,7 +84,7 @@ export const api = {
     data: { md5s } 
   }),
 
-  syncLocalBook: (data: { book_name: string; book_md5: string; chapters: any[] }) => request<{ book_id: number; chapters_map: Record<string, number> }>({
+  syncLocalBook: (data: { book_name: string; book_md5: string; cloud_book_id?: number; chapters: any[] }) => request<{ book_id: number; chapters_map: Record<string, number> }>({
     url: '/books/sync-local',
     method: 'POST',
     data

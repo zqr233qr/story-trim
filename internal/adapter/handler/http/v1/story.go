@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github/zqr233qr/story-trim/internal/adapter/handler/apix"
 	"github/zqr233qr/story-trim/internal/core/port"
@@ -51,21 +52,20 @@ func (h *StoryHandler) ListPrompts(c *gin.Context) {
 
 // SyncLocalBook 将客户端本地解析的书籍内容同步到云端
 func (h *StoryHandler) SyncLocalBook(c *gin.Context) {
-	var req struct {
-		BookName      string                  `json:"book_name" binding:"required"`
-		BookMD5       string                  `json:"book_md5" binding:"required"`
-		TotalChapters int                     `json:"total_chapters"`
-		Chapters      []port.LocalBookChapter `json:"chapters" binding:"required"`
-	}
+	var req port.SyncLocalBookReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apix.Error(c, 400, errno.ParamErrCode)
 		return
 	}
 
 	userID := c.GetUint("userID")
-	resp, err := h.bookSvc.SyncLocalBook(c.Request.Context(), userID, req.BookName, req.BookMD5, req.TotalChapters, req.Chapters)
+	resp, err := h.bookSvc.SyncLocalBook(c.Request.Context(), &req, userID)
 	if err != nil {
-		apix.Error(c, 500, errno.InternalServerErrCode, err.Error())
+		if strings.Contains(err.Error(), "book already exists") {
+			apix.Error(c, 400, errno.BookAlreadyExistsCode, "该书籍已存在云端")
+		} else {
+			apix.Error(c, 500, errno.InternalServerErrCode, err.Error())
+		}
 		return
 	}
 
@@ -237,6 +237,20 @@ func (h *StoryHandler) SyncTrimmedStatusByMD5(c *gin.Context) {
 
 // SyncTrimmedStatusByID 基于章节ID同步章节的精简足迹
 func (h *StoryHandler) SyncTrimmedStatusByID(c *gin.Context) {
-	// 实现略，逻辑同上，仅查询参数不同，此处按需扩展
-	apix.Success(c, nil)
+	var req struct {
+		BookID uint `json:"book_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apix.Error(c, 400, errno.ParamErrCode)
+		return
+	}
+
+	userID := c.GetUint("userID")
+	modeMap, err := h.actionRepo.GetAllBookTrimmedPromptIDs(c.Request.Context(), userID, req.BookID)
+	if err != nil {
+		apix.Error(c, 500, errno.InternalServerErrCode)
+		return
+	}
+
+	apix.Success(c, gin.H{"trimmed_map": modeMap})
 }

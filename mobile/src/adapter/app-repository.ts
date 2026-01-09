@@ -2,13 +2,14 @@ import { db } from '../utils/sqlite';
 import { parser } from '../utils/parser';
 import type { IBookRepository } from '../core/repository';
 import type { LocalBook, LocalChapter, TrimmedContent } from '../core/types';
+import type { CloudBook } from '../core/repository';
 
 export class AppRepository implements IBookRepository {
   async init(): Promise<void> {
     await db.open();
     
     // 1. Books Table
-    // sync_state: 0=Local, 1=Synced, 2=CloudOnly
+    // sync_state:0=Local,1=Synced,2=CloudOnly
     await db.execute(`
       CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,10 +20,11 @@ export class AppRepository implements IBookRepository {
         total_chapters INTEGER,
         process_status TEXT,
         sync_state INTEGER DEFAULT 0,
+        synced_count INTEGER DEFAULT 0,
         created_at INTEGER
       )
     `);
-
+ 
     // 2. Chapters Table
     await db.execute(`
       CREATE TABLE IF NOT EXISTS chapters (
@@ -32,10 +34,11 @@ export class AppRepository implements IBookRepository {
         chapter_index INTEGER,
         title TEXT,
         content TEXT,
-        md5 TEXT
+        md5 TEXT,
+        words_count INTEGER DEFAULT 0
       )
     `);
-
+ 
     // 3. Trimmed Content Table (Local Cache / Tier 3)
     await db.execute(`
       CREATE TABLE IF NOT EXISTS trimmed_content (
@@ -46,12 +49,35 @@ export class AppRepository implements IBookRepository {
         PRIMARY KEY (source_md5, prompt_id)
       )
     `);
+ 
+    // 4. Contents Table (内容去重表 - 设计文档要求）
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS contents (
+        chapter_md5 TEXT PRIMARY KEY,
+        raw_content TEXT
+      )
+    `);
+ 
+    // 5. Reading History Table (阅读进度表 - 设计文档要求）
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS reading_history (
+        book_id INTEGER PRIMARY KEY,
+        last_chapter_id INTEGER,
+        last_prompt_id INTEGER,
+        scroll_offset REAL,
+        updated_at INTEGER
+      )
+    `);
   }
 
   // --- Sync Helpers ---
   
-  async updateBookCloudInfo(localId: number, cloudId: number, syncState: number): Promise<void> {
-    await db.execute('UPDATE books SET cloud_id = ?, sync_state = ? WHERE id = ?', [cloudId, syncState, localId]);
+  async updateBookCloudInfo(localId: number, cloudId: number, syncState: number, syncedCount?: number): Promise<void> {
+    if (syncedCount !== undefined) {
+      await db.execute('UPDATE books SET cloud_id = ?, sync_state = ?, synced_count = ? WHERE id = ?', [cloudId, syncState, syncedCount, localId]);
+    } else {
+      await db.execute('UPDATE books SET cloud_id = ?, sync_state = ? WHERE id = ?', [cloudId, syncState, localId]);
+    }
   }
   
   async updateChapterCloudId(localId: number, cloudId: number): Promise<void> {
@@ -60,11 +86,13 @@ export class AppRepository implements IBookRepository {
 
   async getBooks(): Promise<LocalBook[]> {
     const rows = await db.select<any>('SELECT * FROM books ORDER BY created_at DESC');
-    console.log('[Repo] getBooks raw rows:', JSON.stringify(rows))
     return rows.map(r => ({
       id: r.id,
       title: r.title,
       fingerprint: r.fingerprint,
+      bookMD5: r.book_md5,
+      cloudId: r.cloud_id,
+      syncedCount: r.synced_count || 0,
       totalChapters: r.total_chapters,
       processStatus: r.process_status,
       platform: 'app',
@@ -81,6 +109,9 @@ export class AppRepository implements IBookRepository {
       id: r.id,
       title: r.title,
       fingerprint: r.fingerprint,
+      bookMD5: r.book_md5,
+      cloudId: r.cloud_id,
+      syncedCount: r.synced_count || 0,
       totalChapters: r.total_chapters,
       processStatus: r.process_status,
       platform: 'app',
@@ -104,8 +135,8 @@ export class AppRepository implements IBookRepository {
 
       // Insert Book
       await db.execute(
-        'INSERT INTO books (title, fingerprint, total_chapters, process_status, created_at) VALUES (?, ?, ?, ?, ?)',
-        [result.title, result.fingerprint, result.totalChapters, 'ready', Date.now()]
+        'INSERT INTO books (title, book_md5, fingerprint, total_chapters, process_status, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [result.title, result.bookMD5, result.fingerprint, result.totalChapters, 'ready', 0, Date.now()]
       );
       
       const res = await db.select<any>('SELECT last_insert_rowid() as id');
@@ -118,15 +149,13 @@ export class AppRepository implements IBookRepository {
       for (let i = 0; i < total; i += BATCH_SIZE) {
         const chunkStart = Date.now();
         const chunk = result.chapters.slice(i, i + BATCH_SIZE);
-        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(',');
-        const values = chunk.flatMap(c => [bookId, c.index, c.title, c.content, c.md5]);
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+        const values = chunk.flatMap(c => [bookId, c.index, c.title, c.content, c.md5, c.length || 0]);
         
         await db.execute(
-          `INSERT INTO chapters (book_id, chapter_index, title, content, md5) VALUES ${placeholders}`,
+          `INSERT INTO chapters (book_id, chapter_index, title, content, md5, words_count) VALUES ${placeholders}`,
           values
         );
-        
-        console.log(`[SQL] Batch insert ${chunk.length} chapters took ${Date.now() - chunkStart}ms`);
         
         // 更新入库进度
         if (onProgress) {
@@ -136,13 +165,14 @@ export class AppRepository implements IBookRepository {
       }
     });
     
-    console.log(`[SQL] Total insert took ${Date.now() - startInsert}ms`);
     if (onProgress) onProgress(100);
 
     return {
       id: bookId,
       title: result.title,
       fingerprint: result.fingerprint,
+      bookMD5: result.bookMD5,
+      syncedCount: 0,
       totalChapters: result.totalChapters,
       processStatus: 'ready',
       platform: 'app',
@@ -157,23 +187,40 @@ export class AppRepository implements IBookRepository {
     });
   }
 
+  async syncBookFromCloud(cloudBook: CloudBook): Promise<void> {
+    const existing = await db.select<any>('SELECT id FROM books WHERE book_md5 = ?', [cloudBook.book_md5]);
+    
+    if (existing.length > 0) {
+      console.log('[Sync] Book already exists locally:', cloudBook.title);
+      return;
+    }
+    
+    await db.execute(
+      'INSERT INTO books (cloud_id, book_md5, fingerprint, title, total_chapters, process_status, sync_state, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [cloudBook.id, cloudBook.book_md5 || '', cloudBook.fingerprint, cloudBook.title, cloudBook.total_chapters, 'ready', 2, cloudBook.total_chapters, Date.now()]
+    );
+    
+    console.log('[Sync] Book synced from cloud:', cloudBook.title);
+  }
+
   async getChapters(bookId: number | string): Promise<LocalChapter[]> {
-    const rows = await db.select<any>('SELECT id, chapter_index, title, md5 FROM chapters WHERE book_id = ? ORDER BY chapter_index ASC', [bookId]);
+    const rows = await db.select<any>('SELECT id, chapter_index, title, md5, words_count FROM chapters WHERE book_id = ? ORDER BY chapter_index ASC', [bookId]);
     return rows.map(r => ({
       id: r.id,
       bookId: bookId,
       index: r.chapter_index,
       title: r.title,
       md5: r.md5,
-      wordCount: 0 // TODO
+      words_count: r.words_count || 0
     }));
   }
 
   async getChaptersBatch(bookId: number | string, offset: number, limit: number): Promise<LocalChapter[]> {
     const rows = await db.select<any>(
-        'SELECT id, chapter_index, title, md5, content FROM chapters WHERE book_id = ? ORDER BY chapter_index ASC LIMIT ? OFFSET ?', 
+        'SELECT id, chapter_index, title, md5, content, words_count FROM chapters WHERE book_id = ? ORDER BY chapter_index ASC LIMIT ? OFFSET ?', 
         [bookId, limit, offset]
     );
+    
     return rows.map(r => ({
       id: r.id,
       bookId: bookId,
@@ -181,7 +228,7 @@ export class AppRepository implements IBookRepository {
       title: r.title,
       md5: r.md5,
       content: r.content,
-      wordCount: r.content ? r.content.length : 0
+      words_count: r.words_count || 0
     }));
   }
 
@@ -219,13 +266,11 @@ export class AppRepository implements IBookRepository {
   }
 
   async insertChapters(bookId: number, chapters: any[]): Promise<void> {
-    // 移除 PRAGMA 优化，优先保证数据一致性
-    
-    const placeholders = chapters.map(() => '(?, ?, ?, ?, ?)').join(',');
-    const values = chapters.flatMap(c => [bookId, c.index, c.title, c.content, c.md5]);
+    const placeholders = chapters.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+    const values = chapters.flatMap(c => [bookId, c.index, c.title, c.content, c.md5, c.length || 0]);
     
     await db.execute(
-      `INSERT INTO chapters (book_id, chapter_index, title, content, md5) VALUES ${placeholders}`,
+      `INSERT INTO chapters (book_id, chapter_index, title, content, md5, words_count) VALUES ${placeholders}`,
       values
     );
   }

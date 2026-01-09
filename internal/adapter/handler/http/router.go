@@ -22,7 +22,7 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 			auth.POST("/register", authH.Register)
 			auth.POST("/login", authH.Login)
 		}
-		
+
 		// 获取精简模式列表 (无需登录)
 		api.GET("/common/prompts", storyH.ListPrompts)
 
@@ -47,7 +47,7 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 			// AI 精简流 (WS)
 			protected.GET("/trim/stream/by-md5", trimH.TrimStreamByMD5)
 			protected.GET("/trim/stream/by-id", trimH.TrimStreamByChapterID)
-			
+
 			// 异步任务
 			protected.POST("/tasks/full-trim", taskH.SubmitFullTrimTask)
 		}

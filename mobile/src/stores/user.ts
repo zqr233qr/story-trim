@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useBookStore } from './book'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(uni.getStorageSync('token') || '')
   const username = ref(uni.getStorageSync('username') || '')
 
   const isLoggedIn = () => {
-    // console.log('[UserStore] check login, token:', token.value)
     return !!token.value
   }
 
@@ -16,6 +16,9 @@ export const useUserStore = defineStore('user', () => {
     username.value = u
     uni.setStorageSync('token', t)
     uni.setStorageSync('username', u)
+
+    const bookStore = useBookStore()
+    bookStore.fetchBooks()
   }
 
   const logout = () => {

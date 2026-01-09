@@ -182,7 +182,12 @@ func (j *EncyclopediaJob) Execute(ctx context.Context) error {
 	}
 
 	prompt := "你是一个文学设定分析员。请基于[旧百科]和[最新剧情摘要]，合并更新为最新的Markdown设定集。"
-	input := fmt.Sprintf("[旧百科]\n%s\n\n[新摘要]\n%s", func() string { if existing != nil { return existing.Content }; return "无" }(), sb.String())
+	input := fmt.Sprintf("[旧百科]\n%s\n\n[新摘要]\n%s", func() string {
+		if existing != nil {
+			return existing.Content
+		}
+		return "无"
+	}(), sb.String())
 
 	content, usage, err := j.s.llm.Chat(ctx, prompt, input)
 	if err == nil {

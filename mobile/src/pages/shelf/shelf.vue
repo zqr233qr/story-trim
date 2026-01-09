@@ -1,6 +1,5 @@
 <script lang="ts">
 import { useBookStore } from '@/stores/book'
-import { db } from '@/utils/sqlite'
 
 // 逻辑层：负责接收数据并入库
 export default {
@@ -120,7 +119,7 @@ const triggerUpload = () => {
 }
 
 const handleSyncBook = async (book: any) => {
-  uni.showLoading({ title: '正在同步至云端...' })
+  console.log('[Shelf] handleSyncBook called, current syncProgress:', bookStore.syncProgress);
   try {
     await bookStore.syncBookToCloud(book.id)
     uni.showToast({ title: '同步成功', icon: 'success' })
@@ -128,8 +127,7 @@ const handleSyncBook = async (book: any) => {
     await bookStore.fetchBooks()
   } catch (e) {
     uni.showToast({ title: '同步失败', icon: 'none' })
-  } finally {
-    uni.hideLoading()
+    console.error('[Shelf] Sync error:', e)
   }
 }
 
@@ -276,15 +274,15 @@ export default {
       const chapters = [];
       let fingerprint = '';
       
-      // 序章处理
-      if (matches.length > 0 && matches[0].index > 0) {
-         const content = text.substring(0, matches[0].index);
-         if (content.trim().length > 10) {
-            const md5 = this.simpleHash(content.trim());
-            fingerprint = md5;
-            chapters.push({ index: 0, title: '序章', content: content, md5: md5 });
-         }
-      }
+       // 序章处理
+       if (matches.length > 0 && matches[0].index > 0) {
+          const content = text.substring(0, matches[0].index);
+          if (content.trim().length > 10) {
+             const md5 = this.simpleHash(content.trim());
+             fingerprint = md5;
+             chapters.push({ index: 0, title: '序章', content: content, md5: md5, length: content.length });
+          }
+       }
 
       // 正文处理
       for (let i = 0; i < matches.length; i++) {
@@ -304,16 +302,17 @@ export default {
           index: chapters.length, // 重新编号
           title: title,
           content: content,
-          md5: md5
+          md5: md5,
+          length: [...content].length // 字符数（中文1字符）
         });
       }
       
-      // 兜底：如果没匹配到章节，当做全文一章
-      if (chapters.length === 0) {
-         const md5 = this.simpleHash(text.trim());
-         chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5 });
-         fingerprint = md5;
-      }
+       // 兜底：如果没匹配到章节，当做全文一章
+       if (chapters.length === 0) {
+          const md5 = this.simpleHash(text.trim());
+          chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5, length: [...text].length }); // 字符数（中文1字符）
+          fingerprint = md5;
+       }
 
       // 2. 发送元数据
       ownerInstance.callMethod('onBookInfo', {

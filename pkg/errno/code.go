@@ -1,17 +1,18 @@
 package errno
 
 const (
-	SuccessCode = 0
+	SuccessCode           = 0
 	InternalServerErrCode = 5000
-	ParamErrCode = 4000
-	
+	ParamErrCode          = 4000
+
 	// 业务模块代码
-	AuthErrCode = 1000
-	UploadErrCode = 2000
-	BookNotFoundCode = 2001
-	ChapterNotFoundCode = 2002
-	LLMErrCode = 3000
-	TaskErrCode = 4001
+	AuthErrCode           = 1000
+	UploadErrCode         = 2000
+	BookNotFoundCode      = 2001
+	ChapterNotFoundCode   = 2002
+	BookAlreadyExistsCode = 2003
+	LLMErrCode            = 3000
+	TaskErrCode           = 4001
 )
 
 var MsgFlags = map[int]string{
@@ -22,6 +23,7 @@ var MsgFlags = map[int]string{
 	UploadErrCode:         "Upload Failed",
 	BookNotFoundCode:      "Book Not Found",
 	ChapterNotFoundCode:   "Chapter Not Found",
+	BookAlreadyExistsCode: "Book already exists in cloud",
 	LLMErrCode:            "AI Engine Error",
 	TaskErrCode:           "Task Execution Error",
 }

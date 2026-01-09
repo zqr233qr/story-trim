@@ -204,7 +204,9 @@ func (s *trimService) mockStreaming(content string) <-chan string {
 		runes := []rune(content)
 		for i := 0; i < len(runes); {
 			step := 10
-			if i+step > len(runes) { step = len(runes) - i }
+			if i+step > len(runes) {
+				step = len(runes) - i
+			}
 			ch <- string(runes[i : i+step])
 			i += step
 			time.Sleep(time.Duration(s.cfg.MockStreamSpeed) * time.Millisecond)
@@ -247,9 +249,19 @@ func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string
 
 			if userID > 0 {
 				_ = s.actionRepo.RecordUserTrim(context.Background(), &domain.UserProcessedChapter{
-					UserID:     userID,
-					BookID:     func() uint { if book != nil { return book.ID }; return 0 }(),
-					ChapterID:  func() uint { if chap != nil { return chap.ID }; return 0 }(),
+					UserID: userID,
+					BookID: func() uint {
+						if book != nil {
+							return book.ID
+						}
+						return 0
+					}(),
+					ChapterID: func() uint {
+						if chap != nil {
+							return chap.ID
+						}
+						return 0
+					}(),
 					PromptID:   pID,
 					ChapterMD5: chapterMD5,
 					CreatedAt:  time.Now(),

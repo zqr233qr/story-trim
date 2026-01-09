@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
 import type { Book, Chapter, Prompt } from '@/api'
+import { useUserStore } from './user'
 // #ifdef APP-PLUS
 import { AppRepository } from '@/adapter/app-repository'
 const repo = new AppRepository()
@@ -37,6 +38,31 @@ export const useBookStore = defineStore('book', () => {
     isLoading.value = true
     try {
       // #ifdef APP-PLUS
+      const userStore = useUserStore()
+      if (!userStore.isLoggedIn()) {
+        books.value = []
+        uni.showToast({
+          title: '请登录以恢复您的书籍',
+          icon: 'none',
+          duration: 3000
+        })
+        return
+      }
+
+      try {
+        const res = await api.getBooks()
+        if (res.code === 0) {
+          const cloudBooks = res.data || []
+          console.log('[FetchBooks] Syncing', cloudBooks.length, 'books from cloud')
+
+          for (const cloudBook of cloudBooks) {
+            await repo.syncBookFromCloud(cloudBook)
+          }
+        }
+      } catch (e) {
+        console.warn('[FetchBooks] Failed to sync books from cloud', e)
+      }
+
       const localBooks = await repo.getBooks()
       books.value = localBooks.map(b => ({
         id: Number(b.id),
@@ -48,7 +74,7 @@ export const useBookStore = defineStore('book', () => {
         progress: 0,
         activeChapterIndex: 0,
         chapters: [],
-        sync_state: b.syncState || 0 // 映射 sync_state
+        sync_state: b.syncState || 0
       }))
       // #endif
 
@@ -255,15 +281,14 @@ export const useBookStore = defineStore('book', () => {
     // #ifdef APP-PLUS
     const book = await repo.getBook(bookId);
     if (!book || book.platform !== 'app') return;
-    
-    // 不要一次性获取所有章节，而是分批读取数据库
+
     const total = book.totalChapters;
     if (total === 0) return;
 
-    syncProgress.value = 1; 
-    let cloudBookId = 0;
-    const BATCH_SIZE = 20; // 调小一点，确保含内容的包不超限
-    let syncedCount = 0;
+    syncProgress.value = 1;
+    let cloudBookId = book.cloudId || 0;
+    const BATCH_SIZE = 200;
+    let syncedCount = book.syncedCount || 0;
 
     try {
       while (syncedCount < total) {
@@ -272,27 +297,35 @@ export const useBookStore = defineStore('book', () => {
 
         const payload = {
             book_name: book.title,
-            book_md5: book.fingerprint, 
+            book_md5: book.bookMD5 || book.fingerprint,
+            cloud_book_id: cloudBookId || undefined,
             total_chapters: total,
             chapters: chunk.map(c => ({
                 index: c.index,
                 title: c.title,
                 md5: c.md5,
                 content: c.content || '',
-                word_count: c.wordCount || 0
+                words_count: c.words_count || 0
             }))
         };
 
         const res = await api.syncLocalBook(payload);
         if (res.code === 0 && res.data) {
-            cloudBookId = res.data.book_id;
+            const returnedBookId = res.data.book_id;
+
+            if (!cloudBookId && returnedBookId) {
+                cloudBookId = returnedBookId;
+            }
+
             const map = res.data.chapters_map || {};
-            
+
             for (const c of chunk) {
                 if (c.md5 && map[c.md5]) {
                     await repo.updateChapterCloudId(Number(c.id), map[c.md5]);
                 }
             }
+
+            await repo.updateBookCloudInfo(bookId, cloudBookId, 1, syncedCount + chunk.length);
         } else {
             throw new Error(res.msg || 'Sync failed');
         }
@@ -302,7 +335,6 @@ export const useBookStore = defineStore('book', () => {
       }
 
       if (cloudBookId > 0) {
-         await repo.updateBookCloudInfo(bookId, cloudBookId, 1);
          console.log('[Sync] Book synced to cloud:', cloudBookId);
       }
     } catch (e) {

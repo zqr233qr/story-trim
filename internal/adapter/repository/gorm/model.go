@@ -60,14 +60,14 @@ type ChapterSummary struct {
 	ChapterIndex    int       `gorm:"not null"`               // 章节索引
 	Content         string    `gorm:"type:text;not null"`     // 章节摘要
 	ConsumeToken    int       `gorm:"not null"`               // 消耗的token数(提示词+输出)
-	CreatedAt      time.Time `gorm:"autoCreateTime"`
+	CreatedAt       time.Time `gorm:"autoCreateTime"`
 }
 
 type SharedEncyclopedia struct {
 	ID              uint      `gorm:"primaryKey"`
 	BookFingerprint string    `gorm:"uniqueIndex:idx_book_enc;size:32;not null"` // 书籍指纹(第一章的归一化md5)
 	RangeEnd        int       `gorm:"uniqueIndex:idx_book_enc;not null"`         // 百科涉及的章节范围
-	Content         string    `gorm:"type:text;not null"`                         // 百科内容 markdwon格式
+	Content         string    `gorm:"type:text;not null"`                        // 百科内容 markdwon格式
 	CreatedAt       time.Time `gorm:"autoCreateTime"`
 }
 

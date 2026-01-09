@@ -2,8 +2,8 @@ package service
 
 import (
 	"fmt"
-	"strings"
 	"github/zqr233qr/story-trim/internal/core/domain"
+	"strings"
 )
 
 func formatSummaries(summaries []domain.ChapterSummary) string {

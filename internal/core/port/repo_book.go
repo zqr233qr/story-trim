@@ -17,5 +17,6 @@ type BookRepository interface {
 	GetBooksByUserID(ctx context.Context, userID uint) ([]domain.Book, error)
 
 	SaveRawContent(ctx context.Context, content *domain.ChapterContent) error
+	BatchSaveRawContents(ctx context.Context, contents []*domain.ChapterContent) error
 	GetRawContent(ctx context.Context, md5 string) (*domain.ChapterContent, error)
 }
