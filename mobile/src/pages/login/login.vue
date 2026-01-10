@@ -20,20 +20,51 @@ const handleSubmit = async () => {
   try {
     let res;
     if (isLogin.value) {
+      console.log('[Login] Login mode')
       res = await api.login({ username: username.value, password: password.value })
     } else {
-      await api.register({ username: username.value, password: password.value })
+      console.log('[Login] Register mode')
+      const regRes = await api.register({ username: username.value, password: password.value })
+      console.log('[Login] Register result:', regRes)
+
+      if (regRes.code !== 0) {
+        errorMsg.value = regRes.msg || '注册失败'
+        return
+      }
+
+      console.log('[Login] Auto login after register')
       res = await api.login({ username: username.value, password: password.value })
     }
 
+    console.log('[Login] Result:', res)
+
     if (res && res.code === 0) {
-      userStore.setLogin(res.data.token, username.value)
+      const token = res.data?.token
+      console.log('[Login] Token:', token)
+
+      if (!token) {
+        errorMsg.value = '服务器响应异常，未返回 token'
+        console.error('[Login] No token in response:', res.data)
+        return
+      }
+
+      userStore.setLogin(token, username.value)
       uni.reLaunch({ url: '/pages/shelf/shelf' })
     } else {
       errorMsg.value = res?.msg || '操作失败'
+      console.error('[Login] Non-zero code:', res.code, res.msg)
     }
   } catch (e: any) {
-    errorMsg.value = '无法连接服务器，请检查网络或使用离线模式'
+    console.error('[Login] Exception:', e)
+    console.error('[Login] Stack:', e.stack)
+
+    if (e.message && e.message.includes('already exists')) {
+      errorMsg.value = '用户名已存在，请直接登录'
+    } else if (e.message && e.message.includes('invalid')) {
+      errorMsg.value = '用户名或密码错误'
+    } else {
+      errorMsg.value = e.message || '无法连接服务器，请检查网络或使用离线模式'
+    }
   } finally {
     loading.value = false
   }

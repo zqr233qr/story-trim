@@ -164,13 +164,21 @@ func (s *bookService) SyncLocalBook(ctx context.Context, req *port.SyncLocalBook
 			log.Printf("[Sync] existingBook.Fingerprint: %s", existingBook.Fingerprint)
 			log.Printf("[Sync] fingerprint: %s", fingerprint)
 
-			if existingBook.Fingerprint == fingerprint {
-				log.Printf("[Sync] ======== 同一本书，支持恢复上传 ========")
-				book = existingBook
-			} else {
+			if existingBook.Fingerprint != fingerprint {
 				log.Printf("[Sync] ======== 不同书籍（MD5 碰撞） ========")
 				return nil, fmt.Errorf("book already exists (MD5 collision): %d", errno.BookAlreadyExistsCode)
 			}
+
+			existingChaps, err := s.bookRepo.GetChaptersByBookID(ctx, existingBook.ID)
+			if err == nil && len(existingChaps) >= req.TotalChapters {
+				log.Printf("[Sync] ======== 重复上传：书籍已完全上传 ========")
+				log.Printf("[Sync] 已上传章节：%d / %d", len(existingChaps), req.TotalChapters)
+				return nil, fmt.Errorf("book already exists: %d", errno.BookAlreadyExistsCode)
+			}
+
+			log.Printf("[Sync] ======== 断点续传：书籍部分已上传 ========")
+			log.Printf("[Sync] 已上传章节：%d / %d", len(existingChaps), req.TotalChapters)
+			book = existingBook
 		} else {
 			log.Printf("[Sync] ======== 书籍不存在，创建新书 ========")
 			book = &domain.Book{

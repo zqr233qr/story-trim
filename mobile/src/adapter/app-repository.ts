@@ -188,19 +188,31 @@ export class AppRepository implements IBookRepository {
   }
 
   async syncBookFromCloud(cloudBook: CloudBook): Promise<void> {
-    const existing = await db.select<any>('SELECT id FROM books WHERE book_md5 = ?', [cloudBook.book_md5]);
-    
+    const existing = await db.select<any>('SELECT id, cloud_id, sync_state FROM books WHERE book_md5 = ?', [cloudBook.book_md5]);
+
     if (existing.length > 0) {
-      console.log('[Sync] Book already exists locally:', cloudBook.title);
+      const existingBook = existing[0];
+      console.log('[Sync] Book already exists locally:', cloudBook.title, 'sync_state:', existingBook.sync_state);
+
+      // 如果是本地书籍（sync_state=0），更新为已同步状态
+      if (existingBook.sync_state === 0 || existingBook.sync_state === undefined) {
+        await db.execute(
+          'UPDATE books SET cloud_id = ?, sync_state = 1, synced_count = total_chapters WHERE id = ?',
+          [cloudBook.id, existingBook.id]
+        );
+        console.log('[Sync] Updated local book to synced state:', cloudBook.title);
+      }
+      // 如果已经是云端书籍或已同步书籍，不需要更新
       return;
     }
-    
+
+    // 创建新的云端书籍记录（降级模式，sync_state=2）
     await db.execute(
       'INSERT INTO books (cloud_id, book_md5, fingerprint, title, total_chapters, process_status, sync_state, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [cloudBook.id, cloudBook.book_md5 || '', cloudBook.fingerprint, cloudBook.title, cloudBook.total_chapters, 'ready', 2, cloudBook.total_chapters, Date.now()]
     );
-    
-    console.log('[Sync] Book synced from cloud:', cloudBook.title);
+
+    console.log('[Sync] Created cloud-only book:', cloudBook.title);
   }
 
   async getChapters(bookId: number | string): Promise<LocalChapter[]> {
@@ -256,10 +268,21 @@ export class AppRepository implements IBookRepository {
   }
 
   // RenderJS 专用：分步插入
-  async createBook(title: string, fingerprint: string, total: number): Promise<number> {
+  async createBook(title: string, fingerprint: string, total: number, bookMD5: string): Promise<number> {
+    const existing = await db.select<any>('SELECT id, title, sync_state FROM books WHERE book_md5 = ?', [bookMD5]);
+
+    if (existing.length > 0) {
+      const existingBook = existing[0];
+      if (existingBook.sync_state === 2) {
+        throw new Error(`该书籍已存在于云端，无需重复导入`);
+      } else {
+        throw new Error(`该书籍已存在于本地，无需重复导入`);
+      }
+    }
+
     await db.execute(
-      'INSERT INTO books (title, fingerprint, total_chapters, process_status, created_at) VALUES (?, ?, ?, ?, ?)',
-      [title, fingerprint, total, 'ready', Date.now()]
+      'INSERT INTO books (title, book_md5, fingerprint, total_chapters, process_status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [title, bookMD5, fingerprint, total, 'ready', Date.now()]
     );
     const res = await db.select<any>('SELECT last_insert_rowid() as id');
     return res[0].id;

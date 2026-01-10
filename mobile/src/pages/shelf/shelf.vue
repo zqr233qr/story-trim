@@ -23,20 +23,20 @@ export default {
     },
 
     // 1. 接收书籍基本信息
-    async onBookInfo(info: { title: string, total: number, fingerprint: string }) {
+    async onBookInfo(info: { title: string, total: number, fingerprint: string, bookMD5: string }) {
       console.log('[Logic] Creating book:', info.title, 'Chapters:', info.total)
       this.parseStartTime = Date.now()
       this.resetBookLock() // 重置锁
-      
+
       const bookStore = useBookStore()
-      bookStore.uploadProgress = 0
-      
       try {
-        const id = await bookStore.createBookRecord(info.title, info.fingerprint, info.total)
+        const id = await bookStore.createBookRecord(info.title, info.fingerprint, info.total, info.bookMD5)
         this.tempBookId = id
         if (this.bookIdResolver) this.bookIdResolver(id) // 解锁
       } catch (e: any) {
-        this.onUploadError('创建书籍失败: ' + e.message)
+        console.error('[Logic] Create book error:', e)
+        this.onUploadError(e.message)
+        this.resetBookLock()
       }
     },
 
@@ -125,8 +125,12 @@ const handleSyncBook = async (book: any) => {
     uni.showToast({ title: '同步成功', icon: 'success' })
     // 重新拉取列表以更新 UI 状态
     await bookStore.fetchBooks()
-  } catch (e) {
-    uni.showToast({ title: '同步失败', icon: 'none' })
+  } catch (e: any) {
+    if (e.message && e.message.includes('已存在云端')) {
+      uni.showToast({ title: '云端已存在本书', icon: 'none' })
+    } else {
+      uni.showToast({ title: '同步失败', icon: 'none' })
+    }
     console.error('[Shelf] Sync error:', e)
   }
 }
@@ -203,6 +207,8 @@ const handleLogout = () => {
 </template>
 
 <script module="filePicker" lang="renderjs">
+import SparkMD5 from 'spark-md5'
+
 export default {
   methods: {
     // 简易哈希算法 (RenderJS 内部使用)
@@ -315,10 +321,12 @@ export default {
        }
 
       // 2. 发送元数据
+      const bookMD5 = SparkMD5.hash(text);
       ownerInstance.callMethod('onBookInfo', {
         title: fileName.replace('.txt', ''),
         total: chapters.length,
-        fingerprint: fingerprint
+        fingerprint: fingerprint,
+        bookMD5: bookMD5
       });
 
       // 3. 分批发送章节数据 (避免 bridge 阻塞)

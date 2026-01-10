@@ -42,6 +42,7 @@ export interface CloudBook {
   title: string;
   total_chapters: number;
   fingerprint: string;
+  book_md5?: string;
   created_at: string;
 }
 

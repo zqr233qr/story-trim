@@ -101,28 +101,21 @@ export const useBookStore = defineStore('book', () => {
   }
 
   // 2. Add Book (此方法仅用于 H5/MP，App 端走 RenderJS -> createBookRecord)
-  const addBook = async (filePath: string, fileName: string) => {
-    isLoading.value = true
-    try {
-      // #ifndef APP-PLUS
-      const res = await api.upload(filePath, fileName)
-      if (res.code === 0) await fetchBooks()
-      return res
-      // #endif
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  // 3. RenderJS 专用：创建书籍记录
-  const createBookRecord = async (title: string, fingerprint: string, total: number) => {
+  const createBookRecord = async (title: string, fingerprint: string, total: number, bookMD5: string) => {
     // #ifdef APP-PLUS
-    return await repo.createBook(title, fingerprint, total)
+    try {
+      return await repo.createBook(title, fingerprint, total, bookMD5)
+    } catch (e: any) {
+      if (e.message && e.message.includes('已存在')) {
+        throw new Error(e.message)
+      }
+      throw new Error('创建书籍失败：' + e.message)
+    }
     // #endif
     return 0
   }
 
-  // 4. RenderJS 专用：批量插入章节
+  // 3. RenderJS 专用：批量插入章节
   const insertChapters = async (bookId: number, chapters: any[]) => {
     // #ifdef APP-PLUS
     await repo.insertChapters(bookId, chapters)
@@ -353,7 +346,7 @@ export const useBookStore = defineStore('book', () => {
 
   return {
     books, activeBook, prompts, isLoading, uploadProgress, syncProgress, activeChapter,
-    init, fetchBooks, addBook, fetchBookDetail, fetchChapter,
+    init, fetchBooks, fetchBookDetail, fetchChapter,
     createBookRecord, insertChapters, saveChapterTrim,
     setActiveBook, setChapter, fetchPrompts,
     fetchChapterTrim, fetchBatchChapters, updateProgress, syncBookToCloud
