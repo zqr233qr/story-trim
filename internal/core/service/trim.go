@@ -236,6 +236,11 @@ func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string
 				rate = float64(int(rate*10000+0.5)) / 100.0
 			}
 
+			consumeToken := 0
+			if usage != nil {
+				consumeToken = int(usage.TotalTokens)
+			}
+
 			_ = s.cacheRepo.SaveTrimResult(ctx, &domain.TrimResult{
 				ChapterMD5:     chapterMD5,
 				PromptID:       pID,
@@ -243,7 +248,7 @@ func (s *trimService) wrapAndSaveStream(ctx context.Context, input <-chan string
 				TrimmedContent: final,
 				TrimWords:      trimmedLen,
 				TrimRate:       rate,
-				ConsumeToken:   usage.TotalTokens,
+				ConsumeToken:   consumeToken,
 				CreatedAt:      time.Now(),
 			})
 

@@ -60,7 +60,7 @@ export interface Chapter {
   content?: string; trimmed_content?: string; trimmed_prompt_ids?: number[]; md5?: string;
 }
 export interface ReadingHistory { last_chapter_id: number; last_prompt_id: number; }
-export interface BookDetail { book: Book; chapters: Chapter[]; trimmed_ids: number[]; reading_history?: ReadingHistory; }
+export interface BookDetail { book: Book; chapters: Chapter[]; trimmed_ids?: number[]; trimmed_map?: Record<number, number[]>; reading_history?: ReadingHistory; }
 export interface Prompt { id: number; name: string; description?: string; is_default?: boolean; version: string; content: string; is_system: boolean; }
 export interface Task { id: string; type: string; status: string; progress: number; error?: string; }
 
@@ -72,11 +72,7 @@ export const api = {
   getBooks: () => request<Book[]>({ url: '/books', method: 'GET' }),
   getBookDetail: (id: number, promptId?: number) => 
     request<BookDetail>({ url: `/books/${id}`, method: 'GET', data: { prompt_id: promptId } }),
-  getChapter: (id: number) => 
-    request<Chapter>({ url: `/chapters/${id}`, method: 'GET' }),
-  getChapterTrim: (id: number, promptId: number) => 
-    request<{ prompt_id: number, trimmed_content: string }>({ url: `/chapters/${id}/trim`, method: 'GET', data: { prompt_id: promptId } }),
-  getPrompts: () => request<Prompt[]>({ url: '/prompts', method: 'GET' }),
+  getPrompts: () => request<Prompt[]>({ url: '/common/prompts', method: 'GET' }),
 
   syncTrimmedStatus: (md5s: string[]) => request<{ trimmed_map: Record<string, number[]> }>({ 
     url: '/contents/sync-status', 
@@ -84,7 +80,7 @@ export const api = {
     data: { md5s } 
   }),
 
-  syncLocalBook: (data: { book_name: string; book_md5: string; cloud_book_id?: number; chapters: any[] }) => request<{ book_id: number; chapters_map: Record<string, number> }>({
+  syncLocalBook: (data: { book_name: string; book_md5: string; cloud_book_id?: number; chapters: any[] }) => request<{ book_id: number; chapter_mappings: Array<{ local_id: number; cloud_id: number }> }>({
     url: '/books/sync-local',
     method: 'POST',
     data
@@ -132,7 +128,7 @@ export const api = {
     // #ifndef H5
     // App 端使用 WebSocket
     const wsBase = BASE_URL.replace('http', 'ws');
-    const wsUrl = `${wsBase}/trim/ws?token=${token}&chapter_id=${chapterId}&prompt_id=${promptId}`;
+    const wsUrl = `${wsBase}/trim/stream/by-id?token=${token}&chapter_id=${chapterId}&prompt_id=${promptId}`;
     const socketTask = uni.connectSocket({ url: wsUrl, complete: () => {} });
     socketTask.onMessage((res) => {
       try {
@@ -147,20 +143,26 @@ export const api = {
   },
 
   // 2. 基于 RawContent 的流式 (无状态, 支持离线混合模式)
-  trimStreamRaw(content: string, promptId: number, md5: string | undefined, onData: (chunk: string) => void, onError: (err: string) => void, onDone: () => void) {
+  trimStreamRaw(content: string, promptId: number, md5: string | undefined, bookFingerprint: string, chapterIndex: number, onData: (chunk: string) => void, onError: (err: string) => void, onDone: () => void) {
     const rawToken = uni.getStorageSync('token')
     const token = rawToken || ''
-    
-    // 使用 WebSocket 替代 XHR
+
+    // 使用 WebSocket 连接到 /trim/stream/by-md5
     const socketTask = uni.connectSocket({
-      url: `${WS_BASE_URL}/trim/ws/raw?token=${token}`,
+      url: `${WS_BASE_URL}/trim/stream/by-md5?token=${token}`,
       complete: ()=> {}
     });
 
     socketTask.onOpen(() => {
       console.log('[WS Open] Sending payload...')
       socketTask.send({
-        data: JSON.stringify({ content, prompt_id: promptId, md5 })
+        data: JSON.stringify({
+          content,
+          prompt_id: promptId,
+          md5: md5 || '',
+          book_fingerprint: bookFingerprint,
+          chapter_index: chapterIndex
+        })
       })
     })
 

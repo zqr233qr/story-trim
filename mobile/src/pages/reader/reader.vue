@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { useBookStore } from '@/stores/book'
 import { api } from '@/api'
+import { trimStreamByChapterId, trimStreamByMd5 } from '@/api/trim'
 import ModeConfigModal from '@/components/ModeConfigModal.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ChapterList from '@/components/ChapterList.vue'
@@ -13,6 +14,23 @@ import GenerationTerminal from '@/components/GenerationTerminal.vue'
 const userStore = useUserStore()
 const bookStore = useBookStore()
 const instance = getCurrentInstance()
+
+// #ifdef APP-PLUS
+import { AppRepository } from '@/adapter/app-repository'
+const repo = new AppRepository()
+// #endif
+
+interface ReadingHistory {
+  last_chapter_id: number
+  last_prompt_id: number
+  updated_at?: string
+}
+
+interface LocalReadingHistory {
+  last_chapter_id: number
+  last_prompt_id: number
+  updated_at: number
+}
 
 // --- 1. 状态定义 ---
 const bookId = ref(0)
@@ -307,15 +325,116 @@ const init = async () => {
     bookStore.fetchPrompts()
   ])
   uni.hideLoading()
-  
+
+  // 恢复阅读进度
+  await restoreReadingProgress()
+
   if (bookStore.activeBook?.status === 'new') showConfigModal.value = true
   if (!bookStore.activeBook?.activeModeId && bookStore.prompts.length > 0) {
      bookStore.activeBook!.activeModeId = bookStore.prompts[0].id.toString()
   }
-  
+
   syncUI() // 初始化 UI
   if (pageMode.value === 'click') refreshWindow()
 }
+
+// 恢复阅读进度
+const restoreReadingProgress = async () => {
+  if (!activeBook.value) return
+
+  // sync_state=0: 仅本地
+  if (activeBook.value.sync_state === 0) {
+    // #ifdef APP-PLUS
+    const local = await repo.getReadingHistory(bookId.value)
+    if (local) {
+      applyProgress(local.last_chapter_id, local.last_prompt_id)
+    }
+    // #endif
+    return
+  }
+
+  // sync_state=1/2: 时间比对
+  // #ifdef APP-PLUS
+  const [local, cloud] = await Promise.all([
+    repo.getReadingHistory(bookId.value),
+    fetchCloudReadingHistory()
+  ])
+
+  let selected: LocalReadingHistory | null = local
+  if (cloud && cloud.updated_at) {
+    if (!local || (cloud.updated_at > local.updated_at)) {
+      selected = cloud
+    }
+  }
+
+  if (selected) {
+    applyProgress(selected.last_chapter_id, selected.last_prompt_id)
+  }
+  // #endif
+
+  // #ifndef APP-PLUS
+  // 小程序端：直接使用云端数据
+  const cloudData = await fetchCloudReadingHistory()
+  if (cloudData) {
+    applyProgress(cloudData.last_chapter_id, cloudData.last_prompt_id)
+  }
+  // #endif
+}
+
+// 从云端获取阅读进度
+const fetchCloudReadingHistory = async (): Promise<LocalReadingHistory | null> => {
+  const res = await api.getBookDetail(activeBook.value!.id)
+  if (res.code === 0 && res.data.reading_history) {
+    const h = res.data.reading_history as ReadingHistory
+    return {
+      last_chapter_id: h.last_chapter_id,
+      last_prompt_id: h.last_prompt_id,
+      updated_at: h.updated_at ? new Date(h.updated_at).getTime() : 0
+    }
+  }
+  return null
+}
+
+// 应用阅读进度
+const applyProgress = (chapterId: number, promptId: number) => {
+  const idx = activeBook.value!.chapters.findIndex(c => c.id === chapterId)
+  if (idx !== -1) {
+    activeBook.value!.activeChapterIndex = idx
+    if (promptId > 0) {
+      activeBook.value!.activeModeId = promptId.toString()
+      isMagicActive.value = true
+    }
+  }
+}
+
+// 保存阅读进度
+const saveProgress = async () => {
+  if (!activeChapter.value) return
+  const chapterId = activeChapter.value.id
+  const promptId = isMagicActive.value ? parseInt(activeBook.value?.activeModeId || '0') : 0
+
+  // 1. 本地 SQLite
+  // #ifdef APP-PLUS
+  await repo.updateProgress(bookId.value, chapterId, promptId)
+  // #endif
+
+  // 2. 云端上报 (sync_state=1/2)
+  // #ifdef APP-PLUS
+  if (activeBook.value?.sync_state !== 0 && activeBook.value?.cloud_id) {
+    try {
+      await bookStore.updateProgress(bookId.value, chapterId, promptId)
+    } catch (e) {
+      console.warn('[Progress] Sync to cloud failed', e)
+    }
+  }
+  // #endif
+}
+
+// 页面卸载时保存进度
+onUnload(() => {
+  uni.setKeepScreenOn({ keepScreenOn: false })
+  saveProgress()
+})
 
 // --- 5. 事件处理 ---
 const handleScroll = (e: any) => {
@@ -379,9 +498,9 @@ const watchBatchTask = (taskId: string, bookName: string) => {
 
 const handleStartProcess = async (modeId: string | number, isBatch: boolean = false) => {
   const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
-  
+
   // 单章精简 (混合模式)
-  const isTrimmed = activeChapter.value?.trimmed_prompt_ids?.some(id => Number(id) === promptId)
+  const isTrimmed = activeChapter.value?.trimmed_prompt_ids?.some((id: number) => Number(id) === promptId)
   if (isTrimmed) {
     showConfigModal.value = false
     await switchToMode(promptId.toString())
@@ -398,85 +517,175 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
   generatingTitle.value = bookStore.prompts.find(p => p.id === promptId)?.name || 'AI Processing'
   streamingContent.value = ''
   showTerminal.value = true
-  
-  // 调用无状态流式接口
-  // console.log('[Reader] Starting stream request...')
-  api.trimStreamRaw(rawContent, promptId, activeChapter.value?.md5, 
-    (text) => { 
-      streamingContent.value += text 
-    }, 
-    (err) => { 
+
+  // #ifdef APP-PLUS
+  const syncState = activeBook.value?.sync_state || 0
+  const cloudChapterId = activeChapter.value?.cloud_id || activeChapter.value?.id
+
+  // sync_state=0 (本地书籍): 使用 trimStreamByMd5，传递内容和 MD5
+  if (syncState === 0) {
+    if (!rawContent || !activeChapter.value?.md5) {
+      showTerminal.value = false
+      showNotification('本地书籍缺少内容信息')
+      return
+    }
+    console.log('[Reader] Starting stream by MD5 (sync_state=0):', activeChapter.value.md5)
+    trimStreamByMd5(
+      rawContent,
+      activeChapter.value.md5,
+      promptId,
+      activeBook.value?.fingerprint || '',
+      activeBook.value?.activeChapterIndex || 0,
+      (text) => {
+        streamingContent.value += text
+      },
+      (err) => {
+        console.error('[Reader] Stream error:', err)
+        showTerminal.value = false
+        showNotification('失败: ' + err)
+      },
+      async () => {
+        const lines = streamingContent.value.split('\n')
+        currentTextLines.value = lines
+
+        activeBook.value!.activeModeId = promptId.toString()
+        isMagicActive.value = true
+
+        if (activeChapter.value) {
+          await bookStore.saveChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId, streamingContent.value)
+          if (!activeChapter.value.trimmed_prompt_ids.includes(promptId)) {
+            activeChapter.value.trimmed_prompt_ids.push(promptId)
+          }
+        }
+
+        if (showTerminal.value) {
+          setTimeout(() => {
+            showTerminal.value = false
+            if (pageMode.value === 'click') refreshWindow('keep')
+          }, 800)
+        } else {
+          showNotification(`精简完成`)
+        }
+      }
+    )
+    return
+  }
+
+  // sync_state=1/2: 使用 trimStreamByChapterId (按章节 ID)
+  console.log('[Reader] Starting stream by chapter ID (sync_state=1/2):', cloudChapterId)
+  trimStreamByChapterId(
+    activeBook.value!.id,
+    cloudChapterId,
+    promptId,
+    (text) => {
+      streamingContent.value += text
+    },
+    (err) => {
       console.error('[Reader] Stream error:', err)
       showTerminal.value = false
-      showNotification('失败: ' + err) 
-    }, 
+      showNotification('失败: ' + err)
+    },
     async () => {
-      // console.log('[Reader] Stream done. Total len:', streamingContent.value.length)
-      
-      // 1. 显式更新 UI (瞬时上屏)
       const lines = streamingContent.value.split('\n')
-      currentTextLines.value = lines // <--- 关键修改：直接赋值，不等待 Store
-      
-      // 2. 更新 Store 状态 (用于下次切换)
+      currentTextLines.value = lines
+
       activeBook.value!.activeModeId = promptId.toString()
       isMagicActive.value = true
-      
-      // 3. 异步保存到持久化层
+
+      if (activeChapter.value) {
+        await bookStore.saveChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId, streamingContent.value)
+        if (!activeChapter.value.trimmed_prompt_ids.includes(promptId)) {
+          activeChapter.value.trimmed_prompt_ids.push(promptId)
+        }
+      }
+
+      if (showTerminal.value) {
+        setTimeout(() => {
+          showTerminal.value = false
+          if (pageMode.value === 'click') refreshWindow('keep')
+        }, 800)
+      } else {
+        showNotification(`精简完成`)
+      }
+    }
+  )
+  // #endif
+
+  // #ifndef APP-PLUS
+  // 小程序端：使用 trimStreamByChapterId (按章节 ID)
+  trimStreamByChapterId(
+    activeBook.value!.id,
+    activeChapter.value!.id,
+    promptId,
+    (text) => {
+      streamingContent.value += text
+    },
+    (err) => {
+      console.error('[Reader] Stream error:', err)
+      showTerminal.value = false
+      showNotification('失败: ' + err)
+    },
+    async () => {
+      const lines = streamingContent.value.split('\n')
+      currentTextLines.value = lines
+
+      activeBook.value!.activeModeId = promptId.toString()
+      isMagicActive.value = true
+
       if (activeChapter.value) {
         await bookStore.saveChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId, streamingContent.value)
         if (!activeChapter.value.trimmed_prompt_ids.includes(promptId)) {
            activeChapter.value.trimmed_prompt_ids.push(promptId)
         }
       }
-      
-      // 4. 关闭终端并刷新窗口
+
       if (showTerminal.value) {
         setTimeout(() => {
           showTerminal.value = false
           if (pageMode.value === 'click') refreshWindow('keep')
         }, 800)
-      } else { 
-        showNotification(`精简完成`) 
+      } else {
+        showNotification(`精简完成`)
       }
     }
   )
+  // #endif
 }
 
 const switchToMode = async (id: string, showModalOnFailure = true) => {
-  // console.log('[Reader] switchToMode start', id)
-  
+  // 先检查登录状态
+  try {
+    const rawToken = uni.getStorageSync('token')
+    const isLogin = !!rawToken
+
+    if (!isLogin) {
+      uni.showModal({
+        title: '需要登录',
+        content: '本地书籍仅支持阅读原文',
+        showCancel: true,
+        confirmText: '去登录',
+        success: (res: any) => {
+          if (res.confirm) uni.navigateTo({ url: '/pages/login/login' })
+        }
+      })
+      return
+    }
+  } catch (e) {
+    uni.showToast({ title: '系统错误', icon: 'none' })
+    return
+  }
+
   // 1. 尝试从本地缓存加载
   const lines = await bookStore.fetchChapterTrim(activeBook.value!.id, activeChapter.value!.id, parseInt(id))
-  
+
   if (lines) {
-    // console.log('[Reader] Cache Hit')
     activeBook.value!.activeModeId = id
     isMagicActive.value = true
-    syncUI() // 显式同步
+    syncUI()
     if (pageMode.value === 'click') refreshWindow('keep')
   } else {
-    // console.log('[Reader] Cache Miss')
     if (showModalOnFailure) {
-      try {
-        const rawToken = uni.getStorageSync('token')
-        const isLogin = !!rawToken
-        
-        if (!isLogin) {
-          uni.showModal({
-            title: '需要登录',
-            content: '离线模式仅支持阅读本地内容。使用 AI 精简功能需要登录账户。',
-            showCancel: true,
-            confirmText: '去登录',
-            success: (res) => {
-              if (res.confirm) uni.navigateTo({ url: '/pages/login/login' })
-            }
-          })
-          return
-        }
-        showConfigModal.value = true
-      } catch (e) {
-        uni.showToast({ title: '系统错误', icon: 'none' })
-      }
+      showConfigModal.value = true
     } else {
       showNotification('暂无离线精简内容')
     }
@@ -505,7 +714,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     
     console.log('[Debug] Check Mode Keep:', modeId, 'Target Trimmed:', targetChapter.trimmed_prompt_ids)
 
-    const hasTrimmed = targetChapter.trimmed_prompt_ids?.some(id => id.toString() === modeId || id === Number(modeId))
+    const hasTrimmed = targetChapter.trimmed_prompt_ids?.some((id: number) => id.toString() === modeId || id === Number(modeId))
     if (!hasTrimmed) {
        console.log('[Debug] Mode Keep Failed -> Reset to original')
        showNotification('该章暂无精简内容，已切回原文')

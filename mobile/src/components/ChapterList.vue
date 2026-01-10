@@ -37,19 +37,19 @@ const hasTrimmedContent = (chapter: any) => {
         <view class="text-[10px] mt-1 text-stone-400">共 {{ chapters.length }} 章</view>
       </view>
 
-      <scroll-view scroll-y class="flex-1 p-2">
-        <view v-for="(chap, index) in chapters" :key="chap.id" 
-          @click="emit('select', index)"
-          :class="[
-            activeChapterIndex === index 
-              ? (isDarkMode ? 'bg-teal-900/20 text-teal-400 border-l-4 border-teal-500' : 'bg-teal-50 text-teal-700 border-l-4 border-teal-500') 
-              : (isDarkMode ? 'text-stone-400' : 'text-stone-600')
-          ]"
-          class="px-4 py-4 text-sm rounded-r-lg mb-1 transition-all flex items-center justify-between">
-          <text class="truncate block flex-1">{{ chap.title }}</text>
-          <text v-if="hasTrimmedContent(chap)" class="text-[10px] ml-2 opacity-80">🪄</text>
-        </view>
-      </scroll-view>
+       <scroll-view scroll-y class="flex-1 p-2 min-h-0">
+         <view v-for="(chap, index) in chapters" :key="chap.id"
+           @click="emit('select', index)"
+           :class="[
+             activeChapterIndex === index
+               ? (isDarkMode ? 'bg-teal-900/20 text-teal-400 border-l-4 border-teal-500' : 'bg-teal-50 text-teal-700 border-l-4 border-teal-500')
+               : (isDarkMode ? 'text-stone-400' : 'text-stone-600')
+           ]"
+           class="px-4 py-4 text-sm rounded-r-lg mb-1 transition-all flex items-center justify-between">
+           <text class="truncate block flex-1">{{ chap.title }}</text>
+           <text v-if="hasTrimmedContent(chap)" class="text-[10px] ml-2 opacity-80">🪄</text>
+         </view>
+       </scroll-view>
     </view>
   </view>
 </template>

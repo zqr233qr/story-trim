@@ -11,6 +11,7 @@ func NewRouter(userSvc port.UserService, storyH *v1.StoryHandler, taskH *v1.Task
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
+	r.Use(LoggerMiddleware())
 	r.Use(CORSMiddleware())
 	r.Use(gin.Recovery())
 

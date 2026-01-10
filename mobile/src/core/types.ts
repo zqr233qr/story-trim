@@ -26,6 +26,7 @@ export interface LocalChapter {
   length?: number;          // 原始长度（RenderJS传递）
   md5: string;              // 章节归一化MD5
   trimmedPromptIds?: number[];
+  cloudId?: number;         // 云端章节ID（用于同步）
 }
 
 export interface TrimmedContent {
