@@ -1,4 +1,4 @@
-# StoryTrim 多端数据同步与存储架构技术文档 (v1.0)
+# StoryTrim 多端数据同步与存储架构技术文档 (v1.1)
 
 ## 1. 架构核心理念
 StoryTrim 采用 **“内容哈希（MD5）为物理灵魂，云端标识（CloudID）为逻辑链接”** 的设计哲学。
@@ -44,16 +44,24 @@ StoryTrim 采用 **“内容哈希（MD5）为物理灵魂，云端标识（Clou
 ```sql
 CREATE TABLE books (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,                 -- 所属用户ID（用于切换账号时过滤书籍）
     cloud_id INTEGER DEFAULT 0,      -- 云端 BookID，0 表示未上云
     book_md5 TEXT UNIQUE,            -- 文件全文哈希
     fingerprint TEXT,                -- 第一章MD5
     title TEXT NOT NULL,             -- 书名
     total_chapters INTEGER DEFAULT 0,
     sync_state INTEGER DEFAULT 0,    -- 0:仅本地, 1:已同步, 2:仅云端(降级模式)
-    created_at DATETIME
+    synced_count INTEGER DEFAULT 0,   -- 已同步章节数
+    created_at INTEGER               -- 创建时间（时间戳）
 );
 CREATE INDEX idx_book_cloud ON books(cloud_id);
+CREATE INDEX idx_book_user ON books(user_id);
 ```
+
+**账号切换逻辑：**
+- 使用 `user_id` 过滤查询：`WHERE (sync_state=0) OR (user_id=?)`
+- sync_state=0（仅本地）的书籍对所有用户可见
+- sync_state=1/2的书籍仅对应用户可见
 
 ### 4.2 `chapters` (章节索引表)
 用于维护书籍结构。
@@ -76,8 +84,7 @@ CREATE INDEX idx_chap_md5 ON chapters(chapter_md5);
 ```sql
 CREATE TABLE contents (
     chapter_md5 TEXT PRIMARY KEY,    -- 主键
-    raw_content TEXT,                -- 原文内容
-    trimmed_data TEXT                -- JSON格式存储: {"mode_1": "...", "mode_2": "..."}
+    raw_content TEXT                 -- 原文内容
 );
 ```
 
@@ -88,7 +95,7 @@ CREATE TABLE reading_history (
     last_chapter_id INTEGER,
     last_prompt_id INTEGER,
     scroll_offset REAL,
-    updated_at DATETIME
+    updated_at INTEGER              -- 更新时间（时间戳）
 );
 ```
 
@@ -113,29 +120,110 @@ CREATE TABLE reading_history (
 1. **书架找回**：App 调用 `/common/books` 拉取云端列表。
 2. **初始化**：App 发现本地 SQLite 无此 `BookMD5`，创建 `sync_state = CLOUD_ONLY` 的记录。
 3. **阅读行为**：
-    - 用户点击章节 -> 发现本地无内容 -> 自动调用 Mini 接口：`/mini/raw/content?chapter_id=xxx`。
+    - 用户点击章节 -> 发现本地无内容 -> 自动调用云端接口：`/chapters/content`。
     - 内容返回后存入 **Tier 2 (Storage Cache)**。
-4. **全量恢复**：用户点击“下载全书” -> App 后台静默调用 Mini 接口批量拉取原文 -> 写入 Tier 3 (SQLite) -> 状态转为 `SYNCED`。
+4. **行为模式**：sync_state=2时，App端行为与小程序端完全一致，强制云端。
 
 ---
 
-## 6. Uni-app 代码实现策略：适配器模式
+## 6. 章节解析架构
+
+### 6.1 服务端统一管理解析规则
+- **接口**：`GET /api/v1/chapters/parse-rules`
+- **返回**：最新的章节解析正则表达式列表
+- **设计目的**：支持动态更新解析规则，无需发版
+
+### 6.2 App端兜底机制
+- **默认规则**：App内置常见的章节解析正则
+- **降级策略**：服务端接口调用失败时，使用本地默认规则
+
+
+### 6.3 解析流程
+1. App尝试从服务端获取最新解析规则
+2. 使用规则列表依次尝试解析
+3. 找到第一个能识别足够章节（>10章）的规则
+4. 对每个章节计算关键字段：
+   - BookMD5：书籍全文哈希
+   - ChapterMD5：章节内容归一化MD5
+   - Fingerprint：第一章MD5（书籍指纹）
+   - WordsCount：章节字数统计
+5. 解析失败时，提示用户检查文件格式
+
+---
+
+## 7. 书籍删除架构
+
+### 7.1 服务端软删除策略
+- **Book表**：添加`DeletedAt`字段，软删除
+- **Chapter表**：添加`DeletedAt`字段，级联软删除
+- **保留数据**：
+  - ChapterContent（全局共享内容）
+  - TrimResult（全局共享精简结果）
+  - ChapterSummary（全局共享摘要）
+  - SharedEncyclopedia（全局共享百科）
+- **删除数据**：
+  - ReadingHistory（用户隐私）
+  - UserProcessedChapter（用户足迹）
+
+### 7.2 App端物理删除
+- **sync_state=0/1**：直接删除本地SQLite记录
+- **sync_state=2**：先调用云端API删除，再删除本地记录
+- **删除范围**：
+  - books、chapters、contents、reading_history
+
+### 7.3 小程序端缓存清理
+- 调用云端API删除
+- 清除Tier 2缓存（Storage）
+- 清除Tier 1缓存（Pinia Store）
+
+---
+
+## 8. Uni-app 代码实现策略：适配器模式
 
 ```typescript
 // 数据源适配器接口
 interface IDataProvider {
     getChapterContent(book: Book, chapter: Chapter): Promise<string>;
     getTrimmedStatus(book: Book, chapters: Chapter[]): Promise<any>;
+    generateTrimmedContent(book: Book, chapter: Chapter, promptId: number): Promise<string>;
 }
 
 // App 模式适配器
 class AppDataProvider implements IDataProvider {
     async getChapterContent(book, chapter) {
-        if (book.sync_state === SYNCED) {
+        // sync_state=0或1：使用本地SQLite
+        if (book.sync_state !== 2) {
             return await db.query('SELECT raw_content FROM contents WHERE chapter_md5 = ?', [chapter.chapter_md5]);
         }
-        // 如果是 CLOUD_ONLY，则动态降级到 Mini 接口
+        // sync_state=2：调用云端API（与小程序一致）
         return await miniApi.fetchContent(chapter.cloud_id);
+    }
+
+    async getTrimmedStatus(book, chapters) {
+        // sync_state=0或1：使用MD5寻址
+        if (book.sync_state !== 2) {
+            const md5s = chapters.map(ch => ch.chapter_md5);
+            return await api.request('/contents/sync-status', { md5s });
+        }
+        // sync_state=2：使用ID寻址（与小程序一致）
+        return await api.request('/chapters/sync-status', { book_id: book.cloud_id });
+    }
+
+    async generateTrimmedContent(book, chapter, promptId) {
+        // sync_state=0或1：使用MD5流式精简
+        if (book.sync_state !== 2) {
+            return await api.stream('/trim/stream/by-md5', {
+                content: chapter.content,
+                md5: chapter.chapter_md5,
+                prompt_id: promptId
+            });
+        }
+        // sync_state=2：使用ID流式精简（与小程序一致）
+        return await api.stream('/trim/stream/by-id', {
+            book_id: book.cloud_id,
+            chapter_id: chapter.cloud_id,
+            prompt_id: promptId
+        });
     }
 }
 
@@ -143,21 +231,70 @@ class AppDataProvider implements IDataProvider {
 class MiniDataProvider implements IDataProvider {
     async getChapterContent(book, chapter) {
         // 优先 Tier 2 缓存
-        let cached = uni.getStorageSync(`cache_${chapter.chapter_md5}`);
+        let cached = uni.getStorageSync(`st_content_${chapter.id}`);
         if (cached) return cached;
-        
+
         // 查云端
-        let remote = await miniApi.fetchContent(chapter.cloud_id);
-        uni.setStorage({key: `cache_${chapter.chapter_md5}`, data: remote});
-        return remote;
+        let remote = await api.request('/chapters/content', { ids: [chapter.id] });
+        const content = remote.data.find(item => item.chapter_id === chapter.id)?.content;
+
+        // 存储到缓存
+        uni.setStorage({key: `st_content_${chapter.id}`, data: content});
+        return content;
+    }
+
+    async getTrimmedStatus(book, chapters) {
+        // 使用ID寻址
+        return await api.request('/chapters/sync-status', { book_id: book.id });
+    }
+
+    async generateTrimmedContent(book, chapter, promptId) {
+        // 使用ID流式精简
+        return await api.stream('/trim/stream/by-id', {
+            book_id: book.id,
+            chapter_id: chapter.id,
+            prompt_id: promptId
+        });
     }
 }
 ```
 
 ---
 
-## 7. 总结
-本设计通过 **“足迹(权利)全端同步”** 与 **“内容(物理)按需分级加载”**，彻底解决了多端切换、重装设备后的数据孤岛问题。
+## 9. 前端决策矩阵
+
+| 场景 | 原文获取 | 精简判定 | 精简拉取 | 兜底生成 |
+| :--- | :--- | :--- | :--- | :--- |
+| **App已同步 (sync_state=1)** | SQLite | `chapters/sync-status` | `chapters/trim` | `stream/by-id` |
+| **App仅本地 (sync_state=0)** | SQLite | 本地SQLite查询 | - | - |
+| **小程序** | `chapters/content` | `books/:id` | `chapters/trim` | `stream/by-id` |
+| **App降级 (sync_state=2)** | `chapters/content` | `chapters/sync-status` | `chapters/trim` | `stream/by-id` |
+
+**设计原则：**
+- App端本地优先（sync_state=0或1时）
+- App端降级模式（sync_state=2时）行为与小程序端完全一致
+- 小程序端强制云端
+
+---
+
+## 10. 总结
+本设计通过 **"足迹(权利)全端同步"** 与 **"内容(物理)按需分级加载"**，彻底解决了多端切换、重装设备后的数据孤岛问题。
 - **对用户**：阅读进度和精简资产永不丢失，哪怕切换到小程序也能立刻继续。
 - **对开发者**：一套代码逻辑，通过简单的状态判断即可在 App、降级 App、小程序之间无缝切换。
 - **对运维**：极度去重的内容池最大程度降低了存储和带宽成本。
+
+---
+
+## 版本变更记录
+
+### v1.1 (2026-01-10)
+- **新增**：章节解析架构（服务端下发+兜底机制）
+- **新增**：书籍删除架构（软删除策略）
+- **新增**：前端决策矩阵（统一数据访问标准）
+- **优化**：适配器模式代码示例（反映最新设计）
+- **优化**：App端本地数据库结构（添加user_id字段）
+- **优化**：精简内容表结构（分离为独立表）
+- **确认**：App降级模式精简生成路径（stream/by-id）
+- **确认**：书籍唯一性策略（用户级别唯一）
+- **确认**：精简结果共享策略（全局共享）
+

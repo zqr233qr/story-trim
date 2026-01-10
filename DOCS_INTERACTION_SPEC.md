@@ -140,6 +140,54 @@
 
 | 场景 | 原文获取 | 精简判定 | 精简拉取 | 兜底生成 |
 | :--- | :--- | :--- | :--- | :--- |
-| **App已同步** | SQLite | `contents/sync-status` | `contents/trim` | `stream/by-md5` |
+| **App已同步 (sync_state=1)** | SQLite | `chapters/sync-status` | `chapters/trim` | `stream/by-id` |
 | **小程序** | `chapters/content` | `books/:id` (一次性) | `chapters/trim` | `stream/by-id` |
 | **App降级** | `chapters/content` | `chapters/sync-status` | `chapters/trim` | `stream/by-id` |
+
+**说明：**
+- App已同步（sync_state=1）：原文使用SQLite，精简使用Storage缓存，云端为兜底
+- App仅本地（sync_state=0）：原文使用SQLite，精简暂不支持（离线）
+- App降级（sync_state=2）：与小程序端一致，强制云端
+- 小程序：强制云端
+
+---
+
+## 8. 离线处理逻辑
+
+### 8.1 网络异常检测
+- App端：在切换精简模式前，检测网络状态
+- 小程序端：在发起API请求前，检测网络状态
+
+### 8.2 离线场景处理
+
+**App端（sync_state=0或1）：**
+- **原文阅读**：直接使用SQLite数据，无需网络
+- **精简模式**：
+  - 检查Storage缓存
+  - 缓存命中：直接使用缓存内容
+  - 缓存未命中：提示"当前精简模式需联网，已切换至原文"，自动切换到原文
+
+**App端（sync_state=2，降级模式）：**
+- **原文阅读**：
+  - 检查Storage缓存
+  - 缓存命中：直接使用缓存内容
+  - 缓存未命中：提示"网络不可用，请检查网络连接"
+- **精简模式**：
+  - 检查Storage缓存
+  - 缓存命中：直接使用缓存内容
+  - 缓存未命中：提示"当前精简模式需联网，已切换至原文"，自动切换到原文
+
+**小程序端：**
+- **原文阅读**：
+  - 检查Storage缓存
+  - 缓存命中：直接使用缓存内容
+  - 缓存未命中：提示"网络不可用，请检查网络连接"
+- **精简模式**：
+  - 检查Storage缓存
+  - 缓存命中：直接使用缓存内容
+  - 缓存未命中：提示"当前精简模式需联网，已切换至原文"，自动切换到原文
+
+### 8.3 Storage缓存策略
+- **Key命名**：`st_content_{cloud_id}` 或 `st_trim_{md5}_{prompt_id}`
+- **LRU淘汰**：容量不足时，淘汰最早的内容
+- **缓存时效**：无固定过期时间，仅按容量淘汰
