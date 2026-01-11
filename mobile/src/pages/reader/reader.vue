@@ -41,9 +41,15 @@ const showConfigModal = ref(false)
 const showBatchModal = ref(false)
 const showSettings = ref(false)
 const isMagicActive = ref(false)
-const isDarkMode = ref(false)
+const readingMode = ref<'light' | 'dark' | 'sepia'>(uni.getStorageSync('readingMode') as 'light' | 'dark' | 'sepia' || 'light')
+const modeColors = {
+  light: { bg: '#fafaf9', text: '#1c1917' },
+  dark: { bg: '#0c0a09', text: '#e5e5e5' },
+  sepia: { bg: '#F5E6D3', text: '#5D4E37' }
+}
 const fontSize = ref(18)
 const pageMode = ref<'scroll' | 'click'>('scroll')
+const hideStatusBar = ref(uni.getStorageSync('hideStatusBar') === 'true')
 
 const showTerminal = ref(false)
 const generatingTitle = ref('')
@@ -58,6 +64,7 @@ const lastScrollTop = ref(0)
 const recordedChapterId = ref(0) // 本章节进度记录锁
 let progressTimer: any = null
 let preloadTimer: any = null
+let menuAutoHideTimer: any = null // 菜单栏自动隐藏定时器
 
 // 图标常量 (本地静态文件)
 const icons = {
@@ -298,10 +305,12 @@ const handleProgressTracking = (chapterId: number) => {
 }
 
 // --- 4. 监听与生命周期 ---
-watch(isDarkMode, (val) => {
+// 监听阅读模式变化，同步修改导航栏颜色
+watch(readingMode, (val) => {
+  const isDark = val === 'dark' || val === 'sepia'
   uni.setNavigationBarColor({
-    frontColor: val ? '#ffffff' : '#000000',
-    backgroundColor: val ? '#0c0a09' : '#fafaf9'
+    frontColor: isDark ? '#ffffff' : '#000000',
+    backgroundColor: isDark ? '#0c0a09' : '#fafaf9'
   })
 }, { immediate: true })
 
@@ -310,12 +319,45 @@ watch([fontSize, pageMode, isMagicActive], () => {
   else syncUI() // 滚动模式下也要同步
 })
 
+// 监听状态栏隐藏设置变化
+watch(hideStatusBar, (val) => {
+  // #ifdef APP-PLUS
+  console.log('[StatusBar] Setting changed, hideStatusBar:', val)
+  plus.navigator.setFullscreen(!!val)
+  
+  // 开启隐藏状态栏时，菜单栏也一同隐藏
+  if (val) {
+    menuVisible.value = false
+  }
+  // #endif
+})
+
 onLoad((options) => {
   uni.setKeepScreenOn({ keepScreenOn: true })
+
+  // #ifdef APP-PLUS
+  // 进入时根据设置控制状态栏和菜单栏
+  console.log('[StatusBar] hideStatusBar:', hideStatusBar.value)
+  plus.navigator.setFullscreen(!!hideStatusBar.value)
+  if (hideStatusBar.value) {
+    menuVisible.value = false // 菜单栏默认隐藏
+  }
+  // #endif
+
   if (options && options.id) {
     bookId.value = parseInt(options.id)
     init()
   }
+})
+
+onUnload(() => {
+  uni.setKeepScreenOn({ keepScreenOn: false })
+
+  // #ifdef APP-PLUS
+  // 退出时恢复状态栏显示
+  console.log('[StatusBar] Restore status bar')
+  plus.navigator.setFullscreen(false)
+  // #endif
 })
 
 const init = async () => {
@@ -515,8 +557,16 @@ const handleScroll = (e: any) => {
   const currentScrollTop = e.detail.scrollTop
   const delta = currentScrollTop - lastScrollTop.value
   if (Math.abs(delta) > 50) {
-    if (delta > 0 && currentScrollTop > 100) menuVisible.value = false
-    else if (delta < 0) menuVisible.value = true
+    // 向下滚动隐藏菜单栏
+    if (delta > 0 && currentScrollTop > 100) {
+      menuVisible.value = false
+      // 如果开启了隐藏状态栏，系统状态栏也一同隐藏
+      if (hideStatusBar.value) {
+        // #ifdef APP-PLUS
+        plus.navigator.setFullscreen(true)
+        // #endif
+      }
+    }
     lastScrollTop.value = currentScrollTop
   }
 }
@@ -540,18 +590,85 @@ const onSwiperChange = (e: any) => {
 }
 
 const handleContentClick = (e: any) => {
-  if (menuVisible.value) { menuVisible.value = false; return }
+  // 清除之前的自动隐藏定时器
+  if (menuAutoHideTimer) {
+    clearTimeout(menuAutoHideTimer)
+    menuAutoHideTimer = null
+  }
+
+  if (menuVisible.value) {
+    // 关闭菜单栏
+    menuVisible.value = false
+    // 如果开启了隐藏状态栏，系统状态栏也一同隐藏
+    if (hideStatusBar.value) {
+      // #ifdef APP-PLUS
+      plus.navigator.setFullscreen(true)
+      // #endif
+    }
+    return
+  }
+
+  // 翻页模式：判断点击区域
   if (pageMode.value === 'click') {
     const info = uni.getSystemInfoSync()
     const x = e.detail.x
     if (x < info.windowWidth * 0.3) {
-      if (swiperCurrent.value > 0) swiperCurrent.value--
-      else if (activeBook.value!.activeChapterIndex > 0) switchChapter(activeBook.value!.activeChapterIndex - 1, 'end')
+      // 左侧 30%：上一页
+      if (swiperCurrent.value > 0) {
+        swiperCurrent.value--
+      } else if (activeBook.value!.activeChapterIndex > 0) {
+        switchChapter(activeBook.value!.activeChapterIndex - 1, 'end')
+      }
+      return
     } else if (x > info.windowWidth * 0.7) {
-      if (swiperCurrent.value < combinedPages.value.length - 1) swiperCurrent.value++
-      else switchChapter(activeBook.value!.activeChapterIndex + 1, 'start')
-    } else { menuVisible.value = true }
-  } else { menuVisible.value = true }
+      // 右侧 30%：下一页
+      if (swiperCurrent.value < combinedPages.value.length - 1) {
+        swiperCurrent.value++
+      } else {
+        switchChapter(activeBook.value!.activeChapterIndex + 1, 'start')
+      }
+      return
+    }
+    // 中间区域：唤出菜单栏
+  } else {
+    // 滚动模式：点击中间区域唤出菜单栏
+    const info = uni.getSystemInfoSync()
+    const x = e.detail.x
+    const centerStart = info.windowWidth * 0.3
+    const centerEnd = info.windowWidth * 0.7
+    if (x < centerStart || x > centerEnd) {
+      return // 点击边缘不处理
+    }
+  }
+
+  // 唤出菜单栏
+  menuVisible.value = true
+
+  // 如果开启了隐藏状态栏，显示系统状态栏，2秒后自动隐藏菜单栏和系统状态栏
+  if (hideStatusBar.value) {
+    // #ifdef APP-PLUS
+    plus.navigator.setFullscreen(false)
+    // #endif
+    menuAutoHideTimer = setTimeout(() => {
+      menuVisible.value = false
+      // #ifdef APP-PLUS
+      plus.navigator.setFullscreen(true)
+      // #endif
+    }, 2000)
+  }
+}
+
+const handleBack = () => {
+  // 关闭菜单栏
+  menuVisible.value = false
+  // 如果开启了隐藏状态栏，系统状态栏也一同隐藏
+  if (hideStatusBar.value) {
+    // #ifdef APP-PLUS
+    plus.navigator.setFullscreen(true)
+    // #endif
+  }
+  // 返回上一页
+  uni.navigateBack()
 }
 
 const showNotification = (msg: string) => {
@@ -765,6 +882,22 @@ const switchToMode = async (id: string, showModalOnFailure = true) => {
   }
 }
 
+const getMagicButtonClass = () => {
+  if (isMagicActive.value) {
+    switch (readingMode.value) {
+      case 'light': return 'bg-teal-500 text-white rotate-12'
+      case 'dark': return 'bg-teal-600 text-white rotate-12'
+      case 'sepia': return 'bg-amber-600 text-white rotate-12'
+    }
+  }
+  switch (readingMode.value) {
+    case 'light': return 'bg-stone-200 text-stone-700'
+    case 'dark': return 'bg-stone-700 text-stone-200'
+    case 'sepia': return 'bg-amber-200 text-amber-800'
+  }
+  return 'bg-stone-200 text-stone-700'
+}
+
 const toggleMagic = () => {
   if (isMagicActive.value) {
     isMagicActive.value = false
@@ -823,14 +956,14 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
 </script>
 
 <template>
-  <view :class="isDarkMode ? 'bg-stone-950 text-stone-300' : 'bg-[#fafaf9] text-stone-800'"
+  <view :style="{ backgroundColor: modeColors[readingMode].bg, color: modeColors[readingMode].text }"
         class="h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-300">
-    
+
     <!-- Top Bar -->
-    <view v-if="menuVisible" class="fixed top-0 inset-x-0 z-[80] flex flex-col border-b bg-inherit shadow-sm transition-colors duration-300">
+    <view v-if="menuVisible" class="fixed top-0 inset-x-0 z-[80] flex flex-col border-b bg-inherit shadow-sm transition-colors duration-300" :style="{ backgroundColor: modeColors[readingMode].bg }">
       <view :style="{ height: statusBarHeight + 'px' }"></view>
       <view class="h-12 flex items-center justify-between px-4">
-        <view @click="uni.navigateBack()" class="p-2 active:opacity-50 transition-opacity">
+        <view @click="handleBack" class="p-2 active:opacity-50 transition-opacity">
           <image :src="icons.back" mode="aspectFit" style="width: 44rpx; height: 44rpx;" class="opacity-70"></image>
         </view>
         <text class="font-bold text-sm truncate max-w-[200px]">{{ activeBook?.title }}</text>
@@ -897,7 +1030,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <!-- Controls -->
     <view v-if="menuVisible" class="fixed bottom-24 right-6 z-40">
       <view @click.stop="toggleMagic" @longpress="showConfigModal = true"
-        :class="isMagicActive ? 'bg-teal-500 text-white rotate-12' : 'bg-stone-800 text-white'"
+        :class="getMagicButtonClass()"
         class="w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all select-none">
         <text v-if="!isAiLoading" class="text-2xl">🪄</text>
         <text v-else class="animate-spin text-xl">⏳</text>
@@ -930,11 +1063,11 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     </view>
 
     <!-- Modals -->
-    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :is-dark-mode="isDarkMode" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
-    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :is-dark-mode="isDarkMode" @close="showBatchModal = false" @confirm="(id) => handleStartProcess(id, true)" />
-    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :is-dark-mode="isDarkMode" @close="showConfigModal = false" @start="handleStartProcess" />
-    <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :is-dark-mode="isDarkMode" :page-mode="pageMode" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:is-dark-mode="isDarkMode = $event" @update:page-mode="pageMode = $event" />
-    <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :is-dark-mode="isDarkMode" @close="handleTerminalClose" />
+    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :reading-mode="readingMode" :mode-colors="modeColors" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
+    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :reading-mode="readingMode" :mode-colors="modeColors" @close="showBatchModal = false" @confirm="(id) => handleStartProcess(id, true)" />
+    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" @close="showConfigModal = false" @start="handleStartProcess" />
+    <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="pageMode = $event" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" />
+    <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :reading-mode="readingMode" :mode-colors="modeColors" @close="handleTerminalClose" />
     <view v-if="showToast" class="fixed bottom-40 left-1/2 -translate-x-1/2 bg-stone-900 text-white px-4 py-2 rounded-full text-xs z-[110] shadow-2xl">{{ toastMsg }}</view>
   </view>
 </template>
