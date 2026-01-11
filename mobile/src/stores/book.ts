@@ -239,10 +239,6 @@ export const useBookStore = defineStore('book', () => {
               }
             } catch (e) { console.warn('[Store] Sync trim status by id failed', e) }
           }
-
-          if (chapters.length > 0) {
-            await fetchChapter(bookId, Number(chapters[0].id))
-          }
         }
       }
     } catch (e) {

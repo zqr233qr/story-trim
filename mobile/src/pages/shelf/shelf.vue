@@ -211,27 +211,22 @@ import SparkMD5 from 'spark-md5'
 
 export default {
   methods: {
-    // 简易哈希算法 (RenderJS 内部使用)
+    // 归一化内容：去除所有非字母数字字符，转小写
+    normalizeContent(content) {
+      return content.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').toLowerCase();
+    },
+
+    // 计算章节内容的归一化 MD5 (真正的 32 位 MD5)
+    calculateChapterMD5(content) {
+      const normalized = this.normalizeContent(content);
+      return SparkMD5.hash(normalized);
+    },
+
+    // 简化的快速哈希 (已废弃，保留仅用于兼容性检查)
     simpleHash(str) {
-      // 极速采样: 头中尾各取100字符
-      const len = str.length;
-      if (len < 500) {
-        let hash = 0;
-        for (let i = 0; i < len; i++) {
-          hash = ((hash << 5) - hash) + str.charCodeAt(i);
-          hash |= 0;
-        }
-        return Math.abs(hash).toString(16);
-      }
-      let sample = str.substring(0, 100) + 
-                   str.substring(Math.floor(len/2), Math.floor(len/2) + 100) + 
-                   str.substring(len - 100);
-      let hash = 0;
-      for (let i = 0; i < sample.length; i++) {
-        hash = ((hash << 5) - hash) + sample.charCodeAt(i);
-        hash |= 0;
-      }
-      return Math.abs(hash).toString(16);
+      // 此函数已废弃，请使用 calculateChapterMD5
+      console.warn('simpleHash is deprecated, use calculateChapterMD5 instead');
+      return this.calculateChapterMD5(str);
     },
 
     trigger(newValue, oldValue, ownerInstance, instance) {
@@ -280,15 +275,15 @@ export default {
       const chapters = [];
       let fingerprint = '';
       
-       // 序章处理
-       if (matches.length > 0 && matches[0].index > 0) {
-          const content = text.substring(0, matches[0].index);
-          if (content.trim().length > 10) {
-             const md5 = this.simpleHash(content.trim());
-             fingerprint = md5;
-             chapters.push({ index: 0, title: '序章', content: content, md5: md5, length: content.length });
-          }
-       }
+        // 序章处理
+        if (matches.length > 0 && matches[0].index > 0) {
+           const content = text.substring(0, matches[0].index);
+           if (content.trim().length > 10) {
+              const md5 = this.calculateChapterMD5(content.trim());
+              fingerprint = md5;
+              chapters.push({ index: 0, title: '序章', content: content, md5: md5, length: content.length });
+           }
+        }
 
       // 正文处理
       for (let i = 0; i < matches.length; i++) {
@@ -301,7 +296,7 @@ export default {
         // 忽略空章
         if (content.trim().length < 5) continue;
 
-        const md5 = this.simpleHash(content.trim());
+        const md5 = this.calculateChapterMD5(content.trim());
         if (!fingerprint) fingerprint = md5;
 
         chapters.push({
@@ -313,12 +308,12 @@ export default {
         });
       }
       
-       // 兜底：如果没匹配到章节，当做全文一章
-       if (chapters.length === 0) {
-          const md5 = this.simpleHash(text.trim());
-          chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5, length: [...text].length }); // 字符数（中文1字符）
-          fingerprint = md5;
-       }
+        // 兜底：如果没匹配到章节，当做全文一章
+        if (chapters.length === 0) {
+           const md5 = this.calculateChapterMD5(text.trim());
+           chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5, length: [...text].length }); // 字符数（中文1字符）
+           fingerprint = md5;
+        }
 
       // 2. 发送元数据
       const bookMD5 = SparkMD5.hash(text);

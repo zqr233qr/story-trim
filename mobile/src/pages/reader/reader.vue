@@ -326,49 +326,67 @@ const init = async () => {
   ])
   uni.hideLoading()
 
-  // 恢复阅读进度
-  await restoreReadingProgress()
+  // 1. 决定起始章节索引
+  const startIndex = await determineStartChapter()
+  if (activeBook.value) {
+    activeBook.value.activeChapterIndex = startIndex
+  }
+
+  // 2. 恢复精简模式
+  const historyPromptId = await getHistoryPromptId()
+  if (historyPromptId > 0 && activeBook.value) {
+    activeBook.value.activeModeId = historyPromptId.toString()
+    isMagicActive.value = true
+  }
+
+  // 3. 立即加载当前章节
+  await loadCurrentChapter()
+
+  // 4. 3秒后异步预加载
+  setTimeout(() => preloadNearbyChapters(), 3000)
 
   if (bookStore.activeBook?.status === 'new') showConfigModal.value = true
   if (!bookStore.activeBook?.activeModeId && bookStore.prompts.length > 0) {
      bookStore.activeBook!.activeModeId = bookStore.prompts[0].id.toString()
   }
 
-  syncUI() // 初始化 UI
+  syncUI()
   if (pageMode.value === 'click') refreshWindow()
 }
 
-// 恢复阅读进度
-const restoreReadingProgress = async () => {
-  if (!activeBook.value) return
+// 决定起始章节索引
+const determineStartChapter = async (): Promise<number> => {
+  if (!activeBook.value) return 0
 
   // sync_state=0: 仅本地
   if (activeBook.value.sync_state === 0) {
     // #ifdef APP-PLUS
     const local = await repo.getReadingHistory(bookId.value)
     if (local) {
-      applyProgress(local.last_chapter_id, local.last_prompt_id)
+      const idx = activeBook.value.chapters.findIndex(c => c.id === local.last_chapter_id)
+      if (idx !== -1) return idx
     }
     // #endif
-    return
+    return 0
   }
 
-  // sync_state=1/2: 时间比对
+  // sync_state=1/2: 并行获取本地 + 云端，比对时间戳
   // #ifdef APP-PLUS
-  const [local, cloud] = await Promise.all([
+  const [local, cloudHistory] = await Promise.all([
     repo.getReadingHistory(bookId.value),
     fetchCloudReadingHistory()
   ])
 
-  let selected: LocalReadingHistory | null = local
-  if (cloud && cloud.updated_at) {
-    if (!local || (cloud.updated_at > local.updated_at)) {
-      selected = cloud
+  let selected = local
+  if (cloudHistory && cloudHistory.updated_at) {
+    if (!local || (cloudHistory.updated_at > local.updated_at)) {
+      selected = cloudHistory
     }
   }
 
   if (selected) {
-    applyProgress(selected.last_chapter_id, selected.last_prompt_id)
+    const idx = activeBook.value.chapters.findIndex(c => c.id === selected!.last_chapter_id)
+    if (idx !== -1) return idx
   }
   // #endif
 
@@ -376,9 +394,76 @@ const restoreReadingProgress = async () => {
   // 小程序端：直接使用云端数据
   const cloudData = await fetchCloudReadingHistory()
   if (cloudData) {
-    applyProgress(cloudData.last_chapter_id, cloudData.last_prompt_id)
+    const idx = activeBook.value.chapters.findIndex(c => c.id === cloudData.last_chapter_id)
+    if (idx !== -1) return idx
   }
   // #endif
+
+  return 0
+}
+
+// 获取历史的精简模式ID
+const getHistoryPromptId = async (): Promise<number> => {
+  if (!activeBook.value) return 0
+
+  // sync_state=0: 本地
+  if (activeBook.value.sync_state === 0) {
+    // #ifdef APP-PLUS
+    const local = await repo.getReadingHistory(bookId.value)
+    return local?.last_prompt_id || 0
+    // #endif
+    return 0
+  }
+
+  // sync_state=1/2: 云端
+  // #ifdef APP-PLUS
+  const [local, cloudHistory] = await Promise.all([
+    repo.getReadingHistory(bookId.value),
+    fetchCloudReadingHistory()
+  ])
+
+  let selected = local
+  if (cloudHistory && cloudHistory.updated_at) {
+    if (!local || (cloudHistory.updated_at > local.updated_at)) {
+      selected = cloudHistory
+    }
+  }
+  return selected?.last_prompt_id || 0
+  // #endif
+
+  // #ifndef APP-PLUS
+  const cloudData = await fetchCloudReadingHistory()
+  return cloudData?.last_prompt_id || 0
+  // #endif
+}
+
+// 加载当前章节内容
+const loadCurrentChapter = async () => {
+  if (!activeBook.value) return
+  const idx = activeBook.value.activeChapterIndex
+  const chapter = activeBook.value.chapters[idx]
+  if (!chapter) return
+
+  if (!chapter.isLoaded) {
+    await bookStore.fetchChapter(bookId.value, chapter.id)
+  }
+}
+
+// 异步预加载后2章
+const preloadNearbyChapters = async () => {
+  if (!activeBook.value) return
+  const idx = activeBook.value.activeChapterIndex
+  const total = activeBook.value.chapters.length
+
+  for (let i = 1; i <= 2; i++) {
+    const targetIdx = idx + i
+    if (targetIdx < total) {
+      const chapter = activeBook.value.chapters[targetIdx]
+      if (!chapter.isLoaded) {
+        bookStore.fetchChapter(bookId.value, chapter.id)
+      }
+    }
+  }
 }
 
 // 从云端获取阅读进度
@@ -393,18 +478,6 @@ const fetchCloudReadingHistory = async (): Promise<LocalReadingHistory | null> =
     }
   }
   return null
-}
-
-// 应用阅读进度
-const applyProgress = (chapterId: number, promptId: number) => {
-  const idx = activeBook.value!.chapters.findIndex(c => c.id === chapterId)
-  if (idx !== -1) {
-    activeBook.value!.activeChapterIndex = idx
-    if (promptId > 0) {
-      activeBook.value!.activeModeId = promptId.toString()
-      isMagicActive.value = true
-    }
-  }
 }
 
 // 保存阅读进度
