@@ -16,7 +16,6 @@ export interface ParsedChapter {
 export interface ParseResult {
   title: string;
   totalChapters: number;
-  fingerprint: string;
   bookMD5: string;
   chapters: ParsedChapter[];
 }
@@ -35,7 +34,6 @@ export const parser = {
           let currentTitle = '序章';
           let currentBuffer: string[] = []; 
           let chapterIndex = 0;
-          let fingerprint = '';
           const spark = new SparkMD5.ArrayBuffer(); // 用于计算全文 MD5
           
           const commitChapter = (title: string, buffer: string[]) => {
@@ -45,10 +43,6 @@ export const parser = {
 
             const md5 = SparkMD5.hash(content); 
             
-            if (chapterIndex === 1 || (chapterIndex === 0 && !fingerprint)) {
-              fingerprint = md5;
-            }
-
             chapters.push({
               index: chapterIndex++,
               title: title,
@@ -73,7 +67,6 @@ export const parser = {
               resolve({
                 title: fileName.replace(/\.txt$/i, ''),
                 totalChapters: chapters.length,
-                fingerprint: fingerprint || 'unknown',
                 bookMD5: bookMD5,
                 chapters: chapters
               });

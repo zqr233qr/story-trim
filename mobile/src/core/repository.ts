@@ -31,7 +31,6 @@ export interface IBookRepository {
 export interface CloudBook {
   id: number;
   book_md5?: string;
-  fingerprint: string;
   title: string;
   total_chapters: number;
   created_at: string;

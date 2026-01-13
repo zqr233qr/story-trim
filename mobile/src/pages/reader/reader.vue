@@ -689,6 +689,21 @@ const watchBatchTask = (taskId: string, bookName: string) => {
 const handleStartProcess = async (modeId: string | number, isBatch: boolean = false) => {
   const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
 
+  // 全书精简模式
+  if (isBatch) {
+    showBatchModal.value = false
+
+    if (!activeBook.value) return
+
+    const success = await bookStore.startFullTrimTask(activeBook.value.id, promptId)
+    if (success) {
+      showNotification('已加入后台处理，可在书架页查看进度')
+    } else {
+      showNotification('启动失败')
+    }
+    return
+  }
+
   // 单章精简 (混合模式)
   const isTrimmed = activeChapter.value?.trimmed_prompt_ids?.some((id: number) => Number(id) === promptId)
   if (isTrimmed) {
@@ -724,7 +739,7 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
       rawContent,
       activeChapter.value.md5,
       promptId,
-      activeBook.value?.fingerprint || '',
+      activeBook.value?.bookMD5 || '',
       activeBook.value?.activeChapterIndex || 0,
       (text) => {
         streamingContent.value += text

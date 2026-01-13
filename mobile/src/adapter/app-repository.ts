@@ -17,7 +17,6 @@ export class AppRepository implements IBookRepository {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cloud_id INTEGER DEFAULT 0,
         book_md5 TEXT,
-        fingerprint TEXT,
         title TEXT,
         total_chapters INTEGER,
         process_status TEXT,
@@ -141,7 +140,6 @@ export class AppRepository implements IBookRepository {
     return rows.map(r => ({
       id: r.id,
       title: r.title,
-      fingerprint: r.fingerprint,
       bookMD5: r.book_md5,
       cloudId: r.cloud_id,
       syncedCount: r.synced_count || 0,
@@ -160,7 +158,6 @@ export class AppRepository implements IBookRepository {
     return {
       id: r.id,
       title: r.title,
-      fingerprint: r.fingerprint,
       bookMD5: r.book_md5,
       cloudId: r.cloud_id,
       syncedCount: r.synced_count || 0,
@@ -181,8 +178,8 @@ export class AppRepository implements IBookRepository {
       await db.execute('PRAGMA journal_mode = MEMORY');
 
       await db.execute(
-        'INSERT INTO books (title, book_md5, fingerprint, total_chapters, process_status, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [result.title, result.bookMD5, result.fingerprint, result.totalChapters, 'ready', 0, Date.now()]
+        'INSERT INTO books (title, book_md5, total_chapters, process_status, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [result.title, result.bookMD5, result.totalChapters, 'ready', 0, Date.now()]
       );
 
       const res = await db.select<any>('SELECT last_insert_rowid() as id');
@@ -217,7 +214,6 @@ export class AppRepository implements IBookRepository {
     return {
       id: bookId,
       title: result.title,
-      fingerprint: result.fingerprint,
       bookMD5: result.bookMD5,
       syncedCount: 0,
       totalChapters: result.totalChapters,
@@ -260,8 +256,8 @@ export class AppRepository implements IBookRepository {
     }
 
     await db.execute(
-      'INSERT INTO books (cloud_id, book_md5, fingerprint, title, total_chapters, process_status, sync_state, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [cloudBook.id, cloudBook.book_md5 || '', cloudBook.fingerprint, cloudBook.title, cloudBook.total_chapters, 'ready', 2, 0, Date.now()]
+      'INSERT INTO books (cloud_id, book_md5, title, total_chapters, process_status, sync_state, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [cloudBook.id, cloudBook.book_md5 || '', cloudBook.title, cloudBook.total_chapters, 'ready', 2, 0, Date.now()]
     );
 
     console.log('[Sync] Created cloud-only book:', cloudBook.title);
@@ -342,7 +338,7 @@ export class AppRepository implements IBookRepository {
     );
   }
 
-  async createBook(title: string, fingerprint: string, total: number, bookMD5: string): Promise<number> {
+  async createBook(title: string, total: number, bookMD5: string): Promise<number> {
     const existing = await db.select<any>('SELECT id, title, sync_state FROM books WHERE book_md5 = ?', [bookMD5]);
 
     if (existing.length > 0) {
@@ -355,8 +351,8 @@ export class AppRepository implements IBookRepository {
     }
 
     await db.execute(
-      'INSERT INTO books (title, book_md5, fingerprint, total_chapters, process_status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [title, bookMD5, fingerprint, total, 'ready', Date.now()]
+      'INSERT INTO books (title, book_md5, total_chapters, process_status, created_at) VALUES (?, ?, ?, ?, ?)',
+      [title, bookMD5, total, 'ready', Date.now()]
     );
     const res = await db.select<any>('SELECT last_insert_rowid() as id');
     return res[0].id;

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
 import { getBatchChapterContents, getBatchTrimmedById, syncTrimmedStatusById, updateReadingProgress } from '@/api/content'
+import { taskApi } from '@/api/task'
 import type { Book, Chapter, Prompt } from '@/api'
 import { useUserStore } from './user'
 // #ifdef APP-PLUS
@@ -20,6 +21,11 @@ export interface BookUI extends Book {
   book_trimmed_ids?: number[]
   sync_state?: number // 0: Local, 1: Synced, 2: CloudOnly
   cloud_id?: number
+  full_trim_status?: string      // 'running' | 'completed' | 'failed'
+  full_trim_progress?: number    // 0-100
+  full_trim_task_id?: string
+  full_trim_prompt_id?: number
+  full_trim_available?: boolean
 }
 
 export const useBookStore = defineStore('book', () => {
@@ -72,7 +78,6 @@ export const useBookStore = defineStore('book', () => {
         id: Number(b.id),
         title: b.title,
         total_chapters: b.totalChapters,
-        fingerprint: b.fingerprint,
         created_at: new Date(b.createdAt).toISOString(),
         status: b.processStatus,
         progress: 0,
@@ -105,10 +110,10 @@ export const useBookStore = defineStore('book', () => {
   }
 
   // 2. Add Book (此方法仅用于 H5/MP，App 端走 RenderJS -> createBookRecord)
-  const createBookRecord = async (title: string, fingerprint: string, total: number, bookMD5: string) => {
+  const createBookRecord = async (title: string, total: number, bookMD5: string) => {
     // #ifdef APP-PLUS
     try {
-      return await repo.createBook(title, fingerprint, total, bookMD5)
+      return await repo.createBook(title, total, bookMD5)
     } catch (e: any) {
       if (e.message && e.message.includes('已存在')) {
         throw new Error(e.message)
@@ -144,7 +149,6 @@ export const useBookStore = defineStore('book', () => {
               cloud_id: cloudBookId,
               title: res.data.book.title,
               total_chapters: res.data.book.total_chapters,
-              fingerprint: res.data.book.fingerprint,
               created_at: res.data.book.created_at,
               status: 'ready',
               progress: 0,
@@ -188,7 +192,6 @@ export const useBookStore = defineStore('book', () => {
             cloud_id: book.cloudId,
             title: book.title,
             total_chapters: book.totalChapters,
-            fingerprint: book.fingerprint,
             created_at: new Date(book.createdAt).toISOString(),
             status: book.processStatus,
             progress: 0,
@@ -442,7 +445,7 @@ export const useBookStore = defineStore('book', () => {
 
         const payload = {
             book_name: book.title,
-            book_md5: book.bookMD5 || book.fingerprint,
+            book_md5: book.bookMD5,
             cloud_book_id: cloudBookId || undefined,
             total_chapters: total,
             chapters: chunk.map(c => ({
@@ -495,12 +498,66 @@ export const useBookStore = defineStore('book', () => {
     return activeBook.value.chapters[activeBook.value.activeChapterIndex]
   })
 
+  // 全文精简任务轮询定时器
+  let fullTrimPollTimer: ReturnType<typeof setInterval> | null = null
+
+  // 启动全文精简任务
+  const startFullTrimTask = async (bookId: number, promptId: number): Promise<boolean> => {
+    const res = await taskApi.startFullTrim(bookId, promptId)
+    if (res.code === 0) {
+      const book = books.value.find(b => b.id === bookId)
+      if (book) {
+        book.full_trim_status = 'running'
+        book.full_trim_progress = 0
+        book.full_trim_task_id = res.data.task_id
+        book.full_trim_prompt_id = promptId
+      }
+      // 开始监控进度
+      monitorFullTrimTask(res.data.task_id, bookId)
+    }
+    return res.code === 0
+  }
+
+  // 监控任务进度（每5秒）
+  const monitorFullTrimTask = (taskId: string, bookId: number) => {
+    if (fullTrimPollTimer) clearInterval(fullTrimPollTimer)
+
+    fullTrimPollTimer = setInterval(async () => {
+      const res = await taskApi.getTaskProgress(taskId)
+      if (res.code !== 0) return
+
+      const book = books.value.find(b => b.id === bookId)
+      if (!book) {
+        clearInterval(fullTrimPollTimer)
+        return
+      }
+
+      book.full_trim_status = res.data.status
+      book.full_trim_progress = res.data.progress
+
+      if (res.data.status === 'completed') {
+        book.full_trim_available = true
+        book.full_trim_status = undefined
+        book.full_trim_progress = undefined
+        clearInterval(fullTrimPollTimer)
+        fullTrimPollTimer = null
+      } else if (res.data.status === 'failed') {
+        // 失败只记录error，不显示UI状态
+        book.full_trim_status = undefined
+        book.full_trim_progress = undefined
+        clearInterval(fullTrimPollTimer)
+        fullTrimPollTimer = null
+      }
+    }, 5000)
+  }
+
   return {
     books, activeBook, prompts, isLoading, uploadProgress, syncProgress, activeChapter,
     init, fetchBooks, fetchBookDetail, fetchChapter,
     createBookRecord, insertChapters, saveChapterTrim,
     setActiveBook, setChapter, fetchPrompts,
     fetchChapterTrim, fetchBatchChapters, updateProgress, syncBookToCloud,
-    syncTrimmedStatusById
+    syncTrimmedStatusById,
+    startFullTrimTask, monitorFullTrimTask
   }
 })

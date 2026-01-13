@@ -105,7 +105,7 @@ export function trimStreamByMd5(
   content: string,
   md5: string,
   promptId: number,
-  bookFingerprint: string,
+  bookMD5: string,
   chapterIndex: number,
   onData: (text: string) => void,
   onError: (err: string) => void,
@@ -134,7 +134,7 @@ export function trimStreamByMd5(
         content,
         prompt_id: promptId,
         md5,
-        book_fingerprint: bookFingerprint,
+        book_md5: bookMD5,
         chapter_index: chapterIndex
       })
     });

@@ -2,12 +2,19 @@
 import { computed } from 'vue'
 import type { Book } from '../stores/book'
 
-const props = defineProps<{ book: Book }>()
+const props = defineProps<{ book: Book & { full_trim_status?: string; full_trim_progress?: number } }>()
 const emit = defineEmits(['click', 'sync'])
 
 const statusText = computed(() => {
   const map: Record<string, string> = { 'new': '新书籍', 'processing': '处理中', 'ready': '已就绪' }
   return map[props.book.status] || props.book.status
+})
+
+const trimProgressText = computed(() => {
+  if (props.book.full_trim_status === 'running' && props.book.full_trim_progress !== undefined) {
+    return `⚡ ${props.book.full_trim_progress}%`
+  }
+  return null
 })
 </script>
 
@@ -37,6 +44,10 @@ const statusText = computed(() => {
           </view>
         </view>
         <text class="text-xs text-stone-400 mt-1 block truncate">共 {{ book.total_chapters || 0 }} 章节</text>
+        <!-- Full Trim Progress Tag -->
+        <view v-if="trimProgressText" class="mt-1.5">
+          <text class="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded inline-block">{{ trimProgressText }}</text>
+        </view>
       </view>
       
       <view class="flex items-center justify-between">

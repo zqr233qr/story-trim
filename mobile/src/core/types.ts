@@ -3,7 +3,6 @@ export type PlatformType = 'app' | 'mp' | 'h5';
 export interface LocalBook {
   id: number | string;
   title: string;
-  fingerprint: string;
   bookMD5?: string;
   cloudId?: number;
   syncedCount?: number;
@@ -42,7 +41,6 @@ export interface CloudBook {
   id: number;
   title: string;
   total_chapters: number;
-  fingerprint: string;
   book_md5?: string;
   created_at: string;
 }
