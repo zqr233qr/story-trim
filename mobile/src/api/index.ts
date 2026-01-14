@@ -157,7 +157,6 @@ export const api = {
   ) => {
     const token = uni.getStorageSync("token");
 
-    // #ifndef H5
     // App 端使用 WebSocket
     const wsBase = BASE_URL.replace("http", "ws");
     const wsUrl = `${wsBase}/trim/stream/by-id?token=${token}&chapter_id=${chapterId}&prompt_id=${promptId}`;
@@ -179,7 +178,6 @@ export const api = {
     socketTask.onError(() => {
       onError("WebSocket Error");
     });
-    // #endif
   },
 
   // 2. 基于 RawContent 的流式 (无状态, 支持离线混合模式)

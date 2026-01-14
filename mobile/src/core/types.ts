@@ -1,4 +1,4 @@
-export type PlatformType = 'app' | 'mp' | 'h5';
+export type PlatformType = 'app' | 'mp';
 
 export interface LocalBook {
   id: number | string;
@@ -26,14 +26,6 @@ export interface LocalChapter {
   md5: string;              // 章节归一化MD5
   trimmedPromptIds?: number[];
   cloudId?: number;         // 云端章节ID（用于同步）
-}
-
-export interface TrimmedContent {
-  id?: number;
-  sourceMd5: string;        // 关联原文MD5
-  promptId: number;
-  content: string;
-  createdAt: number;
 }
 
 // 扩展类型：用于云端API响应

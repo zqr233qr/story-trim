@@ -277,53 +277,53 @@ type BookServiceInterface interface {
 }
 
 type SyncLocalChapter struct {
-	LocalID    uint   `json:"localId"`
+	LocalID    uint   `json:"local_id"`
 	Index      int    `json:"index"`
 	Title      string `json:"title"`
 	MD5        string `json:"md5"`
 	Content    string `json:"content"`
-	WordsCount int    `json:"wordsCount"`
+	WordsCount int    `json:"words_count"`
 }
 
 type SyncLocalBookReq struct {
-	BookName      string             `json:"bookName" binding:"required"`
-	BookMD5       string             `json:"bookMd5" binding:"required"`
-	TotalChapters int                `json:"totalChapters" binding:"required"`
-	CloudBookID   uint               `json:"cloudBookId"`
+	BookName      string             `json:"book_name" binding:"required"`
+	BookMD5       string             `json:"book_md5" binding:"required"`
+	TotalChapters int                `json:"total_chapters" binding:"required"`
+	CloudBookID   uint               `json:"cloud_book_id"`
 	Chapters      []SyncLocalChapter `json:"chapters" binding:"required"`
 }
 
 type ChapterMapping struct {
-	LocalID uint `json:"localId"`
-	CloudID uint `json:"cloudId"`
+	LocalID uint `json:"local_id"`
+	CloudID uint `json:"cloud_id"`
 }
 
 type SyncLocalBookResp struct {
-	BookID          uint             `json:"bookId"`
-	ChapterMappings []ChapterMapping `json:"chapterMappings"`
+	BookID          uint             `json:"book_id"`
+	ChapterMappings []ChapterMapping `json:"chapter_mappings"`
 }
 
 type BookDetailResp struct {
 	Book           model.Book            `json:"book"`
 	Chapters       []model.Chapter       `json:"chapters"`
-	TrimmedMap     map[uint][]uint       `json:"trimmedMap"`
-	ReadingHistory *model.ReadingHistory `json:"readingHistory"`
+	TrimmedMap     map[uint][]uint       `json:"trimmed_map"`
+	ReadingHistory *model.ReadingHistory `json:"reading_history"`
 }
 
 type ChapterContentResp struct {
-	ChapterID  uint   `json:"chapterId"`
-	ChapterMD5 string `json:"chapterMd5"`
+	ChapterID  uint   `json:"chapter_id"`
+	ChapterMD5 string `json:"chapter_md5"`
 	Content    string `json:"content"`
 }
 
 type ChapterTrimResp struct {
-	ChapterID      uint   `json:"chapterId"`
-	PromptID       uint   `json:"promptId"`
-	TrimmedContent string `json:"trimmedContent"`
+	ChapterID      uint   `json:"chapter_id"`
+	PromptID       uint   `json:"prompt_id"`
+	TrimmedContent string `json:"trimmed_content"`
 }
 
 type ContentTrimResp struct {
-	ChapterMD5     string `json:"chapterMd5"`
-	PromptID       uint   `json:"promptId"`
-	TrimmedContent string `json:"trimmedContent"`
+	ChapterMD5     string `json:"chapter_md5"`
+	PromptID       uint   `json:"prompt_id"`
+	TrimmedContent string `json:"trimmed_content"`
 }

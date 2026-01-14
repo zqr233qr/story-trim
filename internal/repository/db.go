@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/zqr233qr/story-trim/internal/config"
+	"github.com/zqr233qr/story-trim/internal/model"
 	"github.com/zqr233qr/story-trim/pkg/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -12,12 +13,29 @@ import (
 
 func NewDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(cfg.Source), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Info),
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
-	logger.Info().Msg("Database connected successfully")
+
+	// 自动迁移表结构
+	err = db.AutoMigrate(
+		&model.Book{},
+		&model.Chapter{},
+		&model.ChapterContent{},
+		&model.Prompt{},
+		&model.Task{},
+		&model.TrimResult{},
+		&model.UserProcessedChapter{},
+		&model.ReadingHistory{},
+		&model.User{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to auto migrate database: %w", err)
+	}
+
+	logger.Info().Msg("Database connected and migrated successfully")
 	return db, nil
 }
 

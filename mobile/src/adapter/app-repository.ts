@@ -1,7 +1,6 @@
 import { db } from '../utils/sqlite';
-import { parser } from '../utils/parser';
 import type { IBookRepository } from '../core/repository';
-import type { LocalBook, LocalChapter, TrimmedContent } from '../core/types';
+import type { LocalBook, LocalChapter } from '../core/types';
 import type { CloudBook } from '../core/repository';
 
 export class AppRepository implements IBookRepository {
@@ -36,17 +35,6 @@ export class AppRepository implements IBookRepository {
         title TEXT,
         md5 TEXT,
         words_count INTEGER DEFAULT 0
-      )
-    `);
-
-    // 3. Trimmed Content Table (Local Cache / Tier 3)
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS trimmed_content (
-        source_md5 TEXT,
-        prompt_id INTEGER,
-        content TEXT,
-        created_at INTEGER,
-        PRIMARY KEY (source_md5, prompt_id)
       )
     `);
 
@@ -121,20 +109,6 @@ export class AppRepository implements IBookRepository {
     }
   }
 
-  // --- Sync Helpers ---
-
-  async updateBookCloudInfo(localId: number, cloudId: number, syncState: number, syncedCount?: number): Promise<void> {
-    if (syncedCount !== undefined) {
-      await db.execute('UPDATE books SET cloud_id = ?, sync_state = ?, synced_count = ? WHERE id = ?', [cloudId, syncState, syncedCount, localId]);
-    } else {
-      await db.execute('UPDATE books SET cloud_id = ?, sync_state = ? WHERE id = ?', [cloudId, syncState, localId]);
-    }
-  }
-
-  async updateChapterCloudId(localId: number, cloudId: number): Promise<void> {
-    await db.execute('UPDATE chapters SET cloud_id = ? WHERE id = ?', [cloudId, localId]);
-  }
-
   async getBooks(): Promise<LocalBook[]> {
     const rows = await db.select<any>('SELECT * FROM books ORDER BY created_at DESC');
     return rows.map(r => ({
@@ -169,75 +143,6 @@ export class AppRepository implements IBookRepository {
     };
   }
 
-  async addBook(filePath: string, fileName: string, onProgress?: (p: number) => void): Promise<LocalBook> {
-    const result = await parser.parseFile(filePath, fileName, onProgress);
-
-    let bookId = 0;
-    await db.transaction(async () => {
-      await db.execute('PRAGMA synchronous = OFF');
-      await db.execute('PRAGMA journal_mode = MEMORY');
-
-      await db.execute(
-        'INSERT INTO books (title, book_md5, total_chapters, process_status, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [result.title, result.bookMD5, result.totalChapters, 'ready', 0, Date.now()]
-      );
-
-      const res = await db.select<any>('SELECT last_insert_rowid() as id');
-      bookId = res[0].id;
-
-      const total = result.chapters.length;
-      const BATCH_SIZE = 200;
-
-      for (let i = 0; i < total; i += BATCH_SIZE) {
-        const chunk = result.chapters.slice(i, i + BATCH_SIZE);
-        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(',');
-
-        await db.execute(
-          `INSERT INTO chapters (book_id, chapter_index, title, md5, words_count) VALUES ${placeholders}`,
-          chunk.flatMap(c => [bookId, c.index, c.title, c.md5, c.length || 0])
-        );
-
-        await db.execute(
-          `INSERT OR REPLACE INTO contents (chapter_md5, raw_content) VALUES ${chunk.map(() => '(?, ?)').join(',')}`,
-          chunk.flatMap(c => [c.md5, c.content])
-        );
-
-        if (onProgress) {
-           const p = 80 + Math.floor(((i + chunk.length) / total) * 20);
-           onProgress(p);
-        }
-      }
-    });
-
-    if (onProgress) onProgress(100);
-
-    return {
-      id: bookId,
-      title: result.title,
-      bookMD5: result.bookMD5,
-      syncedCount: 0,
-      totalChapters: result.totalChapters,
-      processStatus: 'ready',
-      platform: 'app',
-      createdAt: Date.now()
-    };
-  }
-
-  async deleteBook(id: number | string): Promise<void> {
-    await db.transaction(async () => {
-      const chapters = await db.select<any>('SELECT md5 FROM chapters WHERE book_id = ?', [id]);
-      const md5s = chapters.map(c => c.md5);
-
-      await db.execute('DELETE FROM chapters WHERE book_id = ?', [id]);
-      await db.execute('DELETE FROM books WHERE id = ?', [id]);
-      await db.execute('DELETE FROM reading_history WHERE book_id = ?', [id]);
-
-      if (md5s.length > 0) {
-        await db.execute(`DELETE FROM contents WHERE chapter_md5 IN (${md5s.map(() => '?').join(',')})`, md5s);
-      }
-    });
-  }
-
   async syncBookFromCloud(cloudBook: CloudBook): Promise<void> {
     const existing = await db.select<any>('SELECT id, cloud_id, sync_state FROM books WHERE book_md5 = ?', [cloudBook.book_md5]);
 
@@ -261,17 +166,6 @@ export class AppRepository implements IBookRepository {
     );
 
     console.log('[Sync] Created cloud-only book:', cloudBook.title);
-  }
-
-  async syncChaptersFromCloud(localBookId: number, cloudChapters: any[]): Promise<void> {
-    await db.transaction(async () => {
-      for (const cloudCh of cloudChapters) {
-        await db.execute(
-          'INSERT OR REPLACE INTO chapters (book_id, cloud_id, chapter_index, title, md5, words_count) VALUES (?, ?, ?, ?, ?, ?)',
-          [localBookId, cloudCh.id, cloudCh.index, cloudCh.title, cloudCh.chapter_md5, cloudCh.words_count || 0]
-        );
-      }
-    });
   }
 
   async getChapters(bookId: number | string): Promise<LocalChapter[]> {
@@ -311,31 +205,6 @@ export class AppRepository implements IBookRepository {
     const md5 = rows[0].md5;
     const contentRows = await db.select<any>('SELECT raw_content FROM contents WHERE chapter_md5 = ?', [md5]);
     return contentRows.length > 0 ? contentRows[0].raw_content : '';
-  }
-
-  async saveChapterContent(md5: string, content: string): Promise<void> {
-    await db.execute(
-      'INSERT OR REPLACE INTO contents (chapter_md5, raw_content) VALUES (?, ?)',
-      [md5, content]
-    );
-  }
-
-  async getTrimmedContent(chapterMd5: string, promptId: number): Promise<TrimmedContent | null> {
-    const rows = await db.select<any>('SELECT * FROM trimmed_content WHERE source_md5 = ? AND prompt_id = ?', [chapterMd5, promptId]);
-    if (rows.length === 0) return null;
-    return {
-      sourceMd5: rows[0].source_md5,
-      promptId: rows[0].prompt_id,
-      content: rows[0].content,
-      createdAt: rows[0].created_at
-    };
-  }
-
-  async saveTrimmedContent(chapterMd5: string, promptId: number, content: string): Promise<void> {
-    await db.execute(
-      'INSERT OR REPLACE INTO trimmed_content (source_md5, prompt_id, content, created_at) VALUES (?, ?, ?, ?)',
-      [chapterMd5, promptId, content, Date.now()]
-    );
   }
 
   async createBook(title: string, total: number, bookMD5: string): Promise<number> {

@@ -36,6 +36,8 @@ func main() {
 	}
 
 	r := gin.New()
+	r.Use(middleware.RequestLogger())
+	r.Use(gin.Recovery())
 
 	api := r.Group("/api/v1")
 	{

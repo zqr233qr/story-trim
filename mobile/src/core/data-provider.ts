@@ -50,69 +50,7 @@ export interface IDataProvider {
    * @returns 章节内容列表，包含缓存指示
    */
   getBatchChapterContents(book: Book, chapters: Chapter[]): Promise<ContentResult[]>;
-  
-  // --- 精简状态同步 ---
-  
-  /**
-   * 同步精简足迹
-   * 
-   * @param book 书籍信息
-   * @param chapters 章节列表
-   * @returns 精简状态映射
-   * 
-   * @description
-   * - App端: 发送MD5数组，对应后端 POST /contents/sync-status
-   * - 小程序: 发送chapter_id数组，对应后端 POST /chapters/sync-status
-   */
-  getTrimmedStatus(book: Book, chapters: Chapter[]): Promise<TrimmedStatusMap>;
-  
-  // --- 精简内容获取 ---
-  
-  /**
-   * 获取单个章节的精简内容（带三级缓存）
-   * 
-   * @param book 书籍信息
-   * @param chapter 章节信息
-   * @param promptId 精简模式ID
-   * @returns 精简内容，包含缓存指示；如果不存在则返回null
-   */
-  getTrimmedContent(
-    book: Book, 
-    chapter: Chapter, 
-    promptId: number
-  ): Promise<ContentResult | null>;
-  
-  /**
-   * 批量获取精简内容（预加载，最多10个）
-   * 
-   * @param book 书籍信息
-   * @param chapters 章节列表
-   * @param promptId 精简模式ID
-   * @returns 精简内容列表，包含缓存指示
-   */
-  getBatchTrimmedContents(
-    book: Book, 
-    chapters: Chapter[], 
-    promptId: number
-  ): Promise<ContentResult[]>;
-  
-  /**
-   * 保存精简内容到缓存
-   * 
-   * @param chapterMd5 章节MD5
-   * @param promptId 精简模式ID
-   * @param content 精简内容
-   * 
-   * @description
-   * - App端: 保存到 SQLite (Tier 3)
-   * - 小程序: 保存到 Storage (Tier 2)
-   */
-  saveTrimmedContent(
-    chapterMd5: string, 
-    promptId: number, 
-    content: string
-  ): Promise<void>;
-  
+    
   // --- 阅读进度 ---
   
   /**

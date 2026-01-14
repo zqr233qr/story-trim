@@ -48,21 +48,6 @@ export function getBatchTrimmedById(ids: number[], promptId: number): Promise<Re
 }
 
 /**
- * 批量获取精简内容（MD5寻址）
- * 对应后端: POST /contents/trim
- *
- * @param md5s 章节MD5数组（上限10）
- * @param promptId 精简模式ID
- */
-export function getBatchTrimmedByMd5(md5s: string[], promptId: number): Promise<Response<TrimmedContentResponse[]>> {
-  return request({
-    url: '/contents/trim',
-    method: 'POST',
-    data: { md5s, prompt_id: promptId }
-  });
-}
-
-/**
  * 按MD5探测精简足迹
  * 对应后端: POST /contents/sync-status
  *

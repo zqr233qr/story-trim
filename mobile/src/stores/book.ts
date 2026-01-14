@@ -7,6 +7,7 @@ import type { Book, Chapter, Prompt } from '@/api'
 import { useUserStore } from './user'
 // #ifdef APP-PLUS
 import { AppRepository } from '@/adapter/app-repository'
+import { db } from '@/utils/sqlite'
 const repo = new AppRepository()
 // #endif
 
@@ -469,10 +470,10 @@ export const useBookStore = defineStore('book', () => {
             const mappings = res.data.chapter_mappings || [];
 
             for (const mapping of mappings) {
-                await repo.updateChapterCloudId(mapping.local_id, mapping.cloud_id);
+                await db.execute('UPDATE chapters SET cloud_id = ? WHERE id = ?', [mapping.cloud_id, mapping.local_id]);
             }
 
-            await repo.updateBookCloudInfo(bookId, cloudBookId, 1, syncedCount + chunk.length);
+            await db.execute('UPDATE books SET cloud_id = ?, sync_state = ?, synced_count = ? WHERE id = ?', [cloudBookId, 1, syncedCount + chunk.length, bookId]);
         } else {
             throw new Error(res.msg || 'Sync failed');
         }
@@ -557,7 +558,6 @@ export const useBookStore = defineStore('book', () => {
     createBookRecord, insertChapters, saveChapterTrim,
     setActiveBook, setChapter, fetchPrompts,
     fetchChapterTrim, fetchBatchChapters, updateProgress, syncBookToCloud,
-    syncTrimmedStatusById,
     startFullTrimTask, monitorFullTrimTask
   }
 })
