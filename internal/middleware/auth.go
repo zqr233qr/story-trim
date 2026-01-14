@@ -14,6 +14,10 @@ func Auth(svc service.AuthServiceInterface) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
 		if token == "" {
+			token = c.Query("token")
+		}
+
+		if token == "" {
 			response.Error(c, http.StatusUnauthorized, errno.AuthErrCodeNoLogin)
 			c.Abort()
 			return

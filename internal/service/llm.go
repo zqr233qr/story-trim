@@ -20,8 +20,15 @@ func NewLlmService(llm *config.LLM) *LlmService {
 // 百万
 var million = 1000000.0
 
-func (s *LlmService) Llm(ctx context.Context, systemPrompt string, userPrompt string) (*LlmResponse, error) {
+func (s *LlmService) getLlmConfig() *config.LLMConfig {
 	llmConfig := s.llm.LLMConfig[s.llm.Use]
+	llmConfig.InputPrice = llmConfig.InputPrice * 100
+	llmConfig.OutputPrice = llmConfig.OutputPrice * 100
+	return &llmConfig
+}
+
+func (s *LlmService) Llm(ctx context.Context, systemPrompt string, userPrompt string) (*LlmResponse, error) {
+	llmConfig := s.getLlmConfig()
 	conf := openai.DefaultConfig(llmConfig.APIKey)
 	conf.BaseURL = llmConfig.BaseURL
 	client := openai.NewClientWithConfig(conf)
@@ -64,7 +71,7 @@ func (s *LlmService) Llm(ctx context.Context, systemPrompt string, userPrompt st
 }
 
 func (s *LlmService) LlmWithStream(ctx context.Context, systemPrompt string, userPrompt string) (*LlmResponse, error) {
-	llmConfig := s.llm.LLMConfig[s.llm.Use]
+	llmConfig := s.getLlmConfig()
 	conf := openai.DefaultConfig(llmConfig.APIKey)
 	conf.BaseURL = llmConfig.BaseURL
 	client := openai.NewClientWithConfig(conf)

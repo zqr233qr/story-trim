@@ -104,11 +104,45 @@ import { onShow } from "@dcloudio/uni-app";
 import { useUserStore } from "@/stores/user";
 import { useBookStore } from "@/stores/book";
 import BookCard from "@/components/BookCard.vue";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal.vue";
+import BookActionSheet from "@/components/BookActionSheet.vue";
+import TaskIndicator from "@/components/TaskIndicator.vue";
+import TaskProgressSheet from "@/components/TaskProgressSheet.vue";
+import { computed } from "vue";
 
 const userStore = useUserStore();
 const bookStore = useBookStore();
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0);
 const renderTrigger = ref(0);
+
+// 任务中心相关
+const showTaskSheet = ref(false);
+const activeTasks = computed(() => {
+  // 只展示正在进行的后台 AI 精简任务
+  return bookStore.books.filter(b => 
+    b.full_trim_status === 'running'
+  );
+});
+
+// 删除相关
+const showDeleteModal = ref(false);
+const bookToDelete = ref<BookUI | null>(null);
+
+// 底部操作菜单相关
+const showActionSheet = ref(false);
+const actionBook = ref<BookUI | null>(null);
+
+interface BookUI {
+  id: number | string;
+  title: string;
+  total_chapters: number;
+  status: string;
+  sync_state?: number;
+  cloud_id?: number;
+  book_trimmed_ids?: number[];
+  full_trim_status?: string;
+  full_trim_progress?: number;
+}
 
 onShow(async () => {
   // #ifdef APP-PLUS
@@ -144,6 +178,39 @@ const handleSyncBook = async (book: any) => {
       uni.showToast({ title: "同步失败", icon: "none" });
     }
     console.error("[Shelf] Sync error:", e);
+  }
+};
+
+const handleDeleteBook = (book: any) => {
+  bookToDelete.value = book;
+  showDeleteModal.value = true;
+};
+
+const handleBookOptions = (book: any) => {
+  actionBook.value = book;
+  showActionSheet.value = true;
+  // Haptic feedback
+  uni.vibrateShort({});
+};
+
+const handleSheetAction = (action: 'sync' | 'delete') => {
+  if (!actionBook.value) return;
+  
+  if (action === 'sync') {
+    handleSyncBook(actionBook.value);
+  } else if (action === 'delete') {
+    handleDeleteBook(actionBook.value);
+  }
+};
+
+const confirmDelete = () => {
+  if (bookToDelete.value) {
+    bookStore.deleteBook(
+      Number(bookToDelete.value.id), 
+      bookToDelete.value.sync_state || 0, 
+      bookToDelete.value.cloud_id
+    );
+    bookToDelete.value = null;
   }
 };
 
@@ -215,6 +282,8 @@ const handleLogout = () => {
           :book="book"
           @click="handleBookClick(book)"
           @sync="handleSyncBook(book)"
+          @delete="handleDeleteBook"
+          @longpress="handleBookOptions"
         />
 
         <view v-if="bookStore.books.length === 0" class="py-20 text-center">
@@ -222,6 +291,23 @@ const handleLogout = () => {
         </view>
       </view>
     </view>
+
+    <!-- Delete Confirm Modal -->
+    <DeleteConfirmModal
+      v-model:visible="showDeleteModal"
+      title="删除书籍"
+      content="确定删除本书吗？此操作不可恢复。"
+      confirm-text="删除"
+      @confirm="confirmDelete"
+    />
+
+    <!-- Custom Book Action Sheet -->
+    <BookActionSheet
+      v-model="showActionSheet"
+      :title="actionBook?.title || '书籍操作'"
+      :show-sync="actionBook?.sync_state === 0"
+      @action="handleSheetAction"
+    />
 
     <!-- Upload Progress Modal -->
     <view
@@ -238,6 +324,18 @@ const handleLogout = () => {
         <text class="text-xs text-stone-400">正在本地解析...</text>
       </view>
     </view>
+
+    <!-- Task Indicator (Floating Pill) -->
+    <TaskIndicator 
+      :count="activeTasks.length" 
+      @click="showTaskSheet = true"
+    />
+
+    <!-- Task Dashboard Sheet -->
+    <TaskProgressSheet
+      v-model="showTaskSheet"
+      :tasks="activeTasks"
+    />
 
     <!-- Sync Progress Modal -->
     <view

@@ -5,7 +5,6 @@ export interface LocalBook {
   title: string;
   bookMD5?: string;
   cloudId?: number;
-  syncedCount?: number;
   totalChapters: number;
   lastReadChapterId?: number | string;
   processStatus: 'new' | 'processing' | 'ready';

@@ -63,24 +63,30 @@ func (r *BookRepository) UpsertChapters(ctx context.Context, bookID uint, chapte
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "book_id"}, {Name: "index"}},
-		DoNothing: true,
+		UpdateAll: true,
 	}).CreateInBatches(dbChaps, 100).Error
 }
 
 func (r *BookRepository) GetBookByID(ctx context.Context, id uint) (*model.Book, error) {
 	var b model.Book
-	err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("id = ?", id), &b)
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("id = ?", id), &b)
 	if err != nil {
 		return nil, err
+	}
+	if !exist {
+		return nil, nil
 	}
 	return &b, nil
 }
 
 func (r *BookRepository) GetBookByMD5(ctx context.Context, userID uint, md5 string) (*model.Book, error) {
 	var b model.Book
-	err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("user_id = ? AND book_md5 = ?", userID, md5), &b)
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("user_id = ? AND book_md5 = ?", userID, md5), &b)
 	if err != nil {
 		return nil, err
+	}
+	if !exist {
+		return nil, nil
 	}
 	return &b, nil
 }
@@ -152,19 +158,26 @@ func (r *BookRepository) BatchSaveRawContents(ctx context.Context, contents []*m
 
 func (r *BookRepository) GetRawContent(ctx context.Context, md5 string) (*model.ChapterContent, error) {
 	var c model.ChapterContent
-	if err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ?", md5), &c); err != nil {
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ?", md5), &c)
+	if err != nil {
 		return nil, err
+	}
+	if !exist {
+		return nil, nil
 	}
 	return &c, nil
 }
 
 func (r *BookRepository) GetTrimResult(ctx context.Context, md5 string, promptID uint) (*model.TrimResult, error) {
-	var t model.TrimResult
-	err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID), &t)
+	var t *model.TrimResult
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID), t)
 	if err != nil {
 		return nil, err
 	}
-	return &t, nil
+	if !exist {
+		return nil, nil
+	}
+	return t, nil
 }
 
 func (r *BookRepository) ExistTrimResultWithoutObject(ctx context.Context, md5 string, promptID uint) (bool, error) {
@@ -173,7 +186,7 @@ func (r *BookRepository) ExistTrimResultWithoutObject(ctx context.Context, md5 s
 
 func (r *BookRepository) SaveTrimResult(ctx context.Context, res *model.TrimResult) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "chapter_md5"}, {Name: "prompt_id"}, {Name: "level"}},
+		Columns:   []clause.Column{{Name: "chapter_md5"}, {Name: "prompt_id"}},
 		UpdateAll: true,
 	}).Create(res).Error
 }
@@ -194,8 +207,12 @@ func (r *BookRepository) UpsertReadingHistory(ctx context.Context, history *mode
 
 func (r *BookRepository) GetReadingHistory(ctx context.Context, userID, bookID uint) (*model.ReadingHistory, error) {
 	var h model.ReadingHistory
-	if err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("user_id = ? AND book_id = ?", userID, bookID), &h); err != nil {
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("user_id = ? AND book_id = ?", userID, bookID), &h)
+	if err != nil {
 		return nil, err
+	}
+	if !exist {
+		return nil, nil
 	}
 	return &h, nil
 }
@@ -250,10 +267,15 @@ func (r *BookRepository) GetSummaryPrompt(ctx context.Context) (*model.Prompt, e
 	return &p, nil
 }
 
+func (r *BookRepository) DeleteBook(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Book{}).Error
+}
+
 type BookRepositoryInterface interface {
 	CreateBook(ctx context.Context, book *model.Book, chapters []model.Chapter) error
 	UpsertChapters(ctx context.Context, bookID uint, chapters []model.Chapter) error
 	GetBookByID(ctx context.Context, id uint) (*model.Book, error)
+	DeleteBook(ctx context.Context, bookID uint) error
 	GetBookByMD5(ctx context.Context, userID uint, md5 string) (*model.Book, error)
 	GetBooksByUserID(ctx context.Context, userID uint) ([]model.Book, error)
 	GetChaptersByBookID(ctx context.Context, bookID uint) ([]model.Chapter, error)

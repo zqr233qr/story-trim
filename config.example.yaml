@@ -1,22 +1,41 @@
+# 配置文件示例
+
+# 文件存储配置
 file_storage:
-  upload_dir: ./uploads
+  upload_dir: "./uploads" # 文件上传目录
 
+# 大语言模型 (LLM) 配置
 llm:
-  base_url: "https://api.deepseek.com"
-  api_key: "your-api-key-here"
-  model: "deepseek-chat"
+  use: "openai_v1" # 当前使用的LLM配置键名
+  llm_config:
+    openai_v1: # 一个具体的LLM配置，键名可自定义
+      base_url: "https://api.openai.com/v1" # LLM API的基础URL
+      api_key: "your_openai_api_key" # LLM API密钥
+      model: "gpt-4-turbo" # 使用的模型名称
+      input_price: 10.0 # 每百万输入token的价格（单位：元）
+      output_price: 30.0 # 每百万输出token的价格（单位：元）
+    another_provider: # 可以添加其他LLM供应商的配置
+      base_url: "https://api.another-provider.com/v1"
+      api_key: "your_another_provider_api_key"
+      model: "model-name"
+      input_price: 5.0
+      output_price: 15.0
 
+# 数据库配置
 database:
-  source: "storytrim.db"
+  source: "story-trim.db" # 数据库文件路径 (对于SQLite)
 
+# 应用内存/行为配置
 memory:
-  summary_limit: 1          # 每次携带的前章摘要数
-  encyclopedia_interval: 50 # 百科更新频率
-  mock_stream_speed: 35     # 拟真流延迟(ms)
+  summary_limit: 10 # 摘要限制
+  encyclopedia_interval: 100 # 百科全书生成间隔
+  mock_stream_speed: 50 # 模拟流式响应速度（单位：毫秒）
 
+# 日志配置
 log:
-  level: "debug"   # debug, info, warn, error
-  format: "console" # console, json
+  level: "info" # 日志级别 (e.g., "debug", "info", "warn", "error")
+  format: "console" # 日志格式 (e.g., "console" for human-readable, "json" for machine-readable)
 
+# 认证配置
 auth:
-  jwt_secret: "your-secret-key"
+  jwt_secret: "a_very_secure_secret_key_that_is_long_and_random" # JWT签名密钥，请务必修改为一个长且随机的字符串

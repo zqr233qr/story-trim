@@ -28,25 +28,16 @@ func (r *TaskRepository) UpdateTask(ctx context.Context, task *model.Task) error
 	}).Error
 }
 
-func (r *TaskRepository) GetTaskByID(ctx context.Context, id string) (*model.Task, error) {
-	var t model.Task
-	if err := r.db.WithContext(ctx).First(&t, "id = ?", id).Error; err != nil {
+func (r *TaskRepository) GetTaskByIDs(ctx context.Context, ids []string) ([]*model.Task, error) {
+	var ts []*model.Task
+	if err := r.db.WithContext(ctx).First(&ts, "id in ?", ids).Error; err != nil {
 		return nil, err
 	}
-	return &t, nil
-}
-
-func (r *TaskRepository) GetLatestFullTrimTask(ctx context.Context, userID, bookID uint) (*model.Task, error) {
-	var t model.Task
-	if err := r.db.WithContext(ctx).Where("user_id = ? AND book_id = ? AND type = ?", userID, bookID, "full_trim").Order("created_at DESC").First(&t).Error; err != nil {
-		return nil, err
-	}
-	return &t, nil
+	return ts, nil
 }
 
 type TaskRepositoryInterface interface {
 	CreateTask(ctx context.Context, task *model.Task) error
 	UpdateTask(ctx context.Context, task *model.Task) error
-	GetTaskByID(ctx context.Context, id string) (*model.Task, error)
-	GetLatestFullTrimTask(ctx context.Context, userID, bookID uint) (*model.Task, error)
+	GetTaskByIDs(ctx context.Context, ids []string) ([]*model.Task, error)
 }

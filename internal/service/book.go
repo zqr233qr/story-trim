@@ -264,9 +264,14 @@ func (s *BookService) ListPrompts(ctx context.Context) ([]model.Prompt, error) {
 	return s.bookRepo.ListSystemPrompts(ctx)
 }
 
+func (s *BookService) DeleteBook(ctx context.Context, userID uint, bookID uint) error {
+	return s.bookRepo.DeleteBook(ctx, bookID)
+}
+
 type BookServiceInterface interface {
 	ListUserBooks(ctx context.Context, userID uint) ([]model.Book, error)
 	GetBookDetailByID(ctx context.Context, userID uint, bookID uint) (*BookDetailResp, error)
+	DeleteBook(ctx context.Context, userID uint, bookID uint) error
 	GetChaptersContent(ctx context.Context, userID uint, ids []uint) ([]ChapterContentResp, error)
 	GetChaptersTrimmed(ctx context.Context, userID uint, ids []uint, promptID uint) ([]ChapterTrimResp, error)
 	GetContentsTrimmed(ctx context.Context, userID uint, md5s []string, promptID uint) ([]ContentTrimResp, error)

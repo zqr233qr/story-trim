@@ -235,4 +235,12 @@ export const api = {
       onError("WebSocket Error");
     });
   },
+
+  // 删除书籍
+  deleteBook: async (id: number) => {
+    return request({
+      url: `/books/${id}`,
+      method: 'DELETE',
+    });
+  },
 };

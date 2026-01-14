@@ -20,7 +20,6 @@ export class AppRepository implements IBookRepository {
         total_chapters INTEGER,
         process_status TEXT,
         sync_state INTEGER DEFAULT 0,
-        synced_count INTEGER DEFAULT 0,
         created_at INTEGER
       )
     `);
@@ -116,7 +115,6 @@ export class AppRepository implements IBookRepository {
       title: r.title,
       bookMD5: r.book_md5,
       cloudId: r.cloud_id,
-      syncedCount: r.synced_count || 0,
       totalChapters: r.total_chapters,
       processStatus: r.process_status,
       platform: 'app',
@@ -134,7 +132,6 @@ export class AppRepository implements IBookRepository {
       title: r.title,
       bookMD5: r.book_md5,
       cloudId: r.cloud_id,
-      syncedCount: r.synced_count || 0,
       totalChapters: r.total_chapters,
       processStatus: r.process_status,
       platform: 'app',
@@ -144,28 +141,25 @@ export class AppRepository implements IBookRepository {
   }
 
   async syncBookFromCloud(cloudBook: CloudBook): Promise<void> {
-    const existing = await db.select<any>('SELECT id, cloud_id, sync_state FROM books WHERE book_md5 = ?', [cloudBook.book_md5]);
+    const existing = await db.select<any>(
+      'SELECT id, sync_state FROM books WHERE cloud_id = ?',
+      [cloudBook.id]
+    );
 
     if (existing.length > 0) {
-      const existingBook = existing[0];
-      console.log('[Sync] Book already exists locally:', cloudBook.title, 'sync_state:', existingBook.sync_state);
-
-      if (existingBook.sync_state === 0 || existingBook.sync_state === undefined) {
+      if (existing[0].sync_state === 0) {
         await db.execute(
-          'UPDATE books SET cloud_id = ?, sync_state = 1, synced_count = total_chapters WHERE id = ?',
-          [cloudBook.id, existingBook.id]
+          'UPDATE books SET sync_state = 1 WHERE id = ?',
+          [existing[0].id]
         );
-        console.log('[Sync] Updated local book to synced state:', cloudBook.title);
       }
       return;
     }
 
     await db.execute(
-      'INSERT INTO books (cloud_id, book_md5, title, total_chapters, process_status, sync_state, synced_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [cloudBook.id, cloudBook.book_md5 || '', cloudBook.title, cloudBook.total_chapters, 'ready', 2, 0, Date.now()]
+      'INSERT INTO books (cloud_id, book_md5, title, total_chapters, process_status, sync_state, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [cloudBook.id, cloudBook.book_md5 || '', cloudBook.title, cloudBook.total_chapters, 'ready', 2, Date.now()]
     );
-
-    console.log('[Sync] Created cloud-only book:', cloudBook.title);
   }
 
   async getChapters(bookId: number | string): Promise<LocalChapter[]> {
@@ -238,6 +232,21 @@ export class AppRepository implements IBookRepository {
         `INSERT OR REPLACE INTO contents (chapter_md5, raw_content) VALUES ${chapters.map(() => '(?, ?)').join(',')}`,
         chapters.flatMap(c => [c.md5, c.content])
       );
+    });
+  }
+
+  async deleteBook(id: number | string): Promise<void> {
+    const chapters = await db.select<any>('SELECT md5 FROM chapters WHERE book_id = ?', [id]);
+    const md5s = chapters.map(c => c.md5);
+
+    await db.transaction(async () => {
+      await db.execute('DELETE FROM chapters WHERE book_id = ?', [id]);
+      await db.execute('DELETE FROM books WHERE id = ?', [id]);
+      await db.execute('DELETE FROM reading_history WHERE book_id = ?', [id]);
+
+      if (md5s.length > 0) {
+        await db.execute(`DELETE FROM contents WHERE chapter_md5 IN (${md5s.map(() => '?').join(',')})`, md5s);
+      }
     });
   }
 

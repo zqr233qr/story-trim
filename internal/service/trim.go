@@ -87,7 +87,7 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 
 	systemPrompt := s.buildSystemPrompt(prompt, raw.Content)
 
-	llmResp, err := s.llmService.LlmWithStream(ctx, systemPrompt, raw.Content)
+	llmResp, err := s.llmService.LlmWithStream(ctx, systemPrompt.systemPrompt, raw.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +122,8 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 				llmResp.PromptTokens = resp.Usage.PromptTokens
 				llmResp.CompletionTokens = resp.Usage.CompletionTokens
 
-				llmResp.InputCost = float64(llmResp.PromptTokens) * float64(llmResp.PromptTokens) / million
-				llmResp.OutputCost = float64(llmResp.CompletionTokens) * float64(llmResp.CompletionTokens) / million
+				llmResp.InputCost = float64(llmResp.PromptTokens) * llmResp.InputMTokenPrice / million
+				llmResp.OutputCost = float64(llmResp.CompletionTokens) * llmResp.OutputMTokenPrice / million
 				llmResp.TotalCost = llmResp.InputCost + llmResp.OutputCost
 			}
 		}
@@ -140,10 +140,11 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 			trimResult := &model.TrimResult{
 				ChapterMD5:       chap.ChapterMD5,
 				PromptID:         promptID,
-				TrimRate:         trimRate,
-				ID:               userID,
 				TrimContent:      trimmedContent,
 				TrimContentWords: trimWords,
+				WordsRange:       systemPrompt.WordsRange,
+				TrimRate:         trimRate,
+				TargetRateRange:  systemPrompt.TargetRateRange,
 				TotalCost:        llmResp.TotalCost,
 				InputCost:        llmResp.InputCost,
 				OutputCost:       llmResp.OutputCost,
@@ -152,6 +153,7 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 				CompletionTokens: llmResp.CompletionTokens,
 				TakeTime:         takeTime,
 				LlmName:          llmResp.LlmName,
+				CreatedAt:        time.Time{},
 			}
 
 			if err := s.bookRepo.SaveTrimResult(context.Background(), trimResult); err != nil {
@@ -178,26 +180,36 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 	return ch, nil
 }
 
-func (s *TrimService) buildSystemPrompt(prompt *model.Prompt, rawContent string) string {
+type systemPromptData struct {
+	systemPrompt    string
+	WordsRange      string
+	TargetRateRange string
+}
+
+func (s *TrimService) buildSystemPrompt(prompt *model.Prompt, rawContent string) systemPromptData {
 	rawLen := len([]rune(rawContent))
 	minWords := int(float64(rawLen) * prompt.TargetRatioMin)
 	maxWords := int(float64(rawLen) * prompt.TargetRatioMax)
 
 	data := struct {
-		WordsRange              string
-		TargetResidualRateRange string
-		PromptContent           string
-		Summaries               string
-		Encyclopedia            string
+		WordsRange      string
+		TargetRateRange string
+		PromptContent   string
+		Summaries       string
+		Encyclopedia    string
 	}{
-		WordsRange:              fmt.Sprintf("%d-%d", minWords, maxWords),
-		TargetResidualRateRange: fmt.Sprintf("%d-%d", int(prompt.TargetRatioMin*100), int(prompt.TargetRatioMax*100)),
-		PromptContent:           prompt.PromptContent,
+		WordsRange:      fmt.Sprintf("%d-%d", minWords, maxWords),
+		TargetRateRange: fmt.Sprintf("%d-%d%", int(prompt.TargetRatioMin*100), int(prompt.TargetRatioMax*100)),
+		PromptContent:   prompt.PromptContent,
 	}
 
 	var buf bytes.Buffer
 	_ = s.tmpl.Execute(&buf, data)
-	return buf.String()
+	return systemPromptData{
+		systemPrompt:    buf.String(),
+		WordsRange:      data.WordsRange,
+		TargetRateRange: data.TargetRateRange,
+	}
 }
 
 func (s *TrimService) mockStreaming(content string) <-chan string {
@@ -245,7 +257,7 @@ func (s *TrimService) TrimChatByChapterID(ctx context.Context, userID uint, chap
 	systemPrompt := s.buildSystemPrompt(prompt, rawContent.Content)
 
 	t := time.Now()
-	llmResp, err := s.llmService.Llm(ctx, systemPrompt, rawContent.Content)
+	llmResp, err := s.llmService.Llm(ctx, systemPrompt.systemPrompt, rawContent.Content)
 	if err != nil {
 		return err
 	}
@@ -259,12 +271,13 @@ func (s *TrimService) TrimChatByChapterID(ctx context.Context, userID uint, chap
 	trimRate := ((float64(trimContentWords)/float64(rawContentWords))*10000 + 0.5) / 100.0
 
 	trimResult := &model.TrimResult{
-		ID:               userID,
 		ChapterMD5:       chapter.ChapterMD5,
 		PromptID:         promptID,
 		TrimContent:      trimContent,
 		TrimContentWords: trimContentWords,
+		WordsRange:       systemPrompt.WordsRange,
 		TrimRate:         trimRate,
+		TargetRateRange:  systemPrompt.TargetRateRange,
 		TotalCost:        llmResp.TotalCost,
 		InputCost:        llmResp.InputCost,
 		OutputCost:       llmResp.OutputCost,

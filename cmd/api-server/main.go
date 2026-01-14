@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load("configs/config.yaml")
+	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load config: %v", err))
 	}
@@ -52,11 +52,12 @@ func main() {
 		{
 			protected.GET("/books", deps.BookHandler.List)
 			protected.GET("/books/:id", deps.BookHandler.GetDetail)
+			protected.DELETE("/books/:id", deps.BookHandler.DeleteBook)
 			protected.POST("/books/sync-local", deps.BookHandler.SyncLocalBook)
 			protected.GET("/trim/stream/by-md5", deps.TrimHandler.TrimStreamByMD5)
 			protected.GET("/trim/stream/by-id", deps.TrimHandler.TrimStreamByChapterID)
 			protected.POST("/tasks/full-trim", deps.TaskHandler.SubmitFullTrimTask)
-			protected.GET("/tasks/:id/progress", deps.TaskHandler.GetTaskProgress)
+			protected.GET("/tasks/progress", deps.TaskHandler.GetTasksProgress)
 		}
 
 		api.GET("/common/prompts", deps.BookHandler.ListPrompts)

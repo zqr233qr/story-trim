@@ -75,9 +75,34 @@ export const useBookStore = defineStore('book', () => {
       }
 
       const localBooks = await repo.getBooks()
-      books.value = localBooks.map(b => ({
+      console.log('[FetchBooks] 本地书籍数量:', localBooks.length);
+      for (const b of localBooks) {
+        console.log('[FetchBooks] 本地书籍:', {
+          id: b.id,
+          title: b.title,
+          bookMD5: b.bookMD5,
+          syncState: b.syncState,
+          cloudId: b.cloudId
+        });
+      }
+
+      const bookMap = new Map<string, any>();
+      for (const b of localBooks) {
+        const key = b.bookMD5;
+        if (!bookMap.has(key)) {
+          bookMap.set(key, b);
+        } else {
+          const existing = bookMap.get(key);
+          if ((b.syncState || 2) < (existing.syncState || 2)) {
+            bookMap.set(key, b);
+          }
+        }
+      }
+
+      books.value = Array.from(bookMap.values()).map(b => ({
         id: Number(b.id),
         title: b.title,
+        book_md5: b.bookMD5,
         total_chapters: b.totalChapters,
         created_at: new Date(b.createdAt).toISOString(),
         status: b.processStatus,
@@ -437,16 +462,16 @@ export const useBookStore = defineStore('book', () => {
     syncProgress.value = 1;
     let cloudBookId = book.cloudId || 0;
     const BATCH_SIZE = 200;
-    let syncedCount = book.syncedCount || 0;
+    let offset = 0;
 
     try {
-      while (syncedCount < total) {
-        const chunk = await repo.getChaptersBatch(bookId, syncedCount, BATCH_SIZE);
+      while (offset < total) {
+        const chunk = await repo.getChaptersBatch(bookId, offset, BATCH_SIZE);
         if (chunk.length === 0) break;
 
         const payload = {
             book_name: book.title,
-            book_md5: book.bookMD5,
+            book_md5: book.bookMD5 || '',
             cloud_book_id: cloudBookId || undefined,
             total_chapters: total,
             chapters: chunk.map(c => ({
@@ -473,13 +498,13 @@ export const useBookStore = defineStore('book', () => {
                 await db.execute('UPDATE chapters SET cloud_id = ? WHERE id = ?', [mapping.cloud_id, mapping.local_id]);
             }
 
-            await db.execute('UPDATE books SET cloud_id = ?, sync_state = ?, synced_count = ? WHERE id = ?', [cloudBookId, 1, syncedCount + chunk.length, bookId]);
+            await db.execute('UPDATE books SET cloud_id = ?, sync_state = 1 WHERE id = ?', [cloudBookId, bookId]);
         } else {
             throw new Error(res.msg || 'Sync failed');
         }
 
-        syncedCount += chunk.length;
-        syncProgress.value = Math.floor((syncedCount / total) * 100);
+        offset += chunk.length;
+        syncProgress.value = Math.floor((offset / total) * 100);
       }
 
       if (cloudBookId > 0) {
@@ -552,12 +577,38 @@ export const useBookStore = defineStore('book', () => {
     }, 5000)
   }
 
+  const deleteBook = async (bookId: number, syncState: number, cloudId?: number) => {
+    console.log('[DeleteBook] params:', { bookId, syncState, cloudId });
+    try {
+      // #ifdef APP-PLUS
+      if (cloudId) {
+        console.log('[DeleteBook] calling api.deleteBook with cloudId:', cloudId);
+        await api.deleteBook(cloudId);
+      }
+      console.log('[DeleteBook] calling repo.deleteBook with bookId:', bookId);
+      await repo.deleteBook(bookId);
+      // #endif
+
+      // #ifndef APP-PLUS
+      console.log('[DeleteBook] calling api.deleteBook with bookId:', bookId);
+      await api.deleteBook(bookId);
+      // #endif
+
+      books.value = books.value.filter(b => Number(b.id) !== bookId);
+      uni.showToast({ title: '已删除', icon: 'none' });
+    } catch (e: any) {
+      console.error('[DeleteBook] 删除失败:', e);
+      uni.showToast({ title: '删除失败', icon: 'none' });
+    }
+  }
+
   return {
     books, activeBook, prompts, isLoading, uploadProgress, syncProgress, activeChapter,
     init, fetchBooks, fetchBookDetail, fetchChapter,
     createBookRecord, insertChapters, saveChapterTrim,
     setActiveBook, setChapter, fetchPrompts,
     fetchChapterTrim, fetchBatchChapters, updateProgress, syncBookToCloud,
+    deleteBook,
     startFullTrimTask, monitorFullTrimTask
   }
 })

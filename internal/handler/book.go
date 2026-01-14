@@ -77,6 +77,17 @@ func (h *BookHandler) ImportBookFile(c *gin.Context) {
 	response.Success(c, nil)
 }
 
+func (h *BookHandler) DeleteBook(c *gin.Context) {
+	bookIDStr := c.Param("id")
+	bookID := cast.ToUint(bookIDStr)
+	err := h.svc.DeleteBook(c.Request.Context(), bookID, GetUserID(c))
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode, err.Error())
+		return
+	}
+	response.Success(c, nil)
+}
+
 func (h *BookHandler) GetDetail(c *gin.Context) {
 	bookIDStr := c.Param("id")
 	bookID := cast.ToUint(bookIDStr)

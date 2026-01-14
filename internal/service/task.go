@@ -98,12 +98,8 @@ func (s *TaskService) SubmitFullTrimTask(ctx context.Context, userID uint, bookI
 	return taskID, nil
 }
 
-func (s *TaskService) GetTaskByID(ctx context.Context, id string) (*model.Task, error) {
-	return s.repo.GetTaskByID(ctx, id)
-}
-
-func (s *TaskService) GetLatestFullTrimTask(ctx context.Context, userID, bookID uint) (*model.Task, error) {
-	return s.repo.GetLatestFullTrimTask(ctx, userID, bookID)
+func (s *TaskService) GetTaskByIDs(ctx context.Context, ids []string) ([]*model.Task, error) {
+	return s.repo.GetTaskByIDs(ctx, ids)
 }
 
 type FullTrimJob struct {
@@ -202,8 +198,7 @@ f:
 
 type TaskServiceInterface interface {
 	SubmitFullTrimTask(ctx context.Context, userID uint, bookID uint, promptID uint) (string, error)
-	GetTaskByID(ctx context.Context, id string) (*model.Task, error)
-	GetLatestFullTrimTask(ctx context.Context, userID, bookID uint) (*model.Task, error)
+	GetTaskByIDs(ctx context.Context, ids []string) ([]*model.Task, error)
 	Start()
 	Stop()
 }
