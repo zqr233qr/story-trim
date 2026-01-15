@@ -12,6 +12,8 @@ import (
 
 type BookService struct {
 	bookRepo repository.BookRepositoryInterface
+	taskRepo repository.TaskRepositoryInterface
+	tkm      *tiktoken.Tiktoken
 }
 
 type Splitter interface {
@@ -24,15 +26,56 @@ type SplitChapter struct {
 	Content string
 }
 
-func NewBookService(bookRepo repository.BookRepositoryInterface) *BookService {
-	return &BookService{bookRepo: bookRepo}
+func NewBookService(bookRepo repository.BookRepositoryInterface, taskRepo repository.TaskRepositoryInterface) *BookService {
+	tkm, _ := tiktoken.GetEncoding("cl100k_base")
+	return &BookService{
+		bookRepo: bookRepo,
+		taskRepo: taskRepo,
+		tkm:      tkm,
+	}
 }
 
-func (s *BookService) ListUserBooks(ctx context.Context, userID uint) ([]model.Book, error) {
-	return s.bookRepo.GetBooksByUserID(ctx, userID)
+func (s *BookService) ListUserBooks(ctx context.Context, userID uint) ([]BookListResp, error) {
+	books, err := s.bookRepo.GetBooksByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks, err := s.taskRepo.GetActiveTasksByUserID(ctx, userID)
+	if err != nil {
+		// Log error but continue with empty tasks? Or return error?
+		// For list, it's better to return books even if task service is down, but strictly speaking err is safer.
+		// Let's assume strict consistency and return error for now.
+		return nil, err
+	}
+
+	taskMap := make(map[uint]*model.Task)
+	for _, t := range tasks {
+		// Only care about full_trim for now as per requirement
+		if t.Type == "full_trim" {
+			taskMap[t.BookID] = t
+		}
+	}
+
+	var res []BookListResp
+	for _, b := range books {
+		resp := BookListResp{
+			Book:             b,
+			FullTrimStatus:   "idle", // Default
+			FullTrimProgress: 0,
+		}
+
+		if t, ok := taskMap[b.ID]; ok {
+			resp.FullTrimStatus = t.Status
+			resp.FullTrimProgress = t.Progress
+		}
+		res = append(res, resp)
+	}
+
+	return res, nil
 }
 
-func (s *BookService) GetBookDetailByID(ctx context.Context, userID uint, bookID uint) (*BookDetailResp, error) {
+func (s *BookService) GetBookDetailByID(ctx context.Context, bookID uint) (*BookDetailResp, error) {
 	book, err := s.bookRepo.GetBookByID(ctx, bookID)
 	if err != nil {
 		return nil, errno.ErrBookNotFound
@@ -43,21 +86,9 @@ func (s *BookService) GetBookDetailByID(ctx context.Context, userID uint, bookID
 		return nil, err
 	}
 
-	trimmedMap, err := s.bookRepo.GetAllBookTrimmedPromptIDs(ctx, userID, bookID)
-	if err != nil {
-		trimmedMap = make(map[uint][]uint)
-	}
-
-	history, err := s.bookRepo.GetReadingHistory(ctx, userID, bookID)
-	if err != nil {
-		return nil, err
-	}
-
 	return &BookDetailResp{
-		Book:           *book,
-		Chapters:       chapters,
-		TrimmedMap:     trimmedMap,
-		ReadingHistory: history,
+		Book:     *book,
+		Chapters: chapters,
 	}, nil
 }
 
@@ -80,6 +111,10 @@ func (s *BookService) GetChaptersContent(ctx context.Context, userID uint, ids [
 		})
 	}
 	return res, nil
+}
+
+func (s *BookService) GetReadingProgress(ctx context.Context, userID uint, bookID uint) (*model.ReadingHistory, error) {
+	return s.bookRepo.GetReadingHistory(ctx, userID, bookID)
 }
 
 func (s *BookService) GetChaptersTrimmed(ctx context.Context, userID uint, ids []uint, promptID uint) ([]ChapterTrimResp, error) {
@@ -172,15 +207,11 @@ func (s *BookService) SyncLocalBook(ctx context.Context, req *SyncLocalBookReq, 
 		}
 	}
 
-	tkm, _ := tiktoken.GetEncoding("cl100k_base")
 	var chapterContents []*model.ChapterContent
 	var domainChaps []model.Chapter
 
 	for _, c := range req.Chapters {
-		tokenCount := 0
-		if tkm != nil {
-			tokenCount = len(tkm.Encode(c.Content, nil, nil))
-		}
+		tokenCount := len(s.tkm.Encode(c.Content, nil, nil))
 
 		chapterContents = append(chapterContents, &model.ChapterContent{
 			ChapterMD5: c.MD5,
@@ -269,8 +300,9 @@ func (s *BookService) DeleteBook(ctx context.Context, userID uint, bookID uint) 
 }
 
 type BookServiceInterface interface {
-	ListUserBooks(ctx context.Context, userID uint) ([]model.Book, error)
-	GetBookDetailByID(ctx context.Context, userID uint, bookID uint) (*BookDetailResp, error)
+	ListUserBooks(ctx context.Context, userID uint) ([]BookListResp, error)
+	GetBookDetailByID(ctx context.Context, bookID uint) (*BookDetailResp, error)
+	GetReadingProgress(ctx context.Context, userID uint, bookID uint) (*model.ReadingHistory, error)
 	DeleteBook(ctx context.Context, userID uint, bookID uint) error
 	GetChaptersContent(ctx context.Context, userID uint, ids []uint) ([]ChapterContentResp, error)
 	GetChaptersTrimmed(ctx context.Context, userID uint, ids []uint, promptID uint) ([]ChapterTrimResp, error)
@@ -279,6 +311,12 @@ type BookServiceInterface interface {
 	UpdateReadingProgress(ctx context.Context, userID uint, bookID uint, chapterID uint, promptID uint) error
 	RegisterTrimStatusByMD5(ctx context.Context, userID uint, md5 string, promptID uint) error
 	ListPrompts(ctx context.Context) ([]model.Prompt, error)
+}
+
+type BookListResp struct {
+	model.Book
+	FullTrimStatus   string `json:"full_trim_status"`
+	FullTrimProgress int    `json:"full_trim_progress"`
 }
 
 type SyncLocalChapter struct {
@@ -309,10 +347,8 @@ type SyncLocalBookResp struct {
 }
 
 type BookDetailResp struct {
-	Book           model.Book            `json:"book"`
-	Chapters       []model.Chapter       `json:"chapters"`
-	TrimmedMap     map[uint][]uint       `json:"trimmed_map"`
-	ReadingHistory *model.ReadingHistory `json:"reading_history"`
+	Book     model.Book      `json:"book"`
+	Chapters []model.Chapter `json:"chapters"`
 }
 
 type ChapterContentResp struct {

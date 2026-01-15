@@ -21,26 +21,31 @@ func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM) (*A
 	authService := service.NewAuthService(authRepository, jwtSecret)
 	authHandler := handler.NewAuthHandler(authService)
 	bookRepository := repository.NewBookRepository(db)
-	bookService := service.NewBookService(bookRepository)
+	taskRepository := repository.NewTaskRepository(db)
+	bookService := service.NewBookService(bookRepository, taskRepository)
 	bookHandler := handler.NewBookHandler(bookService)
 	llmService := service.NewLlmService(llm)
 	trimService := service.NewTrimService(bookRepository, llmService)
 	trimHandler := handler.NewTrimHandler(trimService)
-	taskRepository := repository.NewTaskRepository(db)
 	taskService := provideTaskService(taskRepository, bookRepository, trimService)
 	taskHandler := handler.NewTaskHandler(taskService)
-	apiComponents := NewAPIComponents(authHandler, bookHandler, trimHandler, taskHandler, authService)
+	contentRepository := repository.NewContentRepository(db)
+	contentService := service.NewContentService(contentRepository)
+	contentHandler := handler.NewContentHandler(contentService)
+	apiComponents := NewAPIComponents(authHandler, bookHandler, trimHandler, taskHandler, contentHandler, authService, taskService)
 	return apiComponents, nil
 }
 
 // wire.go:
 
 type APIComponents struct {
-	AuthHandler *handler.AuthHandler
-	BookHandler *handler.BookHandler
-	TrimHandler *handler.TrimHandler
-	TaskHandler *handler.TaskHandler
-	AuthService service.AuthServiceInterface
+	AuthHandler    *handler.AuthHandler
+	BookHandler    *handler.BookHandler
+	TrimHandler    *handler.TrimHandler
+	TaskHandler    *handler.TaskHandler
+	ContentHandler *handler.ContentHandler
+	AuthService    service.AuthServiceInterface
+	TaskService    service.TaskServiceInterface
 }
 
 func NewAPIComponents(
@@ -48,14 +53,18 @@ func NewAPIComponents(
 	bookHandler *handler.BookHandler,
 	trimHandler *handler.TrimHandler,
 	taskHandler *handler.TaskHandler,
+	contentHandler *handler.ContentHandler,
 	authService service.AuthServiceInterface,
+	taskService service.TaskServiceInterface,
 ) *APIComponents {
 	return &APIComponents{
-		AuthHandler: authHandler,
-		BookHandler: bookHandler,
-		TrimHandler: trimHandler,
-		TaskHandler: taskHandler,
-		AuthService: authService,
+		AuthHandler:    authHandler,
+		BookHandler:    bookHandler,
+		TrimHandler:    trimHandler,
+		TaskHandler:    taskHandler,
+		ContentHandler: contentHandler,
+		AuthService:    authService,
+		TaskService:    taskService,
 	}
 }
 

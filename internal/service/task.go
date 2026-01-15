@@ -102,6 +102,14 @@ func (s *TaskService) GetTaskByIDs(ctx context.Context, ids []string) ([]*model.
 	return s.repo.GetTaskByIDs(ctx, ids)
 }
 
+func (s *TaskService) GetActiveTasks(ctx context.Context, userID uint) ([]*repository.TaskWithDetail, error) {
+	return s.repo.GetActiveTasksWithDetails(ctx, userID)
+}
+
+func (s *TaskService) GetActiveTasksCount(ctx context.Context, userID uint) (int64, error) {
+	return s.repo.GetActiveTasksCountByUserID(ctx, userID)
+}
+
 type FullTrimJob struct {
 	s        *TaskService
 	task     *model.Task
@@ -199,6 +207,8 @@ f:
 type TaskServiceInterface interface {
 	SubmitFullTrimTask(ctx context.Context, userID uint, bookID uint, promptID uint) (string, error)
 	GetTaskByIDs(ctx context.Context, ids []string) ([]*model.Task, error)
+	GetActiveTasks(ctx context.Context, userID uint) ([]*repository.TaskWithDetail, error)
+	GetActiveTasksCount(ctx context.Context, userID uint) (int64, error)
 	Start()
 	Stop()
 }

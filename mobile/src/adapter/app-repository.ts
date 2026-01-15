@@ -202,9 +202,11 @@ export class AppRepository implements IBookRepository {
   }
 
   async createBook(title: string, total: number, bookMD5: string): Promise<number> {
-    const existing = await db.select<any>('SELECT id, title, sync_state FROM books WHERE book_md5 = ?', [bookMD5]);
+    console.log('[Repo] createBook called:', { title, total, bookMD5 });
+    const existing = await db.select<any>('SELECT id, title, sync_state, book_md5 FROM books WHERE book_md5 = ?', [bookMD5]);
 
     if (existing.length > 0) {
+      console.log('[Repo] Book already exists:', existing[0]);
       const existingBook = existing[0];
       if (existingBook.sync_state === 2) {
         throw new Error(`该书籍已存在于云端，无需重复导入`);
@@ -218,6 +220,7 @@ export class AppRepository implements IBookRepository {
       [title, bookMD5, total, 'ready', Date.now()]
     );
     const res = await db.select<any>('SELECT last_insert_rowid() as id');
+    console.log('[Repo] Book created with ID:', res[0].id);
     return res[0].id;
   }
 

@@ -52,16 +52,26 @@ func main() {
 		{
 			protected.GET("/books", deps.BookHandler.List)
 			protected.GET("/books/:id", deps.BookHandler.GetDetail)
+			protected.GET("/books/:id/progress", deps.BookHandler.GetProgress)
 			protected.DELETE("/books/:id", deps.BookHandler.DeleteBook)
 			protected.POST("/books/sync-local", deps.BookHandler.SyncLocalBook)
+			protected.POST("/chapters/content", deps.BookHandler.GetChaptersContent)
+			protected.POST("/chapters/trim", deps.BookHandler.GetChaptersTrimmed)
+			protected.POST("/contents/trim", deps.BookHandler.GetContentsTrimmed)
 			protected.GET("/trim/stream/by-md5", deps.TrimHandler.TrimStreamByMD5)
 			protected.GET("/trim/stream/by-id", deps.TrimHandler.TrimStreamByChapterID)
 			protected.POST("/tasks/full-trim", deps.TaskHandler.SubmitFullTrimTask)
 			protected.GET("/tasks/progress", deps.TaskHandler.GetTasksProgress)
+			protected.GET("/tasks/active", deps.TaskHandler.GetActiveTasks)
+			protected.GET("/tasks/active/count", deps.TaskHandler.GetActiveTasksCount)
+			protected.POST("/chapters/status", deps.ContentHandler.GetChapterTrimStatus)
+			protected.POST("/contents/status", deps.ContentHandler.GetContentTrimStatus)
 		}
 
 		api.GET("/common/prompts", deps.BookHandler.ListPrompts)
 	}
+
+	deps.TaskService.Start()
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -82,6 +92,8 @@ func main() {
 	log.Info().Msg("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	deps.TaskService.Stop()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error().Msg(fmt.Sprintf("Server forced to shutdown: %v", err))

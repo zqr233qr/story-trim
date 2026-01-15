@@ -1,154 +1,148 @@
-<script lang="ts">
-import { useBookStore } from "@/stores/book";
-
-// 逻辑层：负责接收数据并入库
-export default {
-  data() {
-    return {
-      tempBookId: 0,
-      bookIdPromise: null as Promise<number> | null,
-      bookIdResolver: null as ((id: number) => void) | null,
-      parseStartTime: 0,
-    };
-  },
-  created() {
-    this.resetBookLock();
-  },
-  methods: {
-    resetBookLock() {
-      this.tempBookId = 0;
-      this.bookIdPromise = new Promise((resolve) => {
-        this.bookIdResolver = resolve;
-      });
-    },
-
-    // 1. 接收书籍基本信息
-    async onBookInfo(info: { title: string; total: number; bookMD5: string }) {
-      console.log(
-        "[Logic] Creating book:",
-        info.title,
-        "Chapters:",
-        info.total,
-      );
-      this.parseStartTime = Date.now();
-      this.resetBookLock(); // 重置锁
-
-      const bookStore = useBookStore();
-      try {
-        const id = await bookStore.createBookRecord(
-          info.title,
-          info.total,
-          info.bookMD5,
-        );
-        this.tempBookId = id;
-        if (this.bookIdResolver) this.bookIdResolver(id); // 解锁
-      } catch (e: any) {
-        console.error("[Logic] Create book error:", e);
-        this.onUploadError(e.message);
-        this.resetBookLock();
-      }
-    },
-
-    // 2. 接收批量章节数据
-    async onBatchChapters(batch: { chapters: any[]; progress: number }) {
-      // 等待书籍 ID 生成
-      if (!this.bookIdPromise) return;
-      const bookId = await this.bookIdPromise;
-
-      const bookStore = useBookStore();
-      bookStore.uploadProgress = batch.progress;
-
-      try {
-        await bookStore.insertChapters(bookId, batch.chapters);
-      } catch (e: any) {
-        console.error("Batch insert failed", e);
-      }
-    },
-    // ...,
-
-    // 3. 完成
-    async onParseSuccess() {
-      const time = Date.now() - this.parseStartTime;
-      console.log(`[Logic] Parse finished in ${time}ms`);
-
-      const bookStore = useBookStore();
-      bookStore.uploadProgress = 100;
-      uni.hideLoading();
-      uni.showToast({ title: "导入成功", icon: "success" });
-
-      // 稍等刷新，让 Toast 显示一会
-      setTimeout(() => {
-        bookStore.fetchBooks();
-        bookStore.uploadProgress = 0; // 重置进度条
-      }, 1000);
-    },
-
-    onUploadError(msg: string) {
-      uni.hideLoading();
-      const bookStore = useBookStore();
-      bookStore.uploadProgress = 0;
-      uni.showModal({ title: "导入失败", content: msg, showCancel: false });
-    },
-
-    // UI Loading 控制
-    showParsingLoading() {
-      // 实际上使用了自定义进度条，所以不需要 uni.showLoading
-    },
-  },
-};
-</script>
-
 <script setup lang="ts">
-import { ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { ref, computed, getCurrentInstance } from "vue";
+import { onShow, onHide } from "@dcloudio/uni-app";
 import { useUserStore } from "@/stores/user";
 import { useBookStore } from "@/stores/book";
+import { taskApi } from "@/api/task";
 import BookCard from "@/components/BookCard.vue";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal.vue";
 import BookActionSheet from "@/components/BookActionSheet.vue";
 import TaskIndicator from "@/components/TaskIndicator.vue";
 import TaskProgressSheet from "@/components/TaskProgressSheet.vue";
-import { computed } from "vue";
 
 const userStore = useUserStore();
 const bookStore = useBookStore();
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0);
 const renderTrigger = ref(0);
 
+// 获取组件实例，用于暴露方法给 renderjs
+const instance = getCurrentInstance();
+
+// --- RenderJS 交互逻辑 ---
+const tempBookId = ref(0);
+let bookIdPromise: Promise<number> | null = null;
+let bookIdResolver: ((id: number) => void) | null = null;
+let parseStartTime = 0;
+
+const resetBookLock = () => {
+  tempBookId.value = 0;
+  bookIdPromise = new Promise((resolve) => {
+    bookIdResolver = resolve;
+  });
+};
+
+// 初始化锁
+resetBookLock();
+
+// 1. 接收书籍基本信息
+const onBookInfo = async (info: { title: string; total: number; bookMD5: string }) => {
+  console.log("[Logic] onBookInfo called:", info.title, "MD5:", info.bookMD5, "Chapters:", info.total);
+  parseStartTime = Date.now();
+  resetBookLock();
+
+  try {
+    const id = await bookStore.createBookRecord(
+      info.title,
+      info.total,
+      info.bookMD5,
+    );
+    console.log("[Logic] Book created with ID:", id);
+    tempBookId.value = id;
+    if (bookIdResolver) bookIdResolver(id);
+  } catch (e: any) {
+    console.error("[Logic] Create book error:", e);
+    onUploadError(e.message);
+    resetBookLock();
+  }
+};
+
+// 2. 接收批量章节数据
+const onBatchChapters = async (batch: { chapters: any[]; progress: number }) => {
+  console.log("[Logic] onBatchChapters called, progress:", batch.progress);
+  
+  if (!bookIdPromise) {
+    console.log("[Logic] No bookIdPromise, returning early");
+    return;
+  }
+  
+  try {
+    const bookId = await bookIdPromise;
+    console.log("[Logic] Inserting chapters for book:", bookId, "count:", batch.chapters.length);
+    bookStore.uploadProgress = batch.progress;
+    await bookStore.insertChapters(bookId, batch.chapters);
+    console.log("[Logic] Chapters inserted successfully");
+  } catch (e: any) {
+    console.error("Batch insert failed", e);
+  }
+};
+
+// 3. 完成
+const onParseSuccess = async () => {
+  const time = Date.now() - parseStartTime;
+  console.log(`[Logic] Parse finished in ${time}ms`);
+
+  bookStore.uploadProgress = 100;
+  uni.hideLoading();
+  uni.showToast({ title: "导入成功", icon: "success" });
+
+  setTimeout(() => {
+    bookStore.fetchBooks();
+    bookStore.uploadProgress = 0;
+  }, 1000);
+};
+
+const onUploadError = (msg: string) => {
+  uni.hideLoading();
+  bookStore.uploadProgress = 0;
+  uni.showModal({ title: "导入失败", content: msg, showCancel: false });
+};
+
+const showParsingLoading = () => {
+  console.log("[Logic] showParsingLoading called");
+};
+
+// 暴露方法给 renderjs
+if (instance && instance.proxy) {
+  (instance.proxy as any).onBookInfo = onBookInfo;
+  (instance.proxy as any).onBatchChapters = onBatchChapters;
+  (instance.proxy as any).onParseSuccess = onParseSuccess;
+  (instance.proxy as any).onUploadError = onUploadError;
+  (instance.proxy as any).showParsingLoading = showParsingLoading;
+}
+
+// --- End RenderJS Logic ---
+
 // 任务中心相关
 const showTaskSheet = ref(false);
-const activeTasks = computed(() => {
-  // 只展示正在进行的后台 AI 精简任务
-  return bookStore.books.filter(b => 
-    b.full_trim_status === 'running'
-  );
-});
+const hasActiveTasks = ref(false);
 
-// 删除相关
-const showDeleteModal = ref(false);
-const bookToDelete = ref<BookUI | null>(null);
+const refreshTasks = async () => {
+  try {
+    const res = await taskApi.getActiveTasksCount();
+    if (res.code === 0) {
+      hasActiveTasks.value = res.data?.has_active || false;
+    }
+  } catch (e) {
+    console.warn('[Shelf] Check active tasks failed', e);
+  }
+};
+
+const showTaskCenter = () => {
+  showTaskSheet.value = true;
+};
 
 // 底部操作菜单相关
 const showActionSheet = ref(false);
-const actionBook = ref<BookUI | null>(null);
-
-interface BookUI {
-  id: number | string;
-  title: string;
-  total_chapters: number;
-  status: string;
-  sync_state?: number;
-  cloud_id?: number;
-  book_trimmed_ids?: number[];
-  full_trim_status?: string;
-  full_trim_progress?: number;
-}
+const actionBook = ref<any>(null);
 
 onShow(async () => {
   // #ifdef APP-PLUS
   await bookStore.init();
   // #endif
-  bookStore.fetchBooks();
+  await bookStore.fetchBooks();
+  
+  // 检查是否有正在运行的任务
+  await refreshTasks();
 });
 
 const handleBookClick = (book: any) => {
@@ -162,14 +156,9 @@ const triggerUpload = () => {
 };
 
 const handleSyncBook = async (book: any) => {
-  console.log(
-    "[Shelf] handleSyncBook called, current syncProgress:",
-    bookStore.syncProgress,
-  );
   try {
     await bookStore.syncBookToCloud(book.id);
     uni.showToast({ title: "同步成功", icon: "success" });
-    // 重新拉取列表以更新 UI 状态
     await bookStore.fetchBooks();
   } catch (e: any) {
     if (e.message && e.message.includes("已存在云端")) {
@@ -181,6 +170,10 @@ const handleSyncBook = async (book: any) => {
   }
 };
 
+// 删除相关
+const showDeleteModal = ref(false);
+const bookToDelete = ref<any>(null);
+
 const handleDeleteBook = (book: any) => {
   bookToDelete.value = book;
   showDeleteModal.value = true;
@@ -189,7 +182,6 @@ const handleDeleteBook = (book: any) => {
 const handleBookOptions = (book: any) => {
   actionBook.value = book;
   showActionSheet.value = true;
-  // Haptic feedback
   uni.vibrateShort({});
 };
 
@@ -221,76 +213,86 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <scroll-view scroll-y class="h-screen bg-stone-50">
-    <view
-      class="p-6 pb-24"
-      :style="{ paddingTop: statusBarHeight + 10 + 'px' }"
-    >
-      <!-- Header -->
-      <view class="flex justify-between items-center mb-8 pt-4">
-        <view class="flex items-center gap-2">
-          <view class="bg-stone-900 text-white p-1.5 rounded-lg">
-            <text class="text-xs font-bold">ST</text>
+  <view class="flex flex-col h-screen bg-stone-50">
+    <scroll-view scroll-y class="flex-1">
+      <view
+        class="p-6 pb-32"
+        :style="{ paddingTop: statusBarHeight + 10 + 'px' }"
+      >
+        <!-- Header -->
+        <view class="flex justify-between items-center mb-8 pt-4">
+          <view class="flex items-center gap-2">
+            <view class="bg-stone-900 text-white p-1.5 rounded-lg">
+              <text class="text-xs font-bold">ST</text>
+            </view>
+            <text class="text-xl font-bold tracking-tight text-stone-800"
+              >StoryTrim</text
+            >
           </view>
-          <text class="text-xl font-bold tracking-tight text-stone-800"
-            >StoryTrim</text
+          
+          <view class="flex items-center gap-3">
+            <view
+              @click="handleLogout"
+              class="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-500 font-bold text-xs active:opacity-50"
+            >
+              {{ (userStore.username || "G").charAt(0).toUpperCase() }}
+            </view>
+          </view>
+        </view>
+
+        <!-- Upload Box -->
+        <view
+          @click="triggerUpload"
+          class="mb-10 border border-stone-100 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] active:scale-[0.98] transition-all duration-300"
+        >
+          <view
+            class="w-12 h-12 bg-stone-50 text-stone-600 rounded-2xl shadow-inner border border-stone-100 flex items-center justify-center mb-4"
+          >
+            <image src="/static/icons/upload.svg" class="w-6 h-6 opacity-60" />
+          </view>
+          <text class="font-bold text-stone-900 tracking-tight">导入本地书籍</text>
+          <text class="text-[10px] text-stone-400 mt-1 uppercase tracking-widest font-medium">支持 TXT 格式</text>
+        </view>
+
+        <!-- Renderjs Bridge -->
+        <view
+          :change:prop="filePicker.trigger"
+          :prop="renderTrigger"
+          class="hidden"
+        ></view>
+
+        <!-- Book List Header -->
+        <view class="flex items-end justify-between mb-5 px-1">
+          <view>
+            <text class="text-xs font-black text-stone-900 uppercase tracking-[0.2em]"
+              >我的书架</text
+            >
+            <view class="w-4 h-0.5 bg-stone-900 mt-1"></view>
+          </view>
+          <text class="text-[10px] text-stone-400 font-medium tracking-wide"
+            >{{ bookStore.books.length }} 本</text
           >
         </view>
-        <view
-          @click="handleLogout"
-          class="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-500 font-bold text-xs active:opacity-50"
-        >
-          {{ (userStore.username || "G").charAt(0).toUpperCase() }}
+
+        <view class="flex flex-col">
+          <BookCard
+            v-for="book in bookStore.books"
+            :key="book.id"
+            :book="book"
+            @click="handleBookClick(book)"
+            @sync="handleSyncBook(book)"
+            @delete="handleDeleteBook"
+            @longpress="handleBookOptions"
+          />
+
+          <view v-if="bookStore.books.length === 0" class="py-20 text-center">
+            <text class="text-stone-300 text-sm italic">书架空空如也</text>
+          </view>
         </view>
       </view>
+    </scroll-view>
 
-      <!-- Upload Box -->
-      <view
-        @click="triggerUpload"
-        class="mb-8 border-2 border-dashed border-stone-200 rounded-3xl p-10 flex flex-col items-center justify-center text-center bg-white/50 active:bg-stone-100 transition-colors"
-      >
-        <view
-          class="w-14 h-14 bg-stone-900 text-white rounded-full shadow-lg flex items-center justify-center mb-4"
-        >
-          <text class="text-2xl">+</text>
-        </view>
-        <text class="font-bold text-stone-800">导入本地书籍</text>
-        <text class="text-xs text-stone-400 mt-1">支持 TXT 格式</text>
-      </view>
-
-      <!-- Renderjs Bridge -->
-      <view
-        :change:prop="filePicker.trigger"
-        :prop="renderTrigger"
-        class="hidden"
-      ></view>
-
-      <!-- Book List -->
-      <view class="flex items-center justify-between mb-4 px-1">
-        <text class="text-sm font-bold text-stone-400 uppercase tracking-widest"
-          >我的书架</text
-        >
-        <text class="text-[10px] text-stone-300"
-          >{{ bookStore.books.length }} 本书</text
-        >
-      </view>
-
-      <view class="flex flex-col">
-        <BookCard
-          v-for="book in bookStore.books"
-          :key="book.id"
-          :book="book"
-          @click="handleBookClick(book)"
-          @sync="handleSyncBook(book)"
-          @delete="handleDeleteBook"
-          @longpress="handleBookOptions"
-        />
-
-        <view v-if="bookStore.books.length === 0" class="py-20 text-center">
-          <text class="text-stone-300 text-sm italic">书架空空如也</text>
-        </view>
-      </view>
-    </view>
+    <!-- FIXED COMPONENTS OUTSIDE SCROLL-VIEW -->
 
     <!-- Delete Confirm Modal -->
     <DeleteConfirmModal
@@ -309,6 +311,18 @@ const handleLogout = () => {
       @action="handleSheetAction"
     />
 
+    <!-- Task Indicator (Floating Pill) - Only show when has tasks -->
+    <TaskIndicator 
+      :has-active-tasks="hasActiveTasks"
+      @click="showTaskCenter"
+    />
+
+    <!-- Task Dashboard Sheet -->
+    <TaskProgressSheet
+      v-model="showTaskSheet"
+      @update:modelValue="(val: boolean) => !val && refreshTasks()"
+    />
+
     <!-- Upload Progress Modal -->
     <view
       v-if="bookStore.uploadProgress > 0 && bookStore.uploadProgress < 100"
@@ -325,18 +339,6 @@ const handleLogout = () => {
       </view>
     </view>
 
-    <!-- Task Indicator (Floating Pill) -->
-    <TaskIndicator 
-      :count="activeTasks.length" 
-      @click="showTaskSheet = true"
-    />
-
-    <!-- Task Dashboard Sheet -->
-    <TaskProgressSheet
-      v-model="showTaskSheet"
-      :tasks="activeTasks"
-    />
-
     <!-- Sync Progress Modal -->
     <view
       v-if="bookStore.syncProgress > 0"
@@ -352,7 +354,7 @@ const handleLogout = () => {
         <text class="text-xs text-stone-400">正在同步至云端...</text>
       </view>
     </view>
-  </scroll-view>
+  </view>
 </template>
 
 <script module="filePicker" lang="renderjs">
@@ -387,7 +389,6 @@ export default {
           return
         }
 
-        // RenderJS 读取速度极快，200MB内通常没问题
         if (file.size > 200 * 1024 * 1024) {
            alert('文件过大(>200MB)')
            document.body.removeChild(input)
@@ -410,6 +411,7 @@ export default {
 
     // 核心解析逻辑 (运行在 RenderJS 线程)
     parseAndUpload(fileName, text, ownerInstance) {
+      console.log('[RenderJS] parseAndUpload called, text length:', text.length);
       const CHAPTER_REGEX = /(?:^|\n)\s*(第[0-9一二三四五六七八九十百千万]+[章回节][^\r\n]*)/g;
 
       // 1. 快速正则分章
@@ -454,7 +456,9 @@ export default {
         }
 
       // 2. 发送元数据
+      console.log('[RenderJS] Sending book info, text length:', text.length);
       const bookMD5 = SparkMD5.hash(text);
+      console.log('[RenderJS] bookMD5:', bookMD5);
       ownerInstance.callMethod('onBookInfo', {
         title: fileName.replace('.txt', ''),
         total: chapters.length,

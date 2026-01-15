@@ -51,7 +51,7 @@ func (s *TrimService) TrimStreamByMD5(ctx context.Context, userID uint, chapterM
 		return s.mockStreaming(cache.TrimContent), nil
 	}
 
-	return s.mockStreaming(rawContent[:min(100, len(rawContent))]), nil
+	return s.trimChapter(ctx, userID, 0, 0, chapterMD5, rawContent, promptID)
 }
 
 func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bookID uint, chapterID uint, promptID uint) (<-chan string, error) {
@@ -75,9 +75,20 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 		return s.mockStreaming(cache.TrimContent), nil
 	}
 
-	raw, err := s.bookRepo.GetRawContent(ctx, chap.ChapterMD5)
-	if err != nil {
-		return nil, errno.ErrChapterNotFound
+	return s.trimChapter(ctx, userID, bookID, chapterID, chap.ChapterMD5, "", promptID)
+}
+
+func (s *TrimService) trimChapter(ctx context.Context, userID uint, bookID uint, chapterID uint, chapterMD5 string, rawContent string, promptID uint) (<-chan string, error) {
+	content := ""
+
+	if chapterID > 0 {
+		raw, err := s.bookRepo.GetRawContent(ctx, chapterMD5)
+		if err != nil {
+			return nil, errno.ErrChapterNotFound
+		}
+		content = raw.Content
+	} else {
+		content = rawContent
 	}
 
 	prompt, err := s.bookRepo.GetPromptByID(ctx, promptID)
@@ -85,9 +96,9 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 		return nil, err
 	}
 
-	systemPrompt := s.buildSystemPrompt(prompt, raw.Content)
+	systemPrompt := s.buildSystemPrompt(prompt, content)
 
-	llmResp, err := s.llmService.LlmWithStream(ctx, systemPrompt.systemPrompt, raw.Content)
+	llmResp, err := s.llmService.LlmWithStream(ctx, systemPrompt.systemPrompt, content)
 	if err != nil {
 		return nil, err
 	}
@@ -132,13 +143,13 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 		if trimmedContent != "" {
 			// 计算字数和压缩率
 			trimWords := len([]rune(trimmedContent))
-			rawWords := len([]rune(raw.Content))
+			rawWords := len([]rune(content))
 			trimRate := ((float64(trimWords)/float64(rawWords))*10000 + 0.5) / 100.0
 			takeTime := time.Since(t).Seconds()
 
 			// 保存处理结果到缓存
 			trimResult := &model.TrimResult{
-				ChapterMD5:       chap.ChapterMD5,
+				ChapterMD5:       chapterMD5,
 				PromptID:         promptID,
 				TrimContent:      trimmedContent,
 				TrimContentWords: trimWords,
@@ -153,7 +164,6 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 				CompletionTokens: llmResp.CompletionTokens,
 				TakeTime:         takeTime,
 				LlmName:          llmResp.LlmName,
-				CreatedAt:        time.Time{},
 			}
 
 			if err := s.bookRepo.SaveTrimResult(context.Background(), trimResult); err != nil {
@@ -169,7 +179,7 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 				BookID:     bookID,
 				ChapterID:  chapterID,
 				PromptID:   promptID,
-				ChapterMD5: chap.ChapterMD5,
+				ChapterMD5: chapterMD5,
 			}); err != nil {
 				logger.Error().Err(err).Msg("failed to record user trim")
 				return
@@ -192,14 +202,14 @@ func (s *TrimService) buildSystemPrompt(prompt *model.Prompt, rawContent string)
 	maxWords := int(float64(rawLen) * prompt.TargetRatioMax)
 
 	data := struct {
+		ModeName        string
 		WordsRange      string
 		TargetRateRange string
 		PromptContent   string
-		Summaries       string
-		Encyclopedia    string
 	}{
+		ModeName:        prompt.Name,
 		WordsRange:      fmt.Sprintf("%d-%d", minWords, maxWords),
-		TargetRateRange: fmt.Sprintf("%d-%d%", int(prompt.TargetRatioMin*100), int(prompt.TargetRatioMax*100)),
+		TargetRateRange: fmt.Sprintf("%d-%d%%", int(prompt.TargetRatioMin*100), int(prompt.TargetRatioMax*100)),
 		PromptContent:   prompt.PromptContent,
 	}
 
@@ -214,20 +224,25 @@ func (s *TrimService) buildSystemPrompt(prompt *model.Prompt, rawContent string)
 
 func (s *TrimService) mockStreaming(content string) <-chan string {
 	ch := make(chan string)
+	contentRune := []rune(content)
 	go func() {
 		defer close(ch)
-		for i := 0; i < len(content); i += 10 {
+		for i := 0; i < len([]rune(content)); i += 10 {
 			end := i + 10
-			if end > len(content) {
-				end = len(content)
+			if end > len(contentRune) {
+				end = len(contentRune)
 			}
-			ch <- content[i:end]
+			ch <- string(contentRune[i:end])
+			time.Sleep(time.Millisecond * 100)
 		}
 	}()
 	return ch
 }
 
 func (s *TrimService) TrimChatByChapterID(ctx context.Context, userID uint, chapterID uint, promptID uint) error {
+	// 测试
+	time.Sleep(time.Second)
+	return nil
 	chapter, err := s.bookRepo.GetChapterByID(ctx, chapterID)
 	if err != nil {
 		return err
