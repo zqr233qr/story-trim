@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
-import { getBatchChapterContents, getBatchTrimmedById, syncTrimmedStatusById, updateReadingProgress } from '@/api/content'
+import { getBatchChapterContents, getBatchTrimmedById, syncTrimmedStatusById, updateReadingProgress, getChapterTrimStatusByMd5, getChapterTrimStatusById } from '@/api/content'
 import { taskApi } from '@/api/task'
 import type { Book, Chapter, Prompt } from '@/api'
 import { useUserStore } from './user'
@@ -50,67 +50,73 @@ export const useBookStore = defineStore('book', () => {
     try {
       // #ifdef APP-PLUS
       const userStore = useUserStore()
-      if (!userStore.isLoggedIn()) {
-        books.value = []
-        uni.showToast({
-          title: '请登录以恢复您的书籍',
-          icon: 'none',
-          duration: 3000
-        })
-        return
-      }
+      let cloudBooks: Book[] = []
+      
+      // 仅在已登录时尝试从云端同步
+      if (userStore.isLoggedIn()) {
+        try {
+          const res = await api.getBooks()
+          // console.log('[FetchBooks] Cloud API result:', res.code, res.data?.length);
+          if (res.code === 0) {
+            cloudBooks = res.data || []
+            console.log('[FetchBooks] Syncing', cloudBooks.length, 'books from cloud')
 
-      try {
-        const res = await api.getBooks()
-        if (res.code === 0) {
-          const cloudBooks = res.data || []
-          console.log('[FetchBooks] Syncing', cloudBooks.length, 'books from cloud')
-
-          for (const cloudBook of cloudBooks) {
-            await repo.syncBookFromCloud(cloudBook)
+            for (const cloudBook of cloudBooks) {
+              await repo.syncBookFromCloud(cloudBook)
+            }
           }
+        } catch (e) {
+          console.warn('[FetchBooks] Failed to sync books from cloud', e)
         }
-      } catch (e) {
-        console.warn('[FetchBooks] Failed to sync books from cloud', e)
       }
 
+      // 无论是否登录，都从本地加载书籍
       const localBooks = await repo.getBooks()
-      console.log('[FetchBooks] 本地书籍数量:', localBooks.length);
-      for (const b of localBooks) {
-        console.log('[FetchBooks] 本地书籍:', {
-          id: b.id,
-          title: b.title,
-          bookMD5: b.bookMD5,
-          syncState: b.syncState,
-          cloudId: b.cloudId
-        });
-      }
-
+      console.log('[FetchBooks] Local DB books count:', localBooks.length);
+      
       const bookMap = new Map<string, any>();
+      const noMd5Books: any[] = [];
+
       for (const b of localBooks) {
-        const key = b.bookMD5;
-        if (!bookMap.has(key)) {
-          bookMap.set(key, b);
-        } else {
-          const existing = bookMap.get(key);
-          if ((b.syncState || 2) < (existing.syncState || 2)) {
+        if (b.bookMD5 && b.bookMD5.length > 5) {
+          const key = b.bookMD5;
+          if (!bookMap.has(key)) {
             bookMap.set(key, b);
+          } else {
+            const existing = bookMap.get(key);
+            if ((b.syncState || 2) < (existing.syncState || 2)) {
+              bookMap.set(key, b);
+            }
           }
+        } else {
+          noMd5Books.push(b);
         }
       }
 
-      books.value = Array.from(bookMap.values()).map(b => ({
-        id: Number(b.id),
-        title: b.title,
-        book_md5: b.bookMD5,
-        total_chapters: b.totalChapters,
-        created_at: new Date(b.createdAt).toISOString(),
-        status: b.processStatus,
-        progress: 0,
-        activeChapterIndex: 0,
-        chapters: [],
-        sync_state: b.syncState || 0
-      }))
+      const finalBooks = [...Array.from(bookMap.values()), ...noMd5Books];
+      const cloudMap = new Map<number, Book>();
+      cloudBooks.forEach(cb => cloudMap.set(cb.id, cb));
+
+      books.value = finalBooks.map(b => {
+        const cloudInfo = b.cloudId ? cloudMap.get(Number(b.cloudId)) : null;
+        return {
+          id: Number(b.id),
+          title: b.title,
+          book_md5: b.bookMD5,
+          total_chapters: b.totalChapters,
+          created_at: new Date(b.createdAt).toISOString(),
+          status: b.processStatus,
+          progress: 0,
+          activeChapterIndex: 0,
+          chapters: [],
+          sync_state: b.syncState || 0,
+          cloud_id: b.cloudId,
+          full_trim_status: cloudInfo?.full_trim_status,
+          full_trim_progress: cloudInfo?.full_trim_progress
+        }
+      })
+      
+      books.value.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       // #endif
 
       // #ifndef APP-PLUS
@@ -122,13 +128,14 @@ export const useBookStore = defineStore('book', () => {
           progress: 0,
           status: 'ready',
           activeChapterIndex: 0,
-          chapters: []
+          chapters: [],
+          full_trim_status: b.full_trim_status,
+          full_trim_progress: b.full_trim_progress
         }))
       }
       // #endif
     } catch (e) {
       console.error('Failed to fetch books', e)
-      // 容错：确保 books 始终是数组
       if (!books.value) books.value = []
     } finally {
       isLoading.value = false
@@ -157,7 +164,7 @@ export const useBookStore = defineStore('book', () => {
     // #endif
   }
 
-  // 5. Fetch Book Detail
+  // 5. Fetch Book Detail (不批量同步精简状态，按需查询)
   const fetchBookDetail = async (bookId: number) => {
     // #ifdef APP-PLUS
     try {
@@ -192,22 +199,6 @@ export const useBookStore = defineStore('book', () => {
               })),
               sync_state: 2
             }
-
-            if (activeBook.value && activeBook.value.chapters.length > 0) {
-              try {
-                const syncRes = await syncTrimmedStatusById(cloudBookId)
-                if (syncRes.code === 0 && syncRes.data.trimmed_map) {
-                  const tMap = syncRes.data.trimmed_map as Record<number, number[]>
-                  activeBook.value.chapters.forEach(c => {
-                    const id = c.cloud_id || c.id
-                    if (tMap[id]) {
-                      const remoteIds = tMap[id].map((id: number) => Number(id))
-                      c.trimmed_prompt_ids = [...new Set([...c.trimmed_prompt_ids, ...remoteIds])]
-                    }
-                  })
-                }
-              } catch (e) { console.warn('[Store] Sync trim status by id failed', e) }
-            }
           }
         } else {
           const chapters = await repo.getChapters(bookId)
@@ -234,39 +225,6 @@ export const useBookStore = defineStore('book', () => {
               modes: {}
             })),
             sync_state: syncState
-          }
-
-          if (syncState === 0 && chapters.length > 0) {
-            const userStore = useUserStore()
-            if (userStore.isLoggedIn()) {
-              const md5s = chapters.map(c => c.md5).filter(m => !!m)
-              try {
-                const syncRes = await api.syncTrimmedStatus(md5s)
-                if (syncRes.code === 0 && syncRes.data.trimmed_map) {
-                  const tMap = syncRes.data.trimmed_map
-                  activeBook.value.chapters.forEach(c => {
-                    if (c.md5 && tMap[c.md5]) {
-                      const remoteIds = tMap[c.md5].map(id => Number(id))
-                      c.trimmed_prompt_ids = [...new Set([...c.trimmed_prompt_ids, ...remoteIds])]
-                    }
-                  })
-                }
-              } catch (e) { console.warn('[Store] Sync trim status by md5 failed', e) }
-            }
-          } else if (syncState === 1 && book.cloudId) {
-            try {
-              const syncRes = await syncTrimmedStatusById(book.cloudId)
-              if (syncRes.code === 0 && syncRes.data.trimmed_map) {
-                const tMap = syncRes.data.trimmed_map as Record<number, number[]>
-                activeBook.value.chapters.forEach(c => {
-                  const id = c.cloud_id || c.id
-                  if (tMap[id]) {
-                    const remoteIds = tMap[id].map((id: number) => Number(id))
-                    c.trimmed_prompt_ids = [...new Set([...c.trimmed_prompt_ids, ...remoteIds])]
-                  }
-                })
-              }
-            } catch (e) { console.warn('[Store] Sync trim status by id failed', e) }
           }
         }
       }
@@ -380,6 +338,41 @@ export const useBookStore = defineStore('book', () => {
 
     const cacheKey = `trim_${chapterId}_${promptId}`
     uni.setStorageSync(cacheKey, lines)
+  }
+
+  // 确保章节的精简状态是最新的（查询云端）
+  const ensureTrimmedStatus = async (chapterId: number): Promise<boolean> => {
+    if (!activeBook.value) return false
+    
+    const chapter = activeBook.value.chapters.find(c => c.id === chapterId)
+    if (!chapter) return false
+
+    const syncState = activeBook.value.sync_state || 0
+    
+    try {
+      if (syncState === 0) {
+        // 本地书籍：根据 MD5 查询
+        if (chapter.md5) {
+          const res = await getChapterTrimStatusByMd5(chapter.md5)
+          if (res.code === 0 && res.data.prompt_ids) {
+            chapter.trimmed_prompt_ids = res.data.prompt_ids
+            return res.data.prompt_ids.length > 0
+          }
+        }
+      } else {
+        // 云端书籍：根据章节 ID 查询
+        const cloudChapterId = chapter.cloud_id || chapterId
+        const res = await getChapterTrimStatusById(cloudChapterId)
+        if (res.code === 0 && res.data.prompt_ids) {
+          chapter.trimmed_prompt_ids = res.data.prompt_ids
+          return res.data.prompt_ids.length > 0
+        }
+      }
+    } catch (e) {
+      console.warn('[Store] Ensure trim status failed', e)
+    }
+    
+    return false
   }
 
   // 批量获取章节内容
@@ -524,57 +517,19 @@ export const useBookStore = defineStore('book', () => {
     return activeBook.value.chapters[activeBook.value.activeChapterIndex]
   })
 
-  // 全文精简任务轮询定时器
-  let fullTrimPollTimer: ReturnType<typeof setInterval> | null = null
-
-  // 启动全文精简任务
+  // 启动全文精简任务（不再管理轮询，任务中心组件自己管理）
   const startFullTrimTask = async (bookId: number, promptId: number): Promise<boolean> => {
     const res = await taskApi.startFullTrim(bookId, promptId)
     if (res.code === 0) {
-      const book = books.value.find(b => b.id === bookId)
+      const book = books.value.find(b => String(b.cloud_id) === String(bookId) || String(b.id) === String(bookId))
       if (book) {
-        book.full_trim_status = 'running'
+        book.full_trim_status = 'pending'
         book.full_trim_progress = 0
         book.full_trim_task_id = res.data.task_id
         book.full_trim_prompt_id = promptId
       }
-      // 开始监控进度
-      monitorFullTrimTask(res.data.task_id, bookId)
     }
     return res.code === 0
-  }
-
-  // 监控任务进度（每5秒）
-  const monitorFullTrimTask = (taskId: string, bookId: number) => {
-    if (fullTrimPollTimer) clearInterval(fullTrimPollTimer)
-
-    fullTrimPollTimer = setInterval(async () => {
-      const res = await taskApi.getTaskProgress(taskId)
-      if (res.code !== 0) return
-
-      const book = books.value.find(b => b.id === bookId)
-      if (!book) {
-        clearInterval(fullTrimPollTimer)
-        return
-      }
-
-      book.full_trim_status = res.data.status
-      book.full_trim_progress = res.data.progress
-
-      if (res.data.status === 'completed') {
-        book.full_trim_available = true
-        book.full_trim_status = undefined
-        book.full_trim_progress = undefined
-        clearInterval(fullTrimPollTimer)
-        fullTrimPollTimer = null
-      } else if (res.data.status === 'failed') {
-        // 失败只记录error，不显示UI状态
-        book.full_trim_status = undefined
-        book.full_trim_progress = undefined
-        clearInterval(fullTrimPollTimer)
-        fullTrimPollTimer = null
-      }
-    }, 5000)
   }
 
   const deleteBook = async (bookId: number, syncState: number, cloudId?: number) => {
@@ -609,6 +564,7 @@ export const useBookStore = defineStore('book', () => {
     setActiveBook, setChapter, fetchPrompts,
     fetchChapterTrim, fetchBatchChapters, updateProgress, syncBookToCloud,
     deleteBook,
-    startFullTrimTask, monitorFullTrimTask
+    startFullTrimTask,
+    ensureTrimmedStatus
   }
 })

@@ -15,8 +15,12 @@ export interface FullTrimStatus {
   prompt_id?: number
 }
 
+export interface ActiveTasksCount {
+  has_active: boolean
+}
+
 export const taskApi = {
-  // 启动全文精简任务（复用现有接口）
+  // 启动全文精简任务
   startFullTrim: (bookId: number, promptId: number): Promise<Response<{ task_id: string }>> => {
     return request({
       url: '/tasks/full-trim',
@@ -37,6 +41,22 @@ export const taskApi = {
   getBookFullTrimStatus: (bookId: number): Promise<Response<FullTrimStatus>> => {
     return request({
       url: `/books/${bookId}/full-trim-status`,
+      method: 'GET'
+    })
+  },
+
+  // 获取用户所有活跃任务
+  getActiveTasks: (): Promise<Response<any[]>> => {
+    return request({
+      url: '/tasks/active',
+      method: 'GET'
+    })
+  },
+
+  // 检查用户是否有活跃任务
+  getActiveTasksCount: (): Promise<Response<ActiveTasksCount>> => {
+    return request({
+      url: '/tasks/active/count',
       method: 'GET'
     })
   }

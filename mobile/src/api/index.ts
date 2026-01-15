@@ -69,6 +69,8 @@ export interface Book {
   total_chapters: number;
   created_at: string;
   book_md5?: string;
+  full_trim_status?: string;
+  full_trim_progress?: number;
 }
 export interface Chapter {
   id: number;
@@ -87,9 +89,6 @@ export interface ReadingHistory {
 export interface BookDetail {
   book: Book;
   chapters: Chapter[];
-  trimmed_ids?: number[];
-  trimmed_map?: Record<number, number[]>;
-  reading_history?: ReadingHistory;
 }
 export interface Prompt {
   id: number;
@@ -116,11 +115,15 @@ export const api = {
     request<void>({ url: "/auth/register", method: "POST", data }),
 
   getBooks: () => request<Book[]>({ url: "/books", method: "GET" }),
-  getBookDetail: (id: number, promptId?: number) =>
+  getBookDetail: (id: number) =>
     request<BookDetail>({
       url: `/books/${id}`,
       method: "GET",
-      data: { prompt_id: promptId },
+    }),
+  getBookProgress: (id: number) =>
+    request<ReadingHistory>({
+      url: `/books/${id}/progress`,
+      method: "GET",
     }),
   getPrompts: () =>
     request<Prompt[]>({ url: "/common/prompts", method: "GET" }),

@@ -50,3 +50,23 @@ func (h *TaskHandler) GetTasksProgress(c *gin.Context) {
 
 	response.Success(c, tasks)
 }
+
+func (h *TaskHandler) GetActiveTasks(c *gin.Context) {
+	userID := GetUserID(c)
+	tasks, err := h.svc.GetActiveTasks(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, errno.TaskErrCode, err.Error())
+		return
+	}
+	response.Success(c, tasks)
+}
+
+func (h *TaskHandler) GetActiveTasksCount(c *gin.Context) {
+	userID := GetUserID(c)
+	count, err := h.svc.GetActiveTasksCount(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, errno.TaskErrCode, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"has_active": count > 0})
+}

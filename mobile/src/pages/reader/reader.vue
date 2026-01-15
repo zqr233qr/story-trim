@@ -10,10 +10,24 @@ import SettingsPanel from '@/components/SettingsPanel.vue'
 import ChapterList from '@/components/ChapterList.vue'
 import BatchTaskModal from '@/components/BatchTaskModal.vue'
 import GenerationTerminal from '@/components/GenerationTerminal.vue'
+import LoginConfirmModal from '@/components/LoginConfirmModal.vue'
 
 const userStore = useUserStore()
 const bookStore = useBookStore()
 const instance = getCurrentInstance()
+
+// 登录引导相关
+const showLoginModal = ref(false)
+const loginTipContent = ref("")
+
+const openLoginModal = (msg: string) => {
+  loginTipContent.value = msg
+  showLoginModal.value = true
+}
+
+const handleLoginConfirm = () => {
+  uni.navigateTo({ url: "/pages/login/login" })
+}
 
 // #ifdef APP-PLUS
 import { AppRepository } from '@/adapter/app-repository'
@@ -63,7 +77,6 @@ const lastScrollTop = ref(0)
 
 const recordedChapterId = ref(0) // 本章节进度记录锁
 let progressTimer: any = null
-let preloadTimer: any = null
 let menuAutoHideTimer: any = null // 菜单栏自动隐藏定时器
 
 // 图标常量 (本地静态文件)
@@ -74,6 +87,45 @@ const icons = {
   batch: '/static/icons/batch.svg',
   next: '/static/icons/next.svg',
   settings: '/static/icons/settings.svg'
+}
+
+// 计算精简百分比（基于字符数）
+const calculateTrimRatio = (original: string[], trimmed: string[]): number => {
+  if (!original || original.length === 0 || !trimmed || trimmed.length === 0) return 0
+  const originalChars = original.join('').length
+  const trimmedChars = trimmed.join('').length
+  if (originalChars === 0) return 0
+  const ratio = Math.round((1 - trimmedChars / originalChars) * 100)
+  return Math.max(0, ratio)
+}
+
+// 获取精简模式信息
+const getCurrentModeInfo = () => {
+  if (!isMagicActive.value || !activeBook.value?.activeModeId) return null
+  const promptId = parseInt(activeBook.value.activeModeId)
+  const prompt = bookStore.prompts.find(p => p.id === promptId)
+  return prompt ? { name: prompt.name, description: prompt.description } : null
+}
+
+// 显示模式切换提示
+const showModeSwitchTip = (chapter: any, promptId: number) => {
+  if (!chapter || !isMagicActive.value) {
+    showNotification('已切换为原文')
+    return
+  }
+  
+  const prompt = bookStore.prompts.find(p => p.id === promptId)
+  if (!prompt) return
+  
+  const original = chapter.modes['original']
+  const trimmed = chapter.modes[`mode_${promptId}`]
+  
+  if (trimmed) {
+    const ratio = calculateTrimRatio(original, trimmed)
+    showNotification(`已切换为「${prompt.name}」，精简 ${ratio}%`)
+  } else {
+    showNotification(`已切换为「${prompt.name}」`)
+  }
 }
 
 // 滑动窗口分页核心状态
@@ -261,33 +313,28 @@ const refreshWindow = async (targetPos: 'first' | 'last' | 'keep' = 'first') => 
   isTextTransitioning.value = false
 }
 
-// 预加载逻辑 (3s触发检查)
-const handlePreloadCheck = (currentIndex: number) => {
-  clearTimeout(preloadTimer)
-  preloadTimer = setTimeout(async () => {
-    if (!activeBook.value) return
-    const chapters = activeBook.value.chapters
-    const missingIds: number[] = []
+  // 预加载逻辑 (统一入口)
+const triggerPreload = async () => {
+  if (!activeBook.value) return
+  
+  const currentIdx = activeBook.value.activeChapterIndex
+  const totalChapters = activeBook.value.chapters.length
+  
+  for (let i = 1; i <= 2; i++) {
+    const targetIdx = currentIdx + i
+    if (targetIdx >= totalChapters) break
     
-    for (let i = 1; i <= 3; i++) {
-      const nextIdx = currentIndex + i
-      if (nextIdx < chapters.length && !chapters[nextIdx].isLoaded) break 
-      if (i === 3) return 
-    }
+    const chapter = activeBook.value.chapters[targetIdx]
+    await preloadChapter(chapter)
+  }
+}
 
-    for (let i = 1; i <= 5; i++) {
-      const nextIdx = currentIndex + i
-      if (nextIdx < chapters.length) {
-        const chap = chapters[nextIdx]
-        if (!chap.isLoaded) missingIds.push(chap.id)
-      }
-    }
-
-    if (missingIds.length > 0) {
-      const promptId = isMagicActive.value ? Number(activeBook.value.activeModeId) : 0
-      await bookStore.fetchBatchChapters(missingIds, promptId)
-    }
-  }, 3000)
+// 单章预加载（只预加载原文）
+const preloadChapter = async (chapter: any) => {
+  if (!chapter) return
+  if (!chapter.isLoaded) {
+    await bookStore.fetchChapter(bookId.value, chapter.id)
+  }
 }
 
 // 进度确认逻辑 (5s确认)
@@ -298,7 +345,17 @@ const handleProgressTracking = (chapterId: number) => {
   progressTimer = setTimeout(async () => {
     if (activeBook.value && activeChapter.value?.id === chapterId) {
       const promptId = isMagicActive.value ? Number(activeBook.value.activeModeId) : 0
-      await bookStore.updateProgress(activeBook.value.id, chapterId, promptId)
+      
+      // 1. 更新本地数据库 (总是执行)
+      // #ifdef APP-PLUS
+      await repo.updateProgress(bookId.value, chapterId, promptId)
+      // #endif
+
+      // 2. 上报云端 (仅已登录且书籍已同步)
+      if (userStore.isLoggedIn() && activeBook.value.sync_state !== 0) {
+         await bookStore.updateProgress(activeBook.value.id, chapterId, promptId)
+      }
+      
       recordedChapterId.value = chapterId
     }
   }, 5000)
@@ -337,13 +394,13 @@ onLoad((options) => {
 
   // #ifdef APP-PLUS
   // 进入时根据设置控制状态栏和菜单栏
-  console.log('[StatusBar] hideStatusBar:', hideStatusBar.value)
   plus.navigator.setFullscreen(!!hideStatusBar.value)
   if (hideStatusBar.value) {
     menuVisible.value = false // 菜单栏默认隐藏
   }
   // #endif
 
+  console.log('options ===', options)
   if (options && options.id) {
     bookId.value = parseInt(options.id)
     init()
@@ -352,7 +409,8 @@ onLoad((options) => {
 
 onUnload(() => {
   uni.setKeepScreenOn({ keepScreenOn: false })
-
+  clearTimeout(progressTimer)
+  
   // #ifdef APP-PLUS
   // 退出时恢复状态栏显示
   console.log('[StatusBar] Restore status bar')
@@ -384,8 +442,8 @@ const init = async () => {
   // 3. 立即加载当前章节
   await loadCurrentChapter()
 
-  // 4. 3秒后异步预加载
-  setTimeout(() => preloadNearbyChapters(), 3000)
+  // 4. 立即触发预加载
+  triggerPreload()
 
   if (bookStore.activeBook?.status === 'new') showConfigModal.value = true
   if (!bookStore.activeBook?.activeModeId && bookStore.prompts.length > 0) {
@@ -486,33 +544,32 @@ const loadCurrentChapter = async () => {
   const chapter = activeBook.value.chapters[idx]
   if (!chapter) return
 
+  // 1. 加载原文（总是需要）
   if (!chapter.isLoaded) {
     await bookStore.fetchChapter(bookId.value, chapter.id)
   }
-}
 
-// 异步预加载后2章
-const preloadNearbyChapters = async () => {
-  if (!activeBook.value) return
-  const idx = activeBook.value.activeChapterIndex
-  const total = activeBook.value.chapters.length
-
-  for (let i = 1; i <= 2; i++) {
-    const targetIdx = idx + i
-    if (targetIdx < total) {
-      const chapter = activeBook.value.chapters[targetIdx]
-      if (!chapter.isLoaded) {
-        bookStore.fetchChapter(bookId.value, chapter.id)
-      }
+  // 2. 如果开启了精简模式，查询并加载精简内容
+  if (isMagicActive.value && activeBook.value?.activeModeId) {
+    const promptId = parseInt(activeBook.value.activeModeId)
+    if (promptId > 0) {
+      // 先查询精简状态
+      await bookStore.ensureTrimmedStatus(chapter.id)
+      // 再加载精简内容
+      await bookStore.fetchChapterTrim(bookId.value, chapter.id, promptId)
     }
   }
 }
 
 // 从云端获取阅读进度
 const fetchCloudReadingHistory = async (): Promise<LocalReadingHistory | null> => {
-  const res = await api.getBookDetail(activeBook.value!.id)
-  if (res.code === 0 && res.data.reading_history) {
-    const h = res.data.reading_history as ReadingHistory
+  if (!userStore.isLoggedIn()) return null
+  
+  const cloudBookId = activeBook.value?.cloud_id || activeBook.value?.id
+  if (!cloudBookId) return null
+  const res = await api.getBookProgress(cloudBookId)
+  if (res.code === 0 && res.data) {
+    const h = res.data as ReadingHistory
     return {
       last_chapter_id: h.last_chapter_id,
       last_prompt_id: h.last_prompt_id,
@@ -528,14 +585,14 @@ const saveProgress = async () => {
   const chapterId = activeChapter.value.id
   const promptId = isMagicActive.value ? parseInt(activeBook.value?.activeModeId || '0') : 0
 
-  // 1. 本地 SQLite
+  // 1. 本地 SQLite (总是保存)
   // #ifdef APP-PLUS
   await repo.updateProgress(bookId.value, chapterId, promptId)
   // #endif
 
-  // 2. 云端上报 (sync_state=1/2)
+  // 2. 云端上报 (仅已登录且已同步)
   // #ifdef APP-PLUS
-  if (activeBook.value?.sync_state !== 0 && activeBook.value?.cloud_id) {
+  if (userStore.isLoggedIn() && activeBook.value?.sync_state !== 0 && activeBook.value?.cloud_id) {
     try {
       await bookStore.updateProgress(bookId.value, chapterId, promptId)
     } catch (e) {
@@ -674,7 +731,7 @@ const handleBack = () => {
 const showNotification = (msg: string) => {
   toastMsg.value = msg
   showToast.value = true
-  setTimeout(() => { showToast.value = false }, 3500)
+  setTimeout(() => { showToast.value = false }, 2000)
 }
 
 const handleTerminalClose = () => {
@@ -687,6 +744,14 @@ const watchBatchTask = (taskId: string, bookName: string) => {
 }
 
 const handleStartProcess = async (modeId: string | number, isBatch: boolean = false) => {
+  // 权限检查：AI 处理功能需要登录
+  if (!userStore.isLoggedIn()) {
+    showBatchModal.value = false;
+    showConfigModal.value = false;
+    openLoginModal('AI 精简功能需要登录账号后才能使用，是否现在去登录？');
+    return;
+  }
+
   const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
 
   // 全书精简模式
@@ -695,7 +760,8 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
 
     if (!activeBook.value) return
 
-    const success = await bookStore.startFullTrimTask(activeBook.value.id, promptId)
+    const cloudBookId = activeBook.value.cloud_id || activeBook.value.id
+    const success = await bookStore.startFullTrimTask(cloudBookId, promptId)
     if (success) {
       showNotification('已加入后台处理，可在书架页查看进度')
     } else {
@@ -726,6 +792,7 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
   // #ifdef APP-PLUS
   const syncState = activeBook.value?.sync_state || 0
   const cloudChapterId = activeChapter.value?.cloud_id || activeChapter.value?.id
+  const cloudBookId = activeBook.value?.cloud_id || activeBook.value?.id
 
   // sync_state=0 (本地书籍): 使用 trimStreamByMd5，传递内容和 MD5
   if (syncState === 0) {
@@ -767,9 +834,10 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
           setTimeout(() => {
             showTerminal.value = false
             if (pageMode.value === 'click') refreshWindow('keep')
+            showModeSwitchTip(activeChapter.value, promptId)
           }, 800)
         } else {
-          showNotification(`精简完成`)
+          showModeSwitchTip(activeChapter.value, promptId)
         }
       }
     )
@@ -777,9 +845,9 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
   }
 
   // sync_state=1/2: 使用 trimStreamByChapterId (按章节 ID)
-  console.log('[Reader] Starting stream by chapter ID (sync_state=1/2):', cloudChapterId)
+  console.log('[Reader] Starting stream by chapter ID (sync_state=1/2):', cloudChapterId, 'BookID:', cloudBookId)
   trimStreamByChapterId(
-    activeBook.value!.id,
+    cloudBookId,
     cloudChapterId,
     promptId,
     (text) => {
@@ -808,15 +876,15 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
         setTimeout(() => {
           showTerminal.value = false
           if (pageMode.value === 'click') refreshWindow('keep')
+          showModeSwitchTip(activeChapter.value, promptId)
         }, 800)
       } else {
-        showNotification(`精简完成`)
+        showModeSwitchTip(activeChapter.value, promptId)
       }
-    }
-  )
-  // #endif
+    })
+    // #endif
 
-  // #ifndef APP-PLUS
+    // #ifndef APP-PLUS
   // 小程序端：使用 trimStreamByChapterId (按章节 ID)
   trimStreamByChapterId(
     activeBook.value!.id,
@@ -848,12 +916,12 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
         setTimeout(() => {
           showTerminal.value = false
           if (pageMode.value === 'click') refreshWindow('keep')
+          showModeSwitchTip(activeChapter.value, promptId)
         }, 800)
       } else {
-        showNotification(`精简完成`)
+        showModeSwitchTip(activeChapter.value, promptId)
       }
-    }
-  )
+    })
   // #endif
 }
 
@@ -864,15 +932,7 @@ const switchToMode = async (id: string, showModalOnFailure = true) => {
     const isLogin = !!rawToken
 
     if (!isLogin) {
-      uni.showModal({
-        title: '需要登录',
-        content: '本地书籍仅支持阅读原文',
-        showCancel: true,
-        confirmText: '去登录',
-        success: (res: any) => {
-          if (res.confirm) uni.navigateTo({ url: '/pages/login/login' })
-        }
-      })
+      openLoginModal('本地书籍仅支持阅读原文，切换精简模式需要登录账号。');
       return
     }
   } catch (e) {
@@ -888,6 +948,13 @@ const switchToMode = async (id: string, showModalOnFailure = true) => {
     isMagicActive.value = true
     syncUI()
     if (pageMode.value === 'click') refreshWindow('keep')
+    triggerPreload()
+    
+    // 显示模式切换提示
+    const promptId = parseInt(id)
+    setTimeout(() => {
+      showModeSwitchTip(activeChapter.value, promptId)
+    }, 100)
   } else {
     if (showModalOnFailure) {
       showConfigModal.value = true
@@ -918,6 +985,7 @@ const toggleMagic = () => {
     isMagicActive.value = false
     syncUI() // 切回原文
     if (pageMode.value === 'click') refreshWindow('keep')
+    showNotification('已切换为原文')
   } else {
     const targetMode = activeBook.value?.activeModeId || (bookStore.prompts[0]?.id.toString())
     if (targetMode) switchToMode(targetMode, true)
@@ -928,26 +996,33 @@ const toggleMagic = () => {
 const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 'start') => {
   if (index < 0 || index >= activeBook.value!.chapters.length) return
   
-  // 检查目标章节是否支持当前模式
-  if (isMagicActive.value) {
-    const targetChapter = activeBook.value!.chapters[index]
-    const modeId = activeBook.value!.activeModeId
-    
-    console.log('[Debug] Check Mode Keep:', modeId, 'Target Trimmed:', targetChapter.trimmed_prompt_ids)
-
-    const hasTrimmed = targetChapter.trimmed_prompt_ids?.some((id: number) => id.toString() === modeId || id === Number(modeId))
-    if (!hasTrimmed) {
-       console.log('[Debug] Mode Keep Failed -> Reset to original')
-       showNotification('该章暂无精简内容，已切回原文')
-       isMagicActive.value = false
-    } else {
-       console.log('[Debug] Mode Keep Success')
+  const targetChapter = activeBook.value!.chapters[index]
+  
+  // 如果当前是精简模式，先查询目标章节的精简状态
+  if (isMagicActive.value && activeBook.value?.activeModeId) {
+    const promptId = parseInt(activeBook.value.activeModeId)
+    if (promptId > 0) {
+      console.log('[Debug] Querying trim status for chapter:', targetChapter.id)
+      await bookStore.ensureTrimmedStatus(targetChapter.id)
+      
+      const hasTrimmed = targetChapter.trimmed_prompt_ids?.includes(promptId)
+      if (!hasTrimmed) {
+        console.log('[Debug] Mode Keep Failed -> Reset to original')
+        const prevPromptId = parseInt(activeBook.value.activeModeId)
+        const prevPrompt = bookStore.prompts.find(p => p.id === prevPromptId)
+        const modeName = prevPrompt?.name || '当前模式'
+        showNotification(`「${modeName}」无精简内容，已切回原文`)
+        isMagicActive.value = false
+      } else {
+        console.log('[Debug] Mode Keep Success, loading trimmed content...')
+        // 关键修复：主动加载目标章节的精简内容
+        await bookStore.fetchChapterTrim(activeBook.value.id, targetChapter.id, promptId)
+      }
     }
   }
 
   isTextTransitioning.value = true
   clearTimeout(progressTimer)
-  clearTimeout(preloadTimer)
 
   if (pageMode.value === 'scroll') {
     scrollTop.value = 1
@@ -960,13 +1035,23 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     await refreshWindow(targetPosition === 'end' ? 'last' : 'first')
   } else {
     await bookStore.setChapter(index)
-    syncUI() // 切换章节后同步
+    syncUI()
     isTextTransitioning.value = false
   }
 
-  const chapId = activeBook.value!.chapters[index].id
-  handlePreloadCheck(index)
-  handleProgressTracking(chapId)
+   const chapId = activeBook.value!.chapters[index].id
+   triggerPreload()
+   handleProgressTracking(chapId)
+
+   // 如果保持精简模式，显示提示
+   if (isMagicActive.value && activeBook.value?.activeModeId) {
+     const promptId = parseInt(activeBook.value.activeModeId)
+     if (promptId > 0) {
+       setTimeout(() => {
+         showModeSwitchTip(activeBook.value!.chapters[index], promptId)
+       }, 300)
+     }
+   }
 }
 </script>
 
@@ -1047,8 +1132,17 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
       <view @click.stop="toggleMagic" @longpress="showConfigModal = true"
         :class="getMagicButtonClass()"
         class="w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all select-none">
-        <text v-if="!isAiLoading" class="text-2xl">🪄</text>
-        <text v-else class="animate-spin text-xl">⏳</text>
+        <image 
+          v-if="!isAiLoading" 
+          src="/static/icons/sparkles.svg" 
+          class="w-7 h-7 transition-opacity duration-300" 
+          :class="isMagicActive ? 'opacity-100 invert brightness-200' : 'opacity-60'" 
+        />
+        <image 
+          v-else 
+          src="/static/icons/loading.svg" 
+          class="w-6 h-6 animate-spin opacity-60" 
+        />
       </view>
     </view>
 
@@ -1083,6 +1177,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" @close="showConfigModal = false" @start="handleStartProcess" />
     <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="pageMode = $event" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" />
     <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :reading-mode="readingMode" :mode-colors="modeColors" @close="handleTerminalClose" />
+    <LoginConfirmModal v-model:visible="showLoginModal" :content="loginTipContent" :reading-mode="readingMode" @confirm="handleLoginConfirm" />
     <view v-if="showToast" class="fixed bottom-40 left-1/2 -translate-x-1/2 bg-stone-900 text-white px-4 py-2 rounded-full text-xs z-[110] shadow-2xl">{{ toastMsg }}</view>
   </view>
 </template>

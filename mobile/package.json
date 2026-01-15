@@ -48,6 +48,7 @@
     "@dcloudio/uni-mp-weixin": "3.0.0-4080420251103001",
     "@dcloudio/uni-mp-xhs": "3.0.0-4080420251103001",
     "@dcloudio/uni-quickapp-webview": "3.0.0-4080420251103001",
+    "jszip": "^3.10.1",
     "pinia": "^2.1.7",
     "spark-md5": "^3.0.2",
     "vue": "^3.4.21",

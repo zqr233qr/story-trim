@@ -108,6 +108,14 @@ func (r *BookRepository) GetChaptersByBookID(ctx context.Context, bookID uint) (
 	return dbChaps, nil
 }
 
+func (r *BookRepository) GetChaptersByBookIDAndIndexes(ctx context.Context, bookID uint, indexes []int) ([]model.Chapter, error) {
+	var dbChaps []model.Chapter
+	if err := r.db.WithContext(ctx).Where("book_id = ? and index in (?)", bookID, indexes).Order("`index` ASC").Find(&dbChaps).Error; err != nil {
+		return nil, err
+	}
+	return dbChaps, nil
+}
+
 func (r *BookRepository) GetChapterByID(ctx context.Context, id uint) (*model.Chapter, error) {
 	var c model.Chapter
 	if err := r.db.WithContext(ctx).First(&c, id).Error; err != nil {
@@ -169,19 +177,19 @@ func (r *BookRepository) GetRawContent(ctx context.Context, md5 string) (*model.
 }
 
 func (r *BookRepository) GetTrimResult(ctx context.Context, md5 string, promptID uint) (*model.TrimResult, error) {
-	var t *model.TrimResult
-	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID), t)
+	var t model.TrimResult
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID), &t)
 	if err != nil {
 		return nil, err
 	}
 	if !exist {
 		return nil, nil
 	}
-	return t, nil
+	return &t, nil
 }
 
 func (r *BookRepository) ExistTrimResultWithoutObject(ctx context.Context, md5 string, promptID uint) (bool, error) {
-	return ExistWithoutObject(r.db.WithContext(ctx).Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID))
+	return ExistWithoutObject(r.db.WithContext(ctx).Model(&model.TrimResult{}).Where("chapter_md5 = ? AND prompt_id = ?", md5, promptID))
 }
 
 func (r *BookRepository) SaveTrimResult(ctx context.Context, res *model.TrimResult) error {
@@ -294,4 +302,5 @@ type BookRepositoryInterface interface {
 	ListSystemPrompts(ctx context.Context) ([]model.Prompt, error)
 	GetSummaryPrompt(ctx context.Context) (*model.Prompt, error)
 	ExistTrimResultWithoutObject(ctx context.Context, md5 string, promptID uint) (bool, error)
+	GetChaptersByBookIDAndIndexes(ctx context.Context, bookID uint, indexes []int) ([]model.Chapter, error)
 }

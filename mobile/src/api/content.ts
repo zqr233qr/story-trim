@@ -90,3 +90,27 @@ export function updateReadingProgress(bookId: number, chapterId: number, promptI
     data: { chapter_id: chapterId, prompt_id: promptId || 0 }
   });
 }
+
+/**
+ * 根据章节ID查询已精简状态
+ * 对应后端: POST /chapters/status
+ */
+export function getChapterTrimStatusById(chapterId: number): Promise<Response<{ prompt_ids: number[] }>> {
+  return request({
+    url: '/chapters/status',
+    method: 'POST',
+    data: { chapter_id: chapterId }
+  });
+}
+
+/**
+ * 根据MD5查询已精简状态
+ * 对应后端: POST /contents/status
+ */
+export function getChapterTrimStatusByMd5(md5: string): Promise<Response<{ prompt_ids: number[] }>> {
+  return request({
+    url: '/contents/status',
+    method: 'POST',
+    data: { chapter_md5: md5 }
+  });
+}

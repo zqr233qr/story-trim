@@ -97,14 +97,32 @@ func (h *BookHandler) GetDetail(c *gin.Context) {
 		return
 	}
 
-	userID := GetUserID(c)
-	resp, err := h.svc.GetBookDetailByID(c.Request.Context(), userID, bookID)
+	resp, err := h.svc.GetBookDetailByID(c.Request.Context(), bookID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode, err.Error())
 		return
 	}
 
 	response.Success(c, resp)
+}
+
+func (h *BookHandler) GetProgress(c *gin.Context) {
+	bookIDStr := c.Param("id")
+	bookID := cast.ToUint(bookIDStr)
+
+	if bookID == 0 {
+		response.Error(c, http.StatusBadRequest, errno.ParamErrCode, "Invalid book ID")
+		return
+	}
+
+	userID := GetUserID(c)
+	history, err := h.svc.GetReadingProgress(c.Request.Context(), userID, bookID)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode, err.Error())
+		return
+	}
+
+	response.Success(c, history)
 }
 
 func (h *BookHandler) GetChaptersContent(c *gin.Context) {
