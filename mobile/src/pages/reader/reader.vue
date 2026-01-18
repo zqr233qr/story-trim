@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { useBookStore } from '@/stores/book'
 import { api } from '@/api'
 import { trimStreamByChapterId, trimStreamByMd5 } from '@/api/trim'
+import { TTSPlayer } from '@/utils/tts'
 import ModeConfigModal from '@/components/ModeConfigModal.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ChapterList from '@/components/ChapterList.vue'
@@ -62,7 +63,7 @@ const modeColors = {
   sepia: { bg: '#F5E6D3', text: '#5D4E37' }
 }
 const fontSize = ref(18)
-const pageMode = ref<'scroll' | 'click'>('scroll')
+const pageMode = ref<'scroll' | 'click'>(uni.getStorageSync('pageMode') as 'scroll' | 'click' || 'scroll')
 const hideStatusBar = ref(uni.getStorageSync('hideStatusBar') === 'true')
 
 const showTerminal = ref(false)
@@ -75,6 +76,150 @@ const isTextTransitioning = ref(false)
 const scrollTop = ref(0)
 const lastScrollTop = ref(0)
 
+// --- TTS 听书相关 ---
+const isTtsSpeaking = ref(false)
+const showTtsPanel = ref(false)
+const ttsRate = ref(1.0)
+const ttsCurrentIndex = ref(-1)
+const ttsSleepValue = ref(0) // 0-100 用于 slider 显示
+const ttsPlayer = ref<any>(null) // 改为 ref，延迟初始化
+
+const getSleepLabel = (val: number) => {
+  if (val <= 0) return '不开启'
+  return `${val} 分钟`
+}
+
+const handleSleepSliderChange = (e: any) => {
+  const val = e.detail.value
+  ttsSleepValue.value = val
+  
+  if (val <= 0) {
+    if (ttsPlayer.value) ttsPlayer.value.setSleepTimer('off')
+  } else {
+    if (ttsPlayer.value) ttsPlayer.value.setSleepTimer(val)
+    showNotification(`已设置：${val}分钟后关闭`)
+  }
+}
+
+// 懒滚动：只有当段落跑出可视区域（或即将跑出）时才滚动
+const lazyScrollToParagraph = (index: number) => {
+  const query = uni.createSelectorQuery().in(instance)
+  query.selectAll('.content-para').boundingClientRect()
+  query.select('.scroll-view-content').boundingClientRect() // 获取容器位置信息
+  query.exec((res) => {
+    const paras = res[0] as any[]
+    const container = res[1] as any // 容器信息
+    
+    if (!paras || !paras[index] || !container) return
+    
+    const para = paras[index]
+    const windowHeight = uni.getSystemInfoSync().windowHeight
+    const bottomThreshold = windowHeight * 0.85 // 屏幕底部 15% 的触发线
+    const topThreshold = statusBarHeight.value + 60 // 顶部导航栏高度
+    
+    // 1. 如果段落底部超过了触发线 (需要向下滚)
+    // 2. 或者段落顶部已经被遮挡 (需要向上滚 - 极少发生但为了保险)
+    if (para.bottom > bottomThreshold || para.top < topThreshold) {
+       // 计算目标位置：将该段落滚动到屏幕上方 1/3 处，阅读体验最佳
+       // scrollTop = 当前容器scrollTop + (段落top - 容器top) - 目标视觉偏移
+       const targetScrollTop = scrollTop.value + (para.top - container.top) - (windowHeight * 0.2)
+       
+       uni.pageScrollTo({
+         scrollTop: Math.max(0, targetScrollTop),
+         duration: 400
+       })
+       scrollTop.value = Math.max(0, targetScrollTop)
+    }
+  })
+}
+
+// 监听 TTS 进度变化，触发自动滚动
+watch(ttsCurrentIndex, (newIndex) => {
+  if (newIndex >= 0 && pageMode.value === 'scroll') {
+    lazyScrollToParagraph(newIndex)
+  }
+})
+
+// 初始化 TTS (在 init 中调用)
+const initTTS = () => {
+  if (ttsPlayer.value) return
+  
+  ttsPlayer.value = new TTSPlayer({
+    rate: ttsRate.value,
+    title: activeChapter.value?.title || '听书',
+    singer: activeBook.value?.title || 'Story Trim',
+    onRangeStart: (index) => {
+      ttsCurrentIndex.value = index
+      // 滚动逻辑已移至 watch(ttsCurrentIndex)
+    },
+    onEnd: () => {
+      if (activeBook.value && activeBook.value.activeChapterIndex < activeBook.value.chapters.length - 1) {
+        switchChapter(activeBook.value.activeChapterIndex + 1).then(() => {
+          setTimeout(() => {
+            startTTS()
+          }, 1000)
+        })
+      } else {
+        isTtsSpeaking.value = false
+      }
+    },
+    onNext: () => {
+       if (activeBook.value && activeBook.value.activeChapterIndex < activeBook.value.chapters.length - 1) {
+          switchChapter(activeBook.value.activeChapterIndex + 1).then(() => {
+             setTimeout(() => startTTS(), 500)
+          })
+       }
+    },
+    onPrev: () => {
+       if (activeBook.value && activeBook.value.activeChapterIndex > 0) {
+          switchChapter(activeBook.value.activeChapterIndex - 1).then(() => {
+             setTimeout(() => startTTS(), 500)
+          })
+       }
+    }
+  })
+}
+
+const toggleTtsPanel = () => {
+  showTtsPanel.value = !showTtsPanel.value
+}
+
+const updateTtsRate = (newRate: number) => {
+  ttsRate.value = newRate
+  if (ttsPlayer.value) ttsPlayer.value.updateOptions({ rate: newRate })
+}
+
+const toggleTTS = () => {
+  if (isTtsSpeaking.value) {
+    if (ttsPlayer.value) ttsPlayer.value.pause()
+    isTtsSpeaking.value = false
+  } else {
+    startTTS()
+  }
+}
+
+const startTTS = () => {
+  if (!ttsPlayer.value) initTTS()
+  
+  if (currentTextLines.value.length > 0) {
+    if (ttsCurrentIndex.value > 0) {
+       ttsPlayer.value.play(ttsCurrentIndex.value)
+    } else {
+       ttsPlayer.value.setLines(currentTextLines.value)
+       ttsPlayer.value.play(0)
+    }
+    isTtsSpeaking.value = true
+    menuVisible.value = false 
+  }
+}
+
+const stopTTS = () => {
+  if (ttsPlayer.value) ttsPlayer.value.stop()
+  isTtsSpeaking.value = false
+  ttsCurrentIndex.value = -1
+  showTtsPanel.value = false 
+}
+
 const recordedChapterId = ref(0) // 本章节进度记录锁
 let progressTimer: any = null
 let menuAutoHideTimer: any = null // 菜单栏自动隐藏定时器
@@ -86,7 +231,8 @@ const icons = {
   prev: '/static/icons/prev.svg',
   batch: '/static/icons/batch.svg',
   next: '/static/icons/next.svg',
-  settings: '/static/icons/settings.svg'
+  settings: '/static/icons/settings.svg',
+  headphone: '/static/icons/headphone.svg'
 }
 
 // 计算精简百分比（基于字符数）
@@ -133,6 +279,7 @@ const currentPageIndex = ref(0)
 const swiperCurrent = ref(0)
 const isSwiperReady = ref(false)
 const isWindowShifting = ref(false)
+const isSilentUpdate = ref(false) // 静默更新锁
 
 const prevPages = ref<string[][]>([])
 const currPages = ref<string[][]>([])
@@ -205,7 +352,13 @@ const syncUI = () => {
   }
 
   // 优先取缓存，否则取原文，再否则提示
-  const lines = activeChapter.value.modes[modeKey] || activeChapter.value.modes['original'] || ['暂无内容']
+  let lines = activeChapter.value.modes[modeKey] || activeChapter.value.modes['original'] || ['暂无内容']
+  
+  // 【排版优化】清洗段首空白：去除行首的空格、制表符、全角空格(\u3000)、不换行空格(\xA0)
+  // 这样配合 CSS 的 text-indent (indent-8) 可以实现统一的标准缩进，避免重复缩进
+  if (lines && lines.length) {
+    lines = lines.map(line => line.replace(/^[ \t\u3000\xA0]+/, ''))
+  }
   
   // 避免无意义的赋值触发重绘
   if (JSON.stringify(currentTextLines.value) !== JSON.stringify(lines)) {
@@ -270,12 +423,83 @@ const getChapterText = (idx: number): string[] => {
 }
 
 // 加载/刷新滑动窗口 (翻页模式的唯一入口)
-const refreshWindow = async (targetPos: 'first' | 'last' | 'keep' = 'first') => {
+const refreshWindow = async (targetPos: 'first' | 'last' | 'keep' = 'first', reuseDirection?: 'next' | 'prev') => {
   if (pageMode.value !== 'click' || !activeBook.value) return
   
-  // 确保数据最新
   syncUI()
   
+  // 快速复用模式 (消除白屏关键)
+  if (reuseDirection === 'next' && nextPages.value.length > 0) {
+      // 复用：旧Curr -> 新Prev, 旧Next -> 新Curr
+      const oldCurr = currPages.value
+      const oldNext = nextPages.value
+      
+      prevPages.value = oldCurr
+      currPages.value = oldNext
+      nextPages.value = [] // 暂时置空
+      
+      // 瞬移 Index: 新组合是 [Prev(原Curr), Curr(原Next), Next(空)]
+      // 目标是 Curr 的第一页，即 prevPages.length
+      // 注意：swiperCurrent 必须在数据变化后立即修正，否则 Swiper 会乱跳
+      // 我们先修正数据，Swiper 会根据 key 或 dom 重新渲染，此时 index 也要对上
+      
+      isSilentUpdate.value = true
+      swiperCurrent.value = oldCurr.length
+      currentPageIndex.value = oldCurr.length
+      
+      setTimeout(() => { isSilentUpdate.value = false }, 300)
+      
+      // 异步加载新的 Next (Chapter + 1)
+      const nextIdx = activeBook.value.activeChapterIndex + 1
+      if (nextIdx < activeBook.value.chapters.length) {
+          const nextText = getChapterText(nextIdx)
+          if (nextText.length > 0) {
+              measureText(nextText).then(pages => { nextPages.value = pages })
+          } else {
+              // 如果没预加载，去 fetch
+              bookStore.fetchChapter(bookId.value, activeBook.value.chapters[nextIdx].id).then(async () => {
+                  const txt = getChapterText(nextIdx)
+                  if (txt.length) nextPages.value = await measureText(txt)
+              })
+          }
+      }
+      return
+  }
+  
+  if (reuseDirection === 'prev' && prevPages.value.length > 0) {
+      const oldPrev = prevPages.value
+      const oldCurr = currPages.value
+      
+      nextPages.value = oldCurr
+      currPages.value = oldPrev
+      prevPages.value = []
+      
+      // 瞬移 Index: 目标是 Curr 的最后一页
+      // 新组合 [Prev(空), Curr(原Prev), Next(原Curr)]
+      // 目标 index = oldPrev.length - 1
+      
+      isSilentUpdate.value = true
+      swiperCurrent.value = oldPrev.length - 1
+      currentPageIndex.value = oldPrev.length - 1
+      
+      setTimeout(() => { isSilentUpdate.value = false }, 300)
+      
+      const prevIdx = activeBook.value.activeChapterIndex - 1
+      if (prevIdx >= 0) {
+          const prevText = getChapterText(prevIdx)
+          if (prevText.length > 0) {
+              measureText(prevText).then(pages => { prevPages.value = pages })
+          } else {
+              bookStore.fetchChapter(bookId.value, activeBook.value.chapters[prevIdx].id).then(async () => {
+                  const txt = getChapterText(prevIdx)
+                  if (txt.length) prevPages.value = await measureText(txt)
+              })
+          }
+      }
+      return
+  }
+
+  // === 全量重置 (首次加载或非连续跳转) ===
   isSwiperReady.value = false
   isTextTransitioning.value = true
   
@@ -292,7 +516,7 @@ const refreshWindow = async (targetPos: 'first' | 'last' | 'keep' = 'first') => 
   if (currentIndex > 0) bookStore.fetchChapter(bookId.value, activeBook.value.chapters[currentIndex-1].id)
   if (currentIndex < activeBook.value.chapters.length - 1) bookStore.fetchChapter(bookId.value, activeBook.value.chapters[currentIndex+1].id)
 
-  // 3. 依次测量当前窗口的三章内容
+  // 3. 依次测量
   currPages.value = await measureText(currentTextLines.value)
   
   const prevText = getChapterText(currentIndex - 1)
@@ -301,7 +525,7 @@ const refreshWindow = async (targetPos: 'first' | 'last' | 'keep' = 'first') => 
   const nextText = getChapterText(currentIndex + 1)
   nextPages.value = nextText.length > 0 ? await measureText(nextText) : []
 
-  // 4. 重置测量层并定位索引
+  // 4. 定位索引
   textToMeasure.value = []
   const targetIdx = targetPos === 'last' ? prevPages.value.length + currPages.value.length - 1 : prevPages.value.length
   
@@ -361,7 +585,13 @@ const handleProgressTracking = (chapterId: number) => {
   }, 5000)
 }
 
-// --- 4. 监听与生命周期 ---
+// 监听菜单显示状态，同步关闭听书面板
+watch(menuVisible, (val) => {
+  if (!val) {
+    showTtsPanel.value = false
+  }
+})
+
 // 监听阅读模式变化，同步修改导航栏颜色
 watch(readingMode, (val) => {
   const isDark = val === 'dark' || val === 'sepia'
@@ -410,6 +640,8 @@ onLoad((options) => {
 onUnload(() => {
   uni.setKeepScreenOn({ keepScreenOn: false })
   clearTimeout(progressTimer)
+  saveProgress() // 保存进度
+  if (ttsPlayer.value) ttsPlayer.value.stop() // 停止听书
   
   // #ifdef APP-PLUS
   // 退出时恢复状态栏显示
@@ -452,6 +684,9 @@ const init = async () => {
 
   syncUI()
   if (pageMode.value === 'click') refreshWindow()
+  
+  // 初始化 TTS (此时 activeBook 已就绪)
+  initTTS()
 }
 
 // 决定起始章节索引
@@ -608,10 +843,7 @@ const saveProgress = async () => {
 }
 
 // 页面卸载时保存进度
-onUnload(() => {
-  uni.setKeepScreenOn({ keepScreenOn: false })
-  saveProgress()
-})
+// 逻辑已合并到上方的 onUnload
 
 // --- 5. 事件处理 ---
 const handleScroll = (e: any) => {
@@ -634,7 +866,7 @@ const handleScroll = (e: any) => {
 }
 
 const onSwiperChange = (e: any) => {
-  if (!isSwiperReady.value || isWindowShifting.value) return
+  if (!isSwiperReady.value || isWindowShifting.value || isSilentUpdate.value) return
   const newIdx = e.detail.current
   const prevCount = prevPages.value.length
   const currCount = currPages.value.length
@@ -1001,6 +1233,13 @@ const toggleMagic = () => {
 const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 'start') => {
   if (index < 0 || index >= activeBook.value!.chapters.length) return
   
+  // 手动切换章节时，如果正在听书，则停止
+  if (isTtsSpeaking.value) {
+    if (ttsPlayer.value) ttsPlayer.value.stop()
+    isTtsSpeaking.value = false
+    ttsCurrentIndex.value = -1
+  }
+
   const targetChapter = activeBook.value!.chapters[index]
   
   // 如果当前是精简模式，先查询目标章节的精简状态
@@ -1034,10 +1273,16 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     nextTick(() => { scrollTop.value = 0 })
   }
   
+  // 判断是否相邻，用于无缝切换
+  let reuseDir: 'next' | 'prev' | undefined = undefined
+  if (Math.abs(index - activeBook.value!.activeChapterIndex) === 1) {
+      reuseDir = index > activeBook.value!.activeChapterIndex ? 'next' : 'prev'
+  }
+
   activeBook.value!.activeChapterIndex = index
   
   if (pageMode.value === 'click') {
-    await refreshWindow(targetPosition === 'end' ? 'last' : 'first')
+    await refreshWindow(targetPosition === 'end' ? 'last' : 'first', reuseDir)
   } else {
     await bookStore.setChapter(index)
     syncUI()
@@ -1072,7 +1317,97 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
           <image :src="icons.back" mode="aspectFit" style="width: 44rpx; height: 44rpx;" class="opacity-70"></image>
         </view>
         <text class="font-bold text-sm truncate max-w-[200px]">{{ activeBook?.title }}</text>
-        <view class="w-10"></view>
+        
+        <!-- TTS Icon Button -->
+        <view @click.stop="toggleTtsPanel" class="p-2 relative group active:opacity-50 transition-opacity">
+          <view class="w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200"
+                :class="isTtsSpeaking ? 'bg-teal-500/10' : ''">
+            <image :src="icons.headphone" mode="aspectFit" 
+                   class="w-5 h-5 transition-all duration-300"
+                   :class="[
+                     isTtsSpeaking ? 'opacity-100' : 'opacity-70',
+                     // 如果是播放状态，使用 CSS filter 染成青色 (teal-500 approx hue-rotate)
+                     // 如果是暗黑模式且未播放，反色以显示为白色
+                     isTtsSpeaking ? 'sepia hue-rotate-190 saturate-200' : (readingMode === 'dark' ? 'invert' : '')
+                   ]" 
+                   style="width: 44rpx; height: 44rpx;"></image>
+            <view v-if="isTtsSpeaking" class="absolute inset-0 rounded-full border border-teal-500 animate-ping opacity-20"></view>
+          </view>
+        </view>
+      </view>
+      
+      <!-- TTS Control Panel (Minimalist Modern Style) -->
+      <view v-if="showTtsPanel" 
+            class="absolute top-14 right-4 w-64 bg-white/80 dark:bg-stone-900/80 backdrop-blur-md shadow-2xl rounded-2xl border border-white/20 dark:border-stone-800/50 z-50 p-4 animate-slide-up-fade">
+        
+        <!-- Controls Row -->
+        <view class="flex items-center justify-between mb-5">
+          <view class="flex flex-col">
+            <text class="text-[10px] font-bold tracking-widest uppercase opacity-30 mb-1">状态</text>
+            <text class="text-xs font-medium" :class="isTtsSpeaking ? 'text-teal-500' : 'text-stone-400'">
+              {{ isTtsSpeaking ? '正在朗读...' : '已暂停' }}
+            </text>
+          </view>
+          
+          <view class="flex items-center gap-2">
+            <!-- Stop -->
+            <view @click="stopTTS" class="w-8 h-8 rounded-full flex items-center justify-center bg-stone-200/50 dark:bg-stone-800/50 active:scale-90 transition-transform">
+              <view class="w-2.5 h-2.5 bg-stone-500 rounded-[2px]"></view>
+            </view>
+            <!-- Play/Pause -->
+            <view @click="toggleTTS" class="w-10 h-10 rounded-full flex items-center justify-center bg-teal-500 shadow-lg shadow-teal-500/20 active:scale-95 transition-all">
+              <view v-if="!isTtsSpeaking" class="ml-0.5 border-l-[10px] border-l-white border-y-[6px] border-y-transparent"></view>
+              <view v-else class="flex gap-1">
+                <view class="w-1 h-3 bg-white rounded-full"></view>
+                <view class="w-1 h-3 bg-white rounded-full"></view>
+              </view>
+            </view>
+          </view>
+        </view>
+        
+        <!-- Speed Control (Slider) -->
+        <view class="flex flex-col mb-5">
+          <view class="flex justify-between items-center mb-2">
+            <text class="text-[10px] font-bold tracking-widest uppercase opacity-30">语速</text>
+            <text class="text-xs font-mono font-bold text-teal-600">{{ ttsRate.toFixed(1) }}x</text>
+          </view>
+          <slider 
+            :value="ttsRate" 
+            :min="0.5" 
+            :max="3.0" 
+            :step="0.1" 
+            activeColor="#14b8a6" 
+            backgroundColor="#e5e7eb" 
+            block-size="16"
+            @change="(e) => updateTtsRate(e.detail.value)"
+            @changing="(e) => ttsRate = e.detail.value"
+          />
+        </view>
+
+        <!-- Sleep Timer (Slider) -->
+        <view class="flex flex-col">
+          <view class="flex justify-between items-center mb-2">
+            <text class="text-[10px] font-bold tracking-widest uppercase opacity-30">定时关闭</text>
+            <text class="text-xs font-mono font-bold text-teal-600">{{ getSleepLabel(ttsSleepValue) }}</text>
+          </view>
+          <slider 
+            :value="ttsSleepValue" 
+            :min="0" 
+            :max="90" 
+            :step="5" 
+            activeColor="#14b8a6" 
+            backgroundColor="#e5e7eb" 
+            block-size="16"
+            @change="handleSleepSliderChange"
+            @changing="(e) => ttsSleepValue = e.detail.value"
+          />
+          <view class="flex justify-between px-1 mt-1">
+             <text class="text-[10px] text-stone-300">关</text>
+             <text class="text-[10px] text-stone-300">30分</text>
+             <text class="text-[10px] text-stone-300">60分</text>
+             <text class="text-[10px] text-stone-300">90分</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -1080,12 +1415,14 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <view class="flex-1 min-h-0 w-full" @click="handleContentClick">
       
       <!-- 1. Scroll Mode -->
-      <scroll-view v-if="pageMode === 'scroll'" scroll-y class="h-full" :scroll-top="scrollTop" @scroll="handleScroll">
+      <scroll-view v-if="pageMode === 'scroll'" scroll-y class="h-full scroll-view-content" :scroll-top="scrollTop" @scroll="handleScroll">
         <view class="p-6 pb-32 transition-opacity duration-300" :style="{ fontSize: fontSize + 'px', paddingTop: (statusBarHeight + 60) + 'px' }" :class="{ 'opacity-0': isTextTransitioning }">
           <view class="text-2xl font-bold mb-10 text-center">{{ activeChapter?.title }}</view>
           
           <!-- Explicit UI Binding -->
-          <view v-for="(para, idx) in currentTextLines" :key="idx" class="mb-6 indent-8 leading-loose text-justify">
+          <view v-for="(para, idx) in currentTextLines" :key="idx" 
+                class="content-para mb-6 indent-8 leading-loose text-justify transition-colors duration-300"
+                :class="{ 'text-teal-500 font-medium': ttsCurrentIndex === idx }">
             {{ para }}
           </view>
           
@@ -1106,7 +1443,9 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
             <view v-if="isFirstPageOfChapter(pIdx)" class="text-2xl font-bold mb-10 text-center">
               {{ getPageTitle(pIdx) }}
             </view>
-            <view v-for="(para, idx) in page" :key="idx" class="mb-6 indent-8 leading-loose text-justify">
+            <view v-for="(para, idx) in page" :key="idx" 
+                  class="mb-6 indent-8 leading-loose text-justify transition-colors duration-300"
+                  :class="{ 'text-teal-500 font-medium': ttsCurrentIndex !== -1 && currentTextLines[ttsCurrentIndex] === para }">
               {{ para }}
             </view>
           </view>
@@ -1180,7 +1519,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :reading-mode="readingMode" :mode-colors="modeColors" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
     <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :reading-mode="readingMode" :mode-colors="modeColors" @close="showBatchModal = false" @confirm="(id) => handleStartProcess(id, true)" />
     <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" @close="showConfigModal = false" @start="handleStartProcess" />
-    <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="pageMode = $event" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" />
+    <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="(val) => { pageMode = val; uni.setStorageSync('pageMode', val) }" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" />
     <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :reading-mode="readingMode" :mode-colors="modeColors" @close="handleTerminalClose" />
     <LoginConfirmModal v-model:visible="showLoginModal" :content="loginTipContent" :reading-mode="readingMode" @confirm="handleLoginConfirm" />
     <view v-if="showToast" class="fixed bottom-40 left-1/2 -translate-x-1/2 bg-stone-900 text-white px-4 py-2 rounded-full text-xs z-[110] shadow-2xl">{{ toastMsg }}</view>
@@ -1190,4 +1529,12 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
 <style>
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 ::-webkit-scrollbar { display: none; width: 0; height: 0; color: transparent; }
+
+@keyframes slideUpFade {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up-fade {
+  animation: slideUpFade 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
 </style>

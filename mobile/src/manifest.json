@@ -41,11 +41,13 @@
                     "<uses-permission android:name=\"android.permission.FLASHLIGHT\"/>",
                     "<uses-feature android:name=\"android.hardware.camera\"/>",
                     "<uses-permission android:name=\"android.permission.WRITE_SETTINGS\"/>"
-                ]
+                ],
+                "minSdkVersion" : 23
             },
             /* ios打包配置 */
             "ios" : {
-                "dSYMs" : false
+                "dSYMs" : false,
+                "UIBackgroundModes" : [ "audio" ]
             },
             /* SDK配置 */
             "sdkConfigs" : {},
@@ -79,6 +81,22 @@
                         "spotlight@2x" : "unpackage/res/icons/80x80.png",
                         "spotlight@3x" : "unpackage/res/icons/120x120.png"
                     }
+                }
+            }
+        },
+        "nativePlugins" : {
+            "nrb-tts-plugin" : {
+                "__plugin_info__" : {
+                    "name" : "语音合成TTS - [试用版，仅用于自定义调试基座]",
+                    "description" : "原生语音合成TTS",
+                    "platforms" : "Android,iOS",
+                    "url" : "https://ext.dcloud.net.cn/plugin?id=4133",
+                    "android_package_name" : "",
+                    "ios_bundle_id" : "",
+                    "isCloud" : true,
+                    "bought" : 0,
+                    "pid" : "4133",
+                    "parameters" : {}
                 }
             }
         }
