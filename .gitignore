@@ -15,6 +15,7 @@ config.yaml
 
 # Go
 vendor/
+cmd/api-server/wire_gen.go
 
 # Node
 node_modules/

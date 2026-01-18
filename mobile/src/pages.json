@@ -1,16 +1,16 @@
 {
   "pages": [
     {
-      "path": "pages/login/login",
+      "path": "pages/shelf/shelf",
       "style": {
-        "navigationBarTitleText": "登录",
+        "navigationBarTitleText": "我的书架",
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/shelf/shelf",
+      "path": "pages/login/login",
       "style": {
-        "navigationBarTitleText": "我的书架",
+        "navigationBarTitleText": "登录",
         "navigationStyle": "custom"
       }
     },

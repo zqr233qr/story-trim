@@ -3,6 +3,7 @@ import { ref, computed, getCurrentInstance } from "vue";
 import { onShow, onHide } from "@dcloudio/uni-app";
 import { useUserStore } from "@/stores/user";
 import { useBookStore } from "@/stores/book";
+import { api } from "@/api";
 import { taskApi } from "@/api/task";
 import BookCard from "@/components/BookCard.vue";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal.vue";
@@ -16,11 +17,21 @@ const userStore = useUserStore();
 const bookStore = useBookStore();
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0);
 const renderTrigger = ref(0);
+const currentRules = ref<any[]>([]);
 
 // 通用提示弹窗
 const alertVisible = ref(false);
 const alertMsg = ref("");
 const alertTitle = ref("提示");
+
+const logoutConfirmVisible = ref(false);
+
+const handleLogoutConfirm = () => {
+  userStore.logout();
+  bookStore.fetchBooks();
+  refreshTasks();
+  logoutConfirmVisible.value = false;
+};
 
 // 登录引导相关
 const showLoginModal = ref(false);
@@ -67,8 +78,7 @@ const onBookInfo = async (info: { title: string; total: number; bookMD5: string;
           const dir = '_doc/covers';
           
           // 确保目录存在 (异步稍微麻烦，这里假设已初始化或忽略错误)
-          try { fs.accessSync(dir); } catch { try { fs.mkdirSync(dir, true); } catch(e){} }
-          
+          try { fs.accessSync(dir); } catch { try { fs.mkdirSync(dir, true); } catch(e){} }          
           const filePath = `${dir}/${fileName}`;
           // 去掉 Base64 头部
           const base64Data = info.coverBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -188,13 +198,48 @@ const showActionSheet = ref(false);
 const actionBook = ref<any>(null);
 
 onShow(async () => {
+  console.log('[Shelf] onShow started');
   // #ifdef APP-PLUS
   await bookStore.init();
   // #endif
-  await bookStore.fetchBooks();
+  
+  try {
+    console.log('[Shelf] Calling fetchBooks...');
+    await bookStore.fetchBooks();
+    console.log('[Shelf] fetchBooks done');
+  } catch (e) {
+    console.error('[Shelf] fetchBooks error:', e);
+  }
   
   // 检查是否有正在运行的任务
-  await refreshTasks();
+  try {
+    console.log('[Shelf] Calling refreshTasks...');
+    await refreshTasks();
+    console.log('[Shelf] refreshTasks done');
+  } catch (e) {
+    console.warn('[Shelf] refreshTasks error:', e);
+  }
+
+  // 获取服务端解析规则
+  console.log('[Shelf] Preparing to fetch parser rules...');
+  try {
+    console.log('[Shelf] Calling api.getParserRules...');
+    const res = await api.getParserRules(); // 假设 api 已引入
+    console.log('[Shelf] api.getParserRules response:', res.code, res.data?.rules?.length);
+    
+    if (res.code === 0 && res.data.rules) {
+      currentRules.value = res.data.rules;
+      uni.setStorageSync('parser_rules', res.data);
+      console.log('[Shelf] Rules updated from server');
+    }
+  } catch (e) {
+    console.warn('[Shelf] Fetch parser rules failed:', e);
+    const cached = uni.getStorageSync('parser_rules');
+    if (cached && cached.rules) {
+        currentRules.value = cached.rules;
+        console.log('[Shelf] Rules loaded from cache');
+    }
+  }
 });
 
 const handleBookClick = (book: any) => {
@@ -271,10 +316,14 @@ const confirmDelete = () => {
   }
 };
 
-const handleLogout = () => {
-  userStore.logout();
-  uni.reLaunch({ url: "/pages/login/login" });
+const handleAvatarClick = () => {
+  if (!userStore.isLoggedIn()) {
+    uni.navigateTo({ url: "/pages/login/login" });
+    return;
+  }
+  logoutConfirmVisible.value = true;
 };
+
 
 // 过滤展示的书籍：未登录时隐藏仅云端书籍 (sync_state === 2)
 const displayBooks = computed(() => {
@@ -295,8 +344,8 @@ const displayBooks = computed(() => {
         <!-- Header -->
         <view class="flex justify-between items-center mb-8 pt-4">
           <view class="flex items-center gap-2">
-            <view class="bg-stone-900 text-white p-1.5 rounded-lg">
-              <text class="text-xs font-bold">ST</text>
+            <view class="w-8 h-8">
+              <image src="/static/icons/logo-combined.svg" class="w-full h-full" />
             </view>
             <text class="text-xl font-bold tracking-tight text-stone-800"
               >StoryTrim</text
@@ -305,7 +354,7 @@ const displayBooks = computed(() => {
           
           <view class="flex items-center gap-3">
             <view
-              @click="handleLogout"
+              @click="handleAvatarClick"
               class="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-500 font-bold text-xs active:opacity-50"
             >
               {{ (userStore.username || "G").charAt(0).toUpperCase() }}
@@ -331,6 +380,8 @@ const displayBooks = computed(() => {
         <view
           :change:prop="filePicker.trigger"
           :prop="renderTrigger"
+          :change:rules="filePicker.updateRules"
+          :rules="currentRules"
           class="hidden"
         ></view>
 
@@ -435,11 +486,21 @@ const displayBooks = computed(() => {
       @confirm="handleLoginConfirm"
     />
 
-    <!-- Simple Alert Modal -->
+    <!-- Simple Alert Modal (Alert) -->
     <SimpleAlertModal
       v-model:visible="alertVisible"
       :title="alertTitle"
       :content="alertMsg"
+    />
+
+    <!-- Simple Alert Modal (Logout Confirm) -->
+    <SimpleAlertModal
+      v-model:visible="logoutConfirmVisible"
+      title="退出登录"
+      content="确定要退出当前账号吗？本地数据将保留，但无法同步云端进度。"
+      confirm-text="退出"
+      show-cancel
+      @confirm="handleLogoutConfirm"
     />
   </view>
 </template>
@@ -449,7 +510,20 @@ import SparkMD5 from 'spark-md5'
 import JSZip from 'jszip'
 
 export default {
+  data() {
+    return {
+      dynamicRules: [] // 存储来自服务端的动态正则规则
+    }
+  },
   methods: {
+    // 接收来自逻辑层的规则更新
+    updateRules(newValue, oldValue, ownerInstance, instance) {
+      if (newValue && Array.isArray(newValue)) {
+        console.log('[RenderJS] 成功同步服务端解析规则, 数量:', newValue.length);
+        this.dynamicRules = newValue;
+      }
+    },
+
     // 归一化内容：去除所有非字母数字字符，转小写
     normalizeContent(content) {
       return content.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').toLowerCase();
@@ -499,6 +573,57 @@ export default {
                     .join('\n'); // 暂时用单换行，阅读器端可能需要处理
     },
 
+    // 简单的 UTF-8 编码检测 (增强版，处理截断)
+    isUTF8(bytes) {
+      let i = 0;
+      while (i < bytes.length) {
+        // ASCII
+        if (bytes[i] <= 0x7F) {
+          i += 1;
+          continue;
+        }
+
+        // 2-byte sequence (110xxxxx 10xxxxxx)
+        if (bytes[i] >= 0xC2 && bytes[i] <= 0xDF) {
+          if (i + 1 >= bytes.length) return true; // 截断，算通过
+          if (bytes[i+1] < 0x80 || bytes[i+1] > 0xBF) return false;
+          i += 2;
+          continue;
+        }
+
+        // 3-byte sequence (1110xxxx 10xxxxxx 10xxxxxx)
+        if (bytes[i] >= 0xE0 && bytes[i] <= 0xEF) {
+           if (i + 2 >= bytes.length) return true; // 截断
+           
+           // Check for overlongs and surrogates
+           if (bytes[i] == 0xE0 && (bytes[i+1] < 0xA0 || bytes[i+1] > 0xBF)) return false;
+           if (bytes[i] == 0xED && (bytes[i+1] < 0x80 || bytes[i+1] > 0x9F)) return false; 
+           if (bytes[i] != 0xE0 && bytes[i] != 0xED && (bytes[i+1] < 0x80 || bytes[i+1] > 0xBF)) return false;
+           
+           if (bytes[i+2] < 0x80 || bytes[i+2] > 0xBF) return false;
+           i += 3;
+           continue;
+        }
+
+        // 4-byte sequence (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
+        if (bytes[i] >= 0xF0 && bytes[i] <= 0xF4) {
+           if (i + 3 >= bytes.length) return true; // 截断
+           
+           if (bytes[i] == 0xF0 && (bytes[i+1] < 0x90 || bytes[i+1] > 0xBF)) return false;
+           if (bytes[i] == 0xF4 && (bytes[i+1] < 0x80 || bytes[i+1] > 0x8F)) return false;
+           if (bytes[i] != 0xF0 && bytes[i] != 0xF4 && (bytes[i+1] < 0x80 || bytes[i+1] > 0xBF)) return false;
+           
+           if (bytes[i+2] < 0x80 || bytes[i+2] > 0xBF) return false;
+           if (bytes[i+3] < 0x80 || bytes[i+3] > 0xBF) return false;
+           i += 4;
+           continue;
+        }
+
+        return false;
+      }
+      return true;
+    },
+
     trigger(newValue, oldValue, ownerInstance, instance) {
       if (newValue === 0) return
 
@@ -541,12 +666,24 @@ export default {
           }
           reader.readAsArrayBuffer(file)
         } else {
-          const reader = new FileReader()
-          reader.onload = (e) => {
-            this.parseAndUpload(file.name, e.target.result, ownerInstance)
-            document.body.removeChild(input)
-          }
-          reader.readAsText(file)
+          // TXT 编码检测逻辑
+          const checkReader = new FileReader();
+          checkReader.onload = (e) => {
+             const buffer = new Uint8Array(e.target.result);
+             // 检测前 4KB 即可
+             const isUtf8 = this.isUTF8(buffer);
+             const encoding = isUtf8 ? 'utf-8' : 'gbk';
+             console.log(`[RenderJS] Detected encoding: ${encoding}`);
+             
+             const textReader = new FileReader();
+             textReader.onload = (evt) => {
+                this.parseAndUpload(file.name, evt.target.result, ownerInstance);
+                document.body.removeChild(input);
+             }
+             textReader.readAsText(file, encoding);
+          };
+          // 读取前 4KB 用于检测
+          checkReader.readAsArrayBuffer(file.slice(0, 4096));
         }
       }
 
@@ -799,46 +936,161 @@ export default {
       sendNextBatch();
     },
 
-    // 原有的 TXT 解析逻辑
+    // --- TXT 智能解析算法 (移植自 Go 服务端) ---
+    
+    // 获取解析规则：优先使用服务端下发的动态规则
+    getParserRules() {
+      if (this.dynamicRules && this.dynamicRules.length > 0) {
+        return this.dynamicRules;
+      }
+      
+      // 兜底本地默认规则 (采用字符串形式，方便统一 new RegExp)
+      return [
+        {
+          name: "Strict_Chinese",
+          pattern: "(?:^|\\n)第[0-9零一二三四五六七八九十百千万]+[章回节][ \\t\\f].*",
+          weight: 100
+        },
+        {
+          name: "Normal_Chinese",
+          pattern: "(?:^|\\n)第[0-9零一二三四五六七八九十百千万]+[章回节].*",
+          weight: 90
+        },
+        {
+          name: "Strict_English",
+          pattern: "(?:^|\\n)Chapter\\s+\\d+.*",
+          weight: 80
+        },
+        {
+          name: "Loose_Number",
+          pattern: "(?:^|\\n)\\d+\\.\\s+.*",
+          weight: 60
+        },
+        {
+          name: "Loose_Direct",
+          pattern: "(?:^|\\n)[0-9零一二三四五六七八九十百千万]+\\s+.*",
+          weight: 40
+        }
+      ];
+    },
+
+    // 计算解析结果的健康分
+    calculateScore(totalLen, matchIndices, weight) {
+      const count = matchIndices.length;
+      if (count === 0) return -10000;
+
+      // 1. 计算每章长度
+      const lengths = [];
+      for (let i = 0; i < count; i++) {
+        const start = matchIndices[i];
+        const next = (i === count - 1) ? totalLen : matchIndices[i+1];
+        lengths.push(next - start);
+      }
+
+      // 2. 计算平均长度
+      const sum = lengths.reduce((a, b) => a + b, 0);
+      const avg = sum / count;
+
+      // 阈值：如果平均字数不到 200，说明极大概率误匹配（如匹配到了列表项）
+      if (avg < 200) return -20000;
+
+      // 3. 计算标准差 (Standard Deviation)
+      const varianceSum = lengths.reduce((s, l) => s + Math.pow(l - avg, 2), 0);
+      const stdDev = Math.sqrt(varianceSum / count);
+
+      // 4. 计算变异系数 (CV = stdDev / avg)
+      const cv = stdDev / avg;
+
+      // 5. 最终得分公式
+      // 得分 = 权重 + 数量微调 - 离散度惩罚
+      const countBonus = Math.min(count * 0.1, 50);
+      const uniformityPenalty = cv * 50;
+
+      return weight + countBonus - uniformityPenalty;
+    },
+
+    // 核心解析逻辑 (运行在 RenderJS 线程)
     parseAndUpload(fileName, text, ownerInstance) {
-      console.log('[RenderJS] parseAndUpload called, text length:', text.length);
-      const CHAPTER_REGEX = /(?:^|\n)\s*(第[0-9一二三四五六七八九十百千万]+[章回节][^\r\n]*)/g;
+      console.log('[RenderJS] 开始智能解析 TXT:', fileName);
+      const totalLen = text.length;
+      const rules = this.getParserRules(); // 使用新方法获取规则
+      
+      let bestResult = {
+        indices: [],
+        ruleName: 'Fallback',
+        score: -Infinity
+      };
 
-      const matches = [...text.matchAll(CHAPTER_REGEX)];
+      // 1. 竞速阶段：只找索引，不提取内容，省内存
+      rules.forEach(rule => {
+        try {
+          const indices = [];
+          let match;
+          // 注意：不管是本地规则还是服务端下发，统一使用 new RegExp 实例化
+          // flags 默认为 'g'，如果服务端下发了 flags 则使用下发的
+          const regex = new RegExp(rule.pattern, rule.flags || 'g');
+          
+          while ((match = regex.exec(text)) !== null) {
+            indices.push(match.index);
+          }
+
+          if (indices.length > 0) {
+            const score = this.calculateScore(totalLen, indices, rule.weight);
+            console.log(`[RenderJS] 规则 ${rule.name} 匹配到 ${indices.length} 章, 得分: ${score.toFixed(2)}`);
+            
+            if (score > bestResult.score) {
+              bestResult = { indices, ruleName: rule.name, score };
+            }
+          }
+        } catch (e) {
+          console.error(`[RenderJS] 规则 ${rule.name} 实例化或匹配失败:`, e);
+        }
+      });
+
+      // 2. 提取阶段
       const chapters = [];
+      const winnerIndices = bestResult.indices;
 
-      if (matches.length > 0 && matches[0].index > 0) {
-         const content = text.substring(0, matches[0].index);
-         if (content.trim().length > 10) {
-            const md5 = this.calculateChapterMD5(content.trim());
-            chapters.push({ index: 0, title: '序章', content: content, md5: md5, length: content.length });
-         }
+      if (winnerIndices.length === 0) {
+        // 兜底：全文一章
+        const md5 = this.calculateChapterMD5(text.trim());
+        chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5, length: [...text].length });
+      } else {
+        console.log(`[RenderJS] 胜出规则: ${bestResult.ruleName}, 最终提取章节数: ${winnerIndices.length}`);
+        
+        for (let i = 0; i < winnerIndices.length; i++) {
+          const start = winnerIndices[i];
+          const end = (i === winnerIndices.length - 1) ? totalLen : winnerIndices[i+1];
+          
+          // 获取标题行 (取前 200 个字符进行行提取)
+          let slice = text.substring(start, start + 200);
+          // 去除开头的换行符
+          const originalSlice = slice;
+          slice = slice.replace(/^[\r\n]+/, '');
+          const prefixLen = originalSlice.length - slice.length; // 被裁掉的开头换行符长度
+          
+          const lineEnd = slice.indexOf('\n');
+          const titleLine = lineEnd !== -1 ? slice.substring(0, lineEnd) : slice;
+          const title = titleLine.trim() || `第 ${i+1} 章节`;
+          
+          // 计算标题行在原 text 中的偏移和长度，以便从 content 中移除
+          // 标题行在 slice 中的结束位置是 lineEnd (如果有换行) 或 slice.length
+          const titleLineFullLen = (lineEnd !== -1 ? lineEnd + 1 : slice.length); 
+          
+          let content = text.substring(start + prefixLen + titleLineFullLen, end);
+          if (content.trim().length < 5) continue;
+
+          chapters.push({
+            index: chapters.length,
+            title: title,
+            content: content.trim(),
+            md5: this.calculateChapterMD5(content.trim()),
+            length: [...content.trim()].length
+          });
+        }
       }
 
-      for (let i = 0; i < matches.length; i++) {
-        const m = matches[i];
-        const title = m[1].trim();
-        const start = m.index + m[0].length;
-        const end = (i < matches.length - 1) ? matches[i+1].index : text.length;
-        const content = text.substring(start, end);
-
-        if (content.trim().length < 5) continue;
-
-        const md5 = this.calculateChapterMD5(content.trim());
-        chapters.push({
-          index: chapters.length,
-          title: title,
-          content: content,
-          md5: md5,
-          length: [...content].length
-        });
-      }
-
-      if (chapters.length === 0) {
-         const md5 = this.calculateChapterMD5(text.trim());
-         chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5, length: [...text].length });
-      }
-
+      // 3. 发送元数据
       const bookMD5 = SparkMD5.hash(text);
       ownerInstance.callMethod('onBookInfo', {
         title: fileName.replace('.txt', ''),
@@ -846,6 +1098,7 @@ export default {
         bookMD5: bookMD5
       });
 
+      // 4. 分批上传
       this.batchUpload(chapters, ownerInstance);
     }
   }

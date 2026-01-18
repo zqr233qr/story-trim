@@ -4,12 +4,15 @@ const props = defineProps<{
   title?: string
   content?: string
   confirmText?: string
+  showCancel?: boolean
+  cancelText?: string
 }>()
 
-const emit = defineEmits(['update:visible', 'confirm'])
+const emit = defineEmits(['update:visible', 'confirm', 'cancel'])
 
 const handleClose = () => {
   emit('update:visible', false)
+  emit('cancel')
 }
 
 const handleConfirm = () => {
@@ -45,12 +48,20 @@ const handleConfirm = () => {
       </text>
 
       <!-- Actions -->
-      <view class="w-full">
+      <view class="w-full flex flex-col gap-3">
         <view 
           @click="handleConfirm"
           class="w-full bg-stone-900 text-white py-3.5 rounded-xl flex items-center justify-center active:scale-[0.98] transition-transform shadow-lg shadow-stone-200"
         >
-          <text class="text-sm font-bold tracking-wide">{{ confirmText || '知道了' }}</text>
+          <text class="text-sm font-bold tracking-wide">{{ confirmText || '确认' }}</text>
+        </view>
+        
+        <view 
+          v-if="showCancel"
+          @click="handleClose"
+          class="w-full bg-white border border-stone-200 text-stone-500 py-3.5 rounded-xl flex items-center justify-center active:bg-stone-50 transition-colors"
+        >
+          <text class="text-sm font-bold">{{ cancelText || '取消' }}</text>
         </view>
       </view>
     </view>

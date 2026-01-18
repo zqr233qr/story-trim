@@ -39,3 +39,23 @@ log:
 # 认证配置
 auth:
   jwt_secret: "a_very_secure_secret_key_that_is_long_and_random" # JWT签名密钥，请务必修改为一个长且随机的字符串
+
+# 解析器配置 (规则下发)
+parser:
+  version: 1
+  rules:
+    - name: "Strict_Chinese_REMOTE"
+      pattern: "(?:^|\\n)第[0-9零一二三四五六七八九十百千万]+[章回节][ \\t\\f].*"
+      weight: 100
+    - name: "Normal_Chinese"
+      pattern: "(?:^|\\n)第[0-9零一二三四五六七八九十百千万]+[章回节].*"
+      weight: 90
+    - name: "Strict_English"
+      pattern: "(?:^|\\n)Chapter\\s+\\d+.*"
+      weight: 80
+    - name: "Loose_Number"
+      pattern: "(?:^|\\n)\\d+\\.\\s+.*"
+      weight: 60
+    - name: "Loose_Direct"
+      pattern: "(?:^|\\n)[0-9零一二三四五六七八九十百千万]+\\s+.*"
+      weight: 40

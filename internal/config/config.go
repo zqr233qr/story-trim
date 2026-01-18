@@ -14,6 +14,18 @@ type Config struct {
 	Memory      MemoryConfig        `mapstructure:"memory"`
 	Log         pkgconfig.LogConfig `mapstructure:"log"`
 	Auth        AuthConfig          `mapstructure:"auth"`
+	Parser      ParserConfig        `mapstructure:"parser"`
+}
+
+type ParserConfig struct {
+	Version int          `mapstructure:"version" json:"version"`
+	Rules   []ParserRule `mapstructure:"rules" json:"rules"`
+}
+
+type ParserRule struct {
+	Name    string `mapstructure:"name" json:"name"`
+	Pattern string `mapstructure:"pattern" json:"pattern"`
+	Weight  int    `mapstructure:"weight" json:"weight"`
 }
 
 type FileStorageConfig struct {

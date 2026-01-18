@@ -13,11 +13,13 @@ import (
 )
 
 type APIComponents struct {
-	AuthHandler *handler.AuthHandler
-	BookHandler *handler.BookHandler
-	TrimHandler *handler.TrimHandler
-	TaskHandler *handler.TaskHandler
-	AuthService service.AuthServiceInterface
+	AuthHandler    *handler.AuthHandler
+	BookHandler    *handler.BookHandler
+	TrimHandler    *handler.TrimHandler
+	TaskHandler    *handler.TaskHandler
+	ContentHandler *handler.ContentHandler
+	AuthService    service.AuthServiceInterface
+	TaskService    service.TaskServiceInterface
 }
 
 func NewAPIComponents(
@@ -25,14 +27,18 @@ func NewAPIComponents(
 	bookHandler *handler.BookHandler,
 	trimHandler *handler.TrimHandler,
 	taskHandler *handler.TaskHandler,
+	contentHandler *handler.ContentHandler,
 	authService service.AuthServiceInterface,
+	taskService service.TaskServiceInterface,
 ) *APIComponents {
 	return &APIComponents{
-		AuthHandler: authHandler,
-		BookHandler: bookHandler,
-		TrimHandler: trimHandler,
-		TaskHandler: taskHandler,
-		AuthService: authService,
+		AuthHandler:    authHandler,
+		BookHandler:    bookHandler,
+		TrimHandler:    trimHandler,
+		TaskHandler:    taskHandler,
+		ContentHandler: contentHandler,
+		AuthService:    authService,
+		TaskService:    taskService,
 	}
 }
 
@@ -54,6 +60,8 @@ func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM) (*A
 		wire.Bind(new(repository.BookRepositoryInterface), new(*repository.BookRepository)),
 		repository.NewTaskRepository,
 		wire.Bind(new(repository.TaskRepositoryInterface), new(*repository.TaskRepository)),
+		repository.NewContentRepository,
+		wire.Bind(new(repository.ContentRepositoryInterface), new(*repository.ContentRepository)),
 
 		// Services
 		service.NewAuthService,
@@ -66,12 +74,15 @@ func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM) (*A
 		wire.Bind(new(service.TaskServiceInterface), new(*service.TaskService)),
 		service.NewLlmService,
 		wire.Bind(new(service.LlmServiceInterface), new(*service.LlmService)),
+		service.NewContentService,
+		wire.Bind(new(service.ContentServiceInterface), new(*service.ContentService)),
 
 		// Handlers
 		handler.NewAuthHandler,
 		handler.NewBookHandler,
 		handler.NewTrimHandler,
 		handler.NewTaskHandler,
+		handler.NewContentHandler,
 
 		// Components
 		NewAPIComponents,

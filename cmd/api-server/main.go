@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"github.com/zqr233qr/story-trim/internal/config"
+	"github.com/zqr233qr/story-trim/internal/handler"
 	"github.com/zqr233qr/story-trim/internal/middleware"
 	"github.com/zqr233qr/story-trim/internal/repository"
 	"github.com/zqr233qr/story-trim/pkg/logger"
@@ -34,6 +35,8 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize components: %v", err))
 	}
+
+	commonHandler := handler.NewCommonHandler(cfg)
 
 	r := gin.New()
 	r.Use(middleware.RequestLogger())
@@ -69,6 +72,7 @@ func main() {
 		}
 
 		api.GET("/common/prompts", deps.BookHandler.ListPrompts)
+		api.GET("/common/parser-rules", commonHandler.GetParserRules)
 	}
 
 	deps.TaskService.Start()

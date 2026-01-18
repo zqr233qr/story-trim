@@ -1,21 +1,11 @@
 // 基础配置
-// 重要：真机调试时，请将下方 IP 替换为你电脑的局域网 IP
-const LOCAL_IP = "192.168.3.178";
-
-export let BASE_URL = "/api/v1";
-
-// #ifndef H5
-BASE_URL = `http://${LOCAL_IP}:8080/api/v1`;
-// #endif
+// 统一使用云端服务器地址
+export const BASE_URL = "http://110.41.38.214:8088/api/v1";
 
 const WS_BASE_URL = BASE_URL.replace("http://", "ws://").replace(
   "https://",
   "wss://",
 );
-
-if (import.meta.env.PROD) {
-  BASE_URL = "/api/v1";
-}
 
 // 统一响应结构
 export interface Response<T> {
@@ -106,6 +96,15 @@ export interface Task {
   progress: number;
   error?: string;
 }
+export interface ParserRule {
+  name: string;
+  pattern: string;
+  weight: number;
+}
+export interface ParserConfig {
+  version: number;
+  rules: ParserRule[];
+}
 
 // --- API 方法 ---
 export const api = {
@@ -115,6 +114,8 @@ export const api = {
     request<void>({ url: "/auth/register", method: "POST", data }),
 
   getBooks: () => request<Book[]>({ url: "/books", method: "GET" }),
+  getParserRules: () =>
+    request<ParserConfig>({ url: "/common/parser-rules", method: "GET" }),
   getBookDetail: (id: number) =>
     request<BookDetail>({
       url: `/books/${id}`,
@@ -243,7 +244,7 @@ export const api = {
   deleteBook: async (id: number) => {
     return request({
       url: `/books/${id}`,
-      method: 'DELETE',
+      method: "DELETE",
     });
   },
 };

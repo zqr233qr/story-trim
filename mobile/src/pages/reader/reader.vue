@@ -567,14 +567,19 @@ const fetchCloudReadingHistory = async (): Promise<LocalReadingHistory | null> =
   
   const cloudBookId = activeBook.value?.cloud_id || activeBook.value?.id
   if (!cloudBookId) return null
-  const res = await api.getBookProgress(cloudBookId)
-  if (res.code === 0 && res.data) {
-    const h = res.data as ReadingHistory
-    return {
-      last_chapter_id: h.last_chapter_id,
-      last_prompt_id: h.last_prompt_id,
-      updated_at: h.updated_at ? new Date(h.updated_at).getTime() : 0
+  
+  try {
+    const res = await api.getBookProgress(cloudBookId)
+    if (res.code === 0 && res.data) {
+      const h = res.data as ReadingHistory
+      return {
+        last_chapter_id: h.last_chapter_id,
+        last_prompt_id: h.last_prompt_id,
+        updated_at: h.updated_at ? new Date(h.updated_at).getTime() : 0
+      }
     }
+  } catch (e) {
+    console.warn('[Reader] Fetch cloud history failed (network offline?), using local only.', e)
   }
   return null
 }

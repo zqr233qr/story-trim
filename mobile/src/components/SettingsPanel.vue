@@ -72,8 +72,8 @@ const mutedColor = computed(() => isDarkMode.value ? '#a8a29e' : '#78716c')
         </view>
       </view>
 
-      <!-- Page Mode -->
-      <view class="mb-8">
+      <!-- Page Mode (Temporarily Hidden due to bugs) -->
+      <!-- <view class="mb-8">
          <view class="text-[10px] font-bold uppercase tracking-widest mb-3" :style="{ color: mutedColor }">翻页模式</view>
          <view class="rounded-xl p-1 flex" :style="{ backgroundColor: isDarkMode ? '#44403c' : '#fafaf9' }">
            <view @click="emit('update:pageMode', 'scroll')"
@@ -87,7 +87,7 @@ const mutedColor = computed(() => isDarkMode.value ? '#a8a29e' : '#78716c')
              点击
            </view>
          </view>
-      </view>
+      </view> -->
 
       <!-- Reading Mode (Three Options) -->
       <view class="mb-8">

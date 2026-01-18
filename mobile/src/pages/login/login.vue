@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { api } from '@/api'
 
@@ -7,8 +8,8 @@ const userStore = useUserStore()
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0)
 
 const isLogin = ref(true)
-const username = ref('zqr')
-const password = ref('123456')
+const username = ref('')
+const password = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 
@@ -79,12 +80,12 @@ const skipLogin = () => {
   <view class="min-h-screen bg-stone-50 flex flex-col justify-center items-center p-6" :style="{ paddingTop: statusBarHeight + 'px' }">
     <view class="w-full max-w-sm">
       <!-- Logo Area -->
-      <view class="text-center mb-10">
-        <view class="w-16 h-16 bg-stone-900 text-white rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-xl shadow-stone-200">
-          <text class="i-heroicons-book-open w-8 h-8 text-white">📖</text>
+      <view class="text-center mb-12">
+        <view class="w-24 h-24 mx-auto flex items-center justify-center mb-4">
+          <image src="/static/icons/logo-combined.svg" class="w-full h-full" />
         </view>
-        <view class="text-2xl font-bold text-stone-800 tracking-tight">StoryTrim</view>
-        <view class="text-stone-400 text-sm mt-2">AI 驱动的极简阅读体验</view>
+        <view class="text-3xl font-black text-stone-900 tracking-tighter">StoryTrim</view>
+        <view class="text-stone-400 text-sm mt-2 font-medium tracking-wide">AI 赋能 · 极简本地阅读</view>
       </view>
 
       <!-- Form -->
@@ -105,12 +106,12 @@ const skipLogin = () => {
       </view>
 
       <!-- Skip / Offline Option -->
-      <view class="mt-10 flex flex-col items-center gap-4">
-        <text @click="skipLogin" class="text-sm text-stone-500 border-b border-stone-300 pb-0.5 font-medium">
-          直接使用 (离线模式)
-        </text>
+      <view class="mt-8 flex flex-col items-center gap-6">
+        <view @click="skipLogin" class="text-sm text-stone-500 font-bold active:text-stone-800 transition-colors">
+          暂不登录，直接使用
+        </view>
         
-        <text @click="isLogin = !isLogin" class="text-xs text-stone-400">
+        <text @click="isLogin = !isLogin" class="text-xs text-stone-400 active:text-stone-600 transition-colors">
           {{ isLogin ? '还没有账号？点击注册' : '已有账号？直接登录' }}
         </text>
       </view>
