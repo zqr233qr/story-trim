@@ -20,15 +20,17 @@ const props = defineProps<{
   prompts: Prompt[],
   trimmedIds?: number[],
   readingMode: 'light' | 'dark' | 'sepia',
-  modeColors: ModeColors
+  modeColors: ModeColors,
+  userPreferredModeId?: number
 }>()
 const emit = defineEmits(['close', 'start'])
 
 const selectedId = ref<number | string>('')
 
-watch(() => props.prompts, (newPs) => {
-  if (newPs.length > 0 && !selectedId.value) {
-    selectedId.value = newPs[0].id
+watch(() => [props.prompts, props.userPreferredModeId], ([newPs, newPrefId]) => {
+  if (newPs && newPs.length > 0 && !selectedId.value) {
+    // 优先使用用户偏好，否则使用第一个
+    selectedId.value = newPrefId ? newPrefId : newPs[0].id
   }
 }, { immediate: true })
 

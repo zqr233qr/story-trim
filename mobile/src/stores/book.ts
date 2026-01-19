@@ -293,6 +293,12 @@ export const useBookStore = defineStore('book', () => {
     }
   }
 
+  // 判断精简内容缓存是否有效（非空且含可见文字）
+  const hasValidTrimLines = (lines: unknown): lines is string[] => {
+    if (!Array.isArray(lines)) return false
+    return lines.some(line => typeof line === 'string' && line.trim().length > 0)
+  }
+
   // 7. Fetch Trimmed Content (Local Cache Only)
   const fetchChapterTrim = async (bookId: number, chapterId: number, promptId: number): Promise<string[] | null> => {
     if (!activeBook.value) return null
@@ -300,13 +306,13 @@ export const useBookStore = defineStore('book', () => {
     if (!chapter) return null
 
     const modeKey = `mode_${promptId}`
-    if (chapter.modes && chapter.modes[modeKey]) return chapter.modes[modeKey]
+    if (hasValidTrimLines(chapter.modes?.[modeKey])) return chapter.modes[modeKey]
     if (!chapter.modes) chapter.modes = {}
 
     const cacheKey = `trim_${chapterId}_${promptId}`
     try {
       const cached = uni.getStorageSync(cacheKey)
-      if (cached) {
+      if (hasValidTrimLines(cached)) {
         chapter.modes[modeKey] = cached
         return cached
       }
@@ -316,11 +322,13 @@ export const useBookStore = defineStore('book', () => {
     const cloudChapterId = chapter.cloud_id || chapterId
     try {
       const res = await getBatchTrimmedById([cloudChapterId], promptId)
-      if (res.code === 0 && res.data[0] && res.data[0].trimmed_content) {
+      if (res.code === 0 && res.data[0] && res.data[0].trimmed_content !== undefined) {
         const lines = res.data[0].trimmed_content.split('\n')
-        chapter.modes[modeKey] = lines
-        uni.setStorageSync(cacheKey, lines)
-        return lines
+        if (hasValidTrimLines(lines)) {
+          chapter.modes[modeKey] = lines
+          uni.setStorageSync(cacheKey, lines)
+          return lines
+        }
       }
     } catch (e) { console.warn('[Store] Fetch trim from cloud failed', e) }
 

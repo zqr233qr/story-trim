@@ -12,6 +12,7 @@ import ChapterList from '@/components/ChapterList.vue'
 import BatchTaskModal from '@/components/BatchTaskModal.vue'
 import GenerationTerminal from '@/components/GenerationTerminal.vue'
 import LoginConfirmModal from '@/components/LoginConfirmModal.vue'
+import Renderjs from './components/Renderjs.vue'
 
 const userStore = useUserStore()
 const bookStore = useBookStore()
@@ -28,6 +29,23 @@ const openLoginModal = (msg: string) => {
 
 const handleLoginConfirm = () => {
   uni.navigateTo({ url: "/pages/login/login" })
+}
+
+const chooseBackgroundImage = async () => {
+  try {
+    const res = await uni.chooseImage({ count: 1, sourceType: ['album'] })
+    const path = res.tempFilePaths?.[0]
+    if (!path) return
+    readingBgImage.value = path
+    uni.setStorageSync('readingBgImage', path)
+  } catch (error) {
+    console.warn('[Reader] Choose background image failed', error)
+  }
+}
+
+const clearBackgroundImage = () => {
+  readingBgImage.value = ''
+  uni.removeStorageSync('readingBgImage')
 }
 
 // #ifdef APP-PLUS
@@ -47,6 +65,29 @@ interface LocalReadingHistory {
   updated_at: number
 }
 
+interface PageLine {
+  text: string
+  paraIndex: number
+  isFirstLine: boolean
+  isParagraphEnd: boolean
+}
+
+interface ChapterPage {
+  chapterIndex: number
+  pageIndex: number
+  content: PageLine[]
+  chapterTitle: string
+  isFirstPage: boolean
+}
+
+interface PaginationCacheEntry {
+  pages?: PageLine[][]
+  lines?: PageLine[]
+  paragraphs?: string[]
+  contentSize: number
+  mode: 'page' | 'line'
+}
+
 // --- 1. 状态定义 ---
 const bookId = ref(0)
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0)
@@ -57,6 +98,8 @@ const showBatchModal = ref(false)
 const showSettings = ref(false)
 const isMagicActive = ref(false)
 const readingMode = ref<'light' | 'dark' | 'sepia'>(uni.getStorageSync('readingMode') as 'light' | 'dark' | 'sepia' || 'light')
+const readingBgImage = ref(uni.getStorageSync('readingBgImage') || '')
+const bgOverlayColor = ref('rgba(0,0,0,0.25)')
 const modeColors = {
   light: { bg: '#fafaf9', text: '#1c1917' },
   dark: { bg: '#0c0a09', text: '#e5e5e5' },
@@ -65,6 +108,11 @@ const modeColors = {
 const fontSize = ref(18)
 const pageMode = ref<'scroll' | 'click'>(uni.getStorageSync('pageMode') as 'scroll' | 'click' || 'scroll')
 const hideStatusBar = ref(uni.getStorageSync('hideStatusBar') === 'true')
+
+// 用户全局偏好（跨书籍）
+const userPreferredModeId = ref(parseInt(uni.getStorageSync('userPreferredModeId') || '0'))
+// 当前章节实际显示的模式
+const actualDisplayModeId = ref(0)
 
 const showTerminal = ref(false)
 const generatingTitle = ref('')
@@ -135,8 +183,20 @@ const lazyScrollToParagraph = (index: number) => {
 
 // 监听 TTS 进度变化，触发自动滚动
 watch(ttsCurrentIndex, (newIndex) => {
-  if (newIndex >= 0 && pageMode.value === 'scroll') {
+  if (newIndex < 0) return
+
+  if (pageMode.value === 'scroll') {
     lazyScrollToParagraph(newIndex)
+    return
+  }
+
+  if (pageMode.value === 'click') {
+    const targetPage = ttsPageIndexMap.value.get(newIndex)
+    if (targetPage === undefined) return
+    if (isPaginating.value || isNavigationLocked.value) return
+    if (activePageIndex.value !== targetPage) {
+      activePageIndex.value = targetPage
+    }
   }
 })
 
@@ -149,6 +209,11 @@ const initTTS = () => {
     title: activeChapter.value?.title || '听书',
     singer: activeBook.value?.title || 'Story Trim',
     onRangeStart: (index) => {
+      console.log('[Reader][TTS] range start', {
+        index,
+        chapterIndex: activeBook.value?.activeChapterIndex,
+        chapterId: activeChapter.value?.id
+      })
       ttsCurrentIndex.value = index
       // 滚动逻辑已移至 watch(ttsCurrentIndex)
     },
@@ -202,6 +267,12 @@ const startTTS = () => {
   if (!ttsPlayer.value) initTTS()
   
   if (currentTextLines.value.length > 0) {
+    console.log('[Reader][TTS] start', {
+      chapterIndex: activeBook.value?.activeChapterIndex,
+      chapterId: activeChapter.value?.id,
+      lines: currentTextLines.value.length,
+      ttsCurrentIndex: ttsCurrentIndex.value
+    })
     if (ttsCurrentIndex.value > 0) {
        ttsPlayer.value.play(ttsCurrentIndex.value)
     } else {
@@ -245,6 +316,12 @@ const calculateTrimRatio = (original: string[], trimmed: string[]): number => {
   return Math.max(0, ratio)
 }
 
+// 判断段落内容是否有效（非空且含可见文字）
+const hasValidLines = (lines?: string[]) => {
+  if (!lines || !Array.isArray(lines)) return false
+  return lines.some(line => line && line.trim().length > 0)
+}
+
 // 获取精简模式信息
 const getCurrentModeInfo = () => {
   if (!isMagicActive.value || !activeBook.value?.activeModeId) return null
@@ -274,20 +351,22 @@ const showModeSwitchTip = (chapter: any, promptId: number) => {
   }
 }
 
-// 滑动窗口分页核心状态
-const currentPageIndex = ref(0)
-const swiperCurrent = ref(0)
+// 虚拟章节管理核心状态
+const virtualPages = ref<ChapterPage[]>([])
+const activePageIndex = ref(0)
 const isSwiperReady = ref(false)
-const isWindowShifting = ref(false)
-const isSilentUpdate = ref(false) // 静默更新锁
-
-const prevPages = ref<string[][]>([])
-const currPages = ref<string[][]>([])
-const nextPages = ref<string[][]>([])
-const textToMeasure = ref<string[]>([]) // 专门用于测量的中转变量
+const isNavigationLocked = ref(false)
 
 // *** 显式 UI 状态 ***
 const currentTextLines = ref<string[]>([])
+const isPaginating = ref(false)
+const paginationCache = new Map<string, PaginationCacheEntry>()
+const ttsPageIndexMap = ref(new Map<number, number>())
+const renderjsPayload = ref<any>(null)
+const measuredLineHeight = ref(1.7)
+const measuredLineHeightPx = ref(0)
+let pendingRenderResolve: ((value: { entry: PaginationCacheEntry; pages?: ChapterPage[] }) => void) | null = null
+
 
 // --- 2. 计算属性 ---
 const activeBook = computed(() => bookStore.activeBook)
@@ -297,41 +376,112 @@ const activeChapter = computed(() => {
 })
 
 const activeModeName = computed(() => {
-  if (!isMagicActive.value) return '原文'
-  const modeId = activeBook.value?.activeModeId
-  if (!modeId || modeId === 'original') return '原文'
+  // 使用 actualDisplayModeId 判断，而不是 isMagicActive
+  if (actualDisplayModeId.value <= 0) return '原文'
+  const modeId = actualDisplayModeId.value.toString()
   const prompt = bookStore.prompts.find(p => p.id.toString() === modeId || p.id === parseInt(modeId))
   return prompt ? prompt.name : modeId
 })
 
 const combinedPages = computed(() => {
-  return [...prevPages.value, ...currPages.value, ...nextPages.value]
+  return virtualPages.value.map(p => ({
+    key: `${p.chapterIndex}-${p.pageIndex}`,
+    content: p.content
+  }))
 })
 
 const relativePageInfo = computed(() => {
-  const idx = swiperCurrent.value
-  const prevLen = prevPages.value.length
-  const currLen = currPages.value.length
-  if (idx < prevLen) return `${idx + 1} / ${prevLen}`
-  if (idx < prevLen + currLen) return `${idx - prevLen + 1} / ${currLen}`
-  return `${idx - prevLen - currLen + 1} / ${nextPages.value.length}`
+  if (virtualPages.value.length === 0) return ''
+  const current = virtualPages.value[activePageIndex.value]
+  if (!current) return ''
+  const sameChapterPages = virtualPages.value.filter(p => p.chapterIndex === current.chapterIndex)
+  const currentIndex = sameChapterPages.findIndex(p => p.pageIndex === current.pageIndex)
+  return `${currentIndex + 1} / ${sameChapterPages.length}`
 })
 
 const getPageTitle = (pIdx: number) => {
-  const chapters = activeBook.value?.chapters
-  if (!chapters) return ''
-  const currIdx = activeBook.value!.activeChapterIndex
-  const prevLen = prevPages.value.length
-  const currLen = currPages.value.length
-  if (pIdx < prevLen) return chapters[currIdx - 1]?.title
-  if (pIdx < prevLen + currLen) return chapters[currIdx]?.title
-  return chapters[currIdx + 1]?.title
+  return activeChapter.value?.title || virtualPages.value[pIdx]?.chapterTitle || ''
 }
 
 const isFirstPageOfChapter = (pIdx: number) => {
-  const prevLen = prevPages.value.length
-  const currLen = currPages.value.length
-  return pIdx === 0 || pIdx === prevLen || pIdx === prevLen + currLen
+  return virtualPages.value[pIdx]?.isFirstPage || false
+}
+
+const getParagraphGroups = (lines: PageLine[]) => {
+  const groups: { paraIndex: number; lines: PageLine[] }[] = []
+  let current: { paraIndex: number; lines: PageLine[] } | null = null
+
+  lines.forEach((line) => {
+    if (!current || current.paraIndex !== line.paraIndex) {
+      current = { paraIndex: line.paraIndex, lines: [line] }
+      groups.push(current)
+      return
+    }
+    current.lines.push(line)
+  })
+
+  return groups
+}
+
+const mapRenderLinesToParagraphs = (lines: any[]) => {
+  const hasTitle = lines.some(line => line.isTitle)
+  const offset = hasTitle ? 1 : 0
+  const grouped = new Map<number, string[]>()
+
+  lines.forEach((line) => {
+    if (line.isTitle) return
+    const paraIndex = line.pIndex - offset
+    if (paraIndex < 0) return
+    if (!grouped.has(paraIndex)) grouped.set(paraIndex, [])
+    grouped.get(paraIndex)!.push(line.text)
+  })
+
+  return Array.from(grouped.values()).map(items => items.join(''))
+}
+
+const mapRenderPages = (pages: any[]) => {
+  const flat: any[] = []
+  pages.forEach((page: any[]) => {
+    page.forEach((line) => flat.push(line))
+  })
+
+  const hasTitle = flat.some(line => line.isTitle)
+  const offset = hasTitle ? 1 : 0
+  const lastIndexMap = new Map<number, number>()
+
+  flat.forEach((line, index) => {
+    if (line.isTitle) return
+    const paraIndex = line.pIndex - offset
+    if (paraIndex < 0) return
+    lastIndexMap.set(paraIndex, index)
+  })
+
+  let flatIndex = 0
+  return pages.map((page: any[]) =>
+    page.filter((line) => !line.isTitle).map((line) => {
+      const paraIndex = line.pIndex - offset
+      const isParagraphEnd = lastIndexMap.get(paraIndex) === flatIndex
+      const mapped = {
+        text: line.text,
+        paraIndex,
+        isFirstLine: line.pFirst,
+        isParagraphEnd
+      }
+      flatIndex += 1
+      return mapped
+    })
+  )
+}
+
+const measureLineHeight = () => {
+  const query = uni.createSelectorQuery().in(instance)
+  query.select('.line-height-probe').boundingClientRect()
+  query.exec((res) => {
+    const rect = res?.[0] as { height?: number } | undefined
+    if (!rect?.height) return
+    measuredLineHeightPx.value = rect.height
+    measuredLineHeight.value = rect.height / fontSize.value
+  })
 }
 
 // --- 3. 核心逻辑 (UI同步、分页、预加载) ---
@@ -351,193 +501,343 @@ const syncUI = () => {
      }
   }
 
-  // 优先取缓存，否则取原文，再否则提示
-  let lines = activeChapter.value.modes[modeKey] || activeChapter.value.modes['original'] || ['暂无内容']
-  
-  // 【排版优化】清洗段首空白：去除行首的空格、制表符、全角空格(\u3000)、不换行空格(\xA0)
-  // 这样配合 CSS 的 text-indent (indent-8) 可以实现统一的标准缩进，避免重复缩进
+  let lines = activeChapter.value.modes[modeKey]
+  if (!hasValidLines(lines)) {
+    lines = activeChapter.value.modes['original']
+  }
+  if (!hasValidLines(lines)) {
+    lines = ['暂无内容']
+  }
+
   if (lines && lines.length) {
     lines = lines.map(line => line.replace(/^[ \t\u3000\xA0]+/, ''))
   }
   
-  // 避免无意义的赋值触发重绘
   if (JSON.stringify(currentTextLines.value) !== JSON.stringify(lines)) {
-    // console.log('[UI] Syncing text lines:', modeKey, lines.length)
     currentTextLines.value = lines
   }
 }
 
-const measureText = async (text: string[]): Promise<string[][]> => {
-  if (text.length === 0) return []
-  
-  textToMeasure.value = text
-  await nextTick()
-  await new Promise(resolve => setTimeout(resolve, 150))
-  
-  const info = uni.getSystemInfoSync()
-  const viewHeight = info.windowHeight - 160
-  
-  return new Promise((resolve) => {
-    const query = uni.createSelectorQuery().in(instance)
-    query.selectAll('.measurer-para').boundingClientRect()
-    query.exec((res) => {
-      const rects = res[0] as any[]
-      if (!rects || rects.length === 0) return resolve([text])
+const updateContainerContent = ({ params, chapterPageList }: any) => {
+  const inferredIsPage = Array.isArray(chapterPageList?.[0])
+  const detectedMode = params?.options?.sizeInfo?.type || (pageMode.value === 'click' ? 'page' : 'line')
+  console.log('[Reader][Renderjs] updateContainerContent', {
+    hasParams: !!params,
+    hasList: !!chapterPageList,
+    mode: detectedMode,
+    inferredIsPage,
+    listLength: Array.isArray(chapterPageList) ? chapterPageList.length : -1,
+    lineHeightRatio: params?.options?.sizeInfo?.lineHeight,
+    measuredLineHeight: measuredLineHeight.value,
+    measuredLineHeightPx: measuredLineHeightPx.value
+  })
+  if (!params?.options?.cacheKey) return
+  const cacheKey = params.options.cacheKey as string
+  const mode = detectedMode as 'page' | 'line'
+  const contentSize = params.options.contentSize as number
 
-      let currentPage: string[] = []
-      let currentHeight = 0
-      const pages: string[][] = []
+  if (!chapterPageList) return
 
-      rects.forEach((rect, idx) => {
-        const paraText = text[idx]
-        const h = rect ? rect.height : 40
-        if (currentHeight + h > viewHeight && currentPage.length > 0) {
-          pages.push(currentPage)
-          currentPage = [paraText]
-          currentHeight = h
-        } else {
-          currentPage.push(paraText)
-          currentHeight += h + 24
+  if (mode === 'page' || inferredIsPage) {
+    const mappedPages = mapRenderPages(chapterPageList)
+    const pages: ChapterPage[] = mappedPages.map((pageContent, pageIndex) => ({
+      chapterIndex: params.options.chapterIndex,
+      pageIndex,
+      content: pageContent,
+      chapterTitle: params.data?.title || '',
+      isFirstPage: pageIndex === 0
+    }))
+
+    const pageMap = new Map<number, number>()
+    pages.forEach((page, pageIndex) => {
+      page.content.forEach(line => {
+        if (!pageMap.has(line.paraIndex)) {
+          pageMap.set(line.paraIndex, pageIndex)
         }
       })
-      if (currentPage.length > 0) pages.push(currentPage)
-      resolve(pages)
     })
+    ttsPageIndexMap.value = pageMap
+
+    const entry: PaginationCacheEntry = {
+      pages: mappedPages,
+      contentSize,
+      mode: 'page'
+    }
+    paginationCache.set(cacheKey, entry)
+
+    pendingRenderResolve?.({ entry, pages })
+    pendingRenderResolve = null
+    virtualPages.value = pages
+    isSwiperReady.value = true
+  } else {
+    const lines = chapterPageList
+    const paragraphs = mapRenderLinesToParagraphs(lines)
+    const entry: PaginationCacheEntry = {
+      lines,
+      paragraphs,
+      contentSize,
+      mode: 'line'
+    }
+    paginationCache.set(cacheKey, entry)
+
+    pendingRenderResolve?.({ entry })
+    pendingRenderResolve = null
+    currentTextLines.value = paragraphs
+  }
+
+  isPaginating.value = false
+  isNavigationLocked.value = false
+  isTextTransitioning.value = false
+}
+
+defineExpose({ updateContainerContent })
+
+const requestRenderjsPagination = (payload: any) => {
+  renderjsPayload.value = payload
+  return new Promise<{ entry: PaginationCacheEntry; pages?: ChapterPage[] }>((resolve) => {
+    pendingRenderResolve = resolve
   })
+}
+
+const buildRenderPayload = (chapterIndex: number, text: string, cacheKey: string, contentSize: number, mode: 'page' | 'line') => {
+  const info = uni.getSystemInfoSync()
+  const titleSize = fontSize.value + 6
+  const lineHeightRatio = measuredLineHeight.value || 1.7
+  const paragraphGap = mode === 'page' ? 0 : 16
+
+  return {
+    data: {
+      title: activeBook.value?.chapters[chapterIndex]?.title || '',
+      content: text
+    },
+    options: {
+      cacheKey,
+      contentSize,
+      chapterIndex,
+      pageWidth: info.windowWidth,
+      pageHeight: info.windowHeight,
+      statusBarHeight: statusBarHeight.value || 0,
+      bookOption: {
+        sizeInfo: {
+          lrPadding: 24,
+          infoHeight: 0,
+          tPadding: 60,
+          bPadding: 24,
+          p: fontSize.value,
+          lineHeight: lineHeightRatio,
+          margin: paragraphGap,
+          title: titleSize,
+          titleLineHeight: 1.5,
+          titleGap: 40,
+          type: mode
+        }
+      }
+    }
+  }
 }
 
 const getChapterText = (idx: number): string[] => {
   const chapters = activeBook.value?.chapters
   if (!chapters || idx < 0 || idx >= chapters.length) return []
   const chap = chapters[idx]
-  
+
   let modeKey = 'original'
-  if (isMagicActive.value) {
-     const id = activeBook.value?.activeModeId
-     if (id && id !== 'original') {
-        modeKey = `mode_${id}`
-     }
+  // 使用actualDisplayModeId而不是isMagicActive和activeBook.value?.activeModeId
+  if (actualDisplayModeId.value > 0) {
+     modeKey = `mode_${actualDisplayModeId.value}`
   }
-  
-  return chap.modes[modeKey] || chap.modes['original'] || []
+
+  const modeLines = chap.modes[modeKey]
+  if (hasValidLines(modeLines)) return modeLines
+
+  const originalLines = chap.modes['original']
+  if (hasValidLines(originalLines)) return originalLines
+
+  return []
 }
 
-// 加载/刷新滑动窗口 (翻页模式的唯一入口)
-const refreshWindow = async (targetPos: 'first' | 'last' | 'keep' = 'first', reuseDirection?: 'next' | 'prev') => {
-  if (pageMode.value !== 'click' || !activeBook.value) return
-  
-  syncUI()
-  
-  // 快速复用模式 (消除白屏关键)
-  if (reuseDirection === 'next' && nextPages.value.length > 0) {
-      // 复用：旧Curr -> 新Prev, 旧Next -> 新Curr
-      const oldCurr = currPages.value
-      const oldNext = nextPages.value
-      
-      prevPages.value = oldCurr
-      currPages.value = oldNext
-      nextPages.value = [] // 暂时置空
-      
-      // 瞬移 Index: 新组合是 [Prev(原Curr), Curr(原Next), Next(空)]
-      // 目标是 Curr 的第一页，即 prevPages.length
-      // 注意：swiperCurrent 必须在数据变化后立即修正，否则 Swiper 会乱跳
-      // 我们先修正数据，Swiper 会根据 key 或 dom 重新渲染，此时 index 也要对上
-      
-      isSilentUpdate.value = true
-      swiperCurrent.value = oldCurr.length
-      currentPageIndex.value = oldCurr.length
-      
-      setTimeout(() => { isSilentUpdate.value = false }, 300)
-      
-      // 异步加载新的 Next (Chapter + 1)
-      const nextIdx = activeBook.value.activeChapterIndex + 1
-      if (nextIdx < activeBook.value.chapters.length) {
-          const nextText = getChapterText(nextIdx)
-          if (nextText.length > 0) {
-              measureText(nextText).then(pages => { nextPages.value = pages })
-          } else {
-              // 如果没预加载，去 fetch
-              bookStore.fetchChapter(bookId.value, activeBook.value.chapters[nextIdx].id).then(async () => {
-                  const txt = getChapterText(nextIdx)
-                  if (txt.length) nextPages.value = await measureText(txt)
-              })
-          }
-      }
-      return
-  }
-  
-  if (reuseDirection === 'prev' && prevPages.value.length > 0) {
-      const oldPrev = prevPages.value
-      const oldCurr = currPages.value
-      
-      nextPages.value = oldCurr
-      currPages.value = oldPrev
-      prevPages.value = []
-      
-      // 瞬移 Index: 目标是 Curr 的最后一页
-      // 新组合 [Prev(空), Curr(原Prev), Next(原Curr)]
-      // 目标 index = oldPrev.length - 1
-      
-      isSilentUpdate.value = true
-      swiperCurrent.value = oldPrev.length - 1
-      currentPageIndex.value = oldPrev.length - 1
-      
-      setTimeout(() => { isSilentUpdate.value = false }, 300)
-      
-      const prevIdx = activeBook.value.activeChapterIndex - 1
-      if (prevIdx >= 0) {
-          const prevText = getChapterText(prevIdx)
-          if (prevText.length > 0) {
-              measureText(prevText).then(pages => { prevPages.value = pages })
-          } else {
-              bookStore.fetchChapter(bookId.value, activeBook.value.chapters[prevIdx].id).then(async () => {
-                  const txt = getChapterText(prevIdx)
-                  if (txt.length) prevPages.value = await measureText(txt)
-              })
-          }
-      }
-      return
-  }
+const buildVirtualWindow = async (chapterIndex: number, targetPage: 'first' | 'last' | 'keep' = 'first') => {
+  if (!activeBook.value || isPaginating.value) return
 
-  // === 全量重置 (首次加载或非连续跳转) ===
   isSwiperReady.value = false
-  isTextTransitioning.value = true
-  
-  const currentIndex = activeBook.value.activeChapterIndex
-  const currentChapter = activeBook.value.chapters[currentIndex]
-  
-  // 1. 确保当前章原文已加载
-  if (!currentChapter.isLoaded) {
-    await bookStore.fetchChapter(activeBook.value.id, currentChapter.id)
-    syncUI() // 加载完再同步一次
+  isNavigationLocked.value = true
+  isPaginating.value = true
+
+  const chapter = activeBook.value.chapters[chapterIndex]
+  if (!chapter) {
+    isSwiperReady.value = true
+    isNavigationLocked.value = false
+    isTextTransitioning.value = false
+    isPaginating.value = false
+    return
   }
-  
-  // 2. 并行加载相邻章节 (不阻塞)
-  if (currentIndex > 0) bookStore.fetchChapter(bookId.value, activeBook.value.chapters[currentIndex-1].id)
-  if (currentIndex < activeBook.value.chapters.length - 1) bookStore.fetchChapter(bookId.value, activeBook.value.chapters[currentIndex+1].id)
 
-  // 3. 依次测量
-  currPages.value = await measureText(currentTextLines.value)
-  
-  const prevText = getChapterText(currentIndex - 1)
-  prevPages.value = prevText.length > 0 ? await measureText(prevText) : []
-  
-  const nextText = getChapterText(currentIndex + 1)
-  nextPages.value = nextText.length > 0 ? await measureText(nextText) : []
+  if (!chapter.isLoaded) {
+    await bookStore.fetchChapter(activeBook.value.id, chapter.id)
+  }
 
-  // 4. 定位索引
-  textToMeasure.value = []
-  const targetIdx = targetPos === 'last' ? prevPages.value.length + currPages.value.length - 1 : prevPages.value.length
-  
-  swiperCurrent.value = targetIdx
-  currentPageIndex.value = targetIdx
-  
+  if (actualDisplayModeId.value > 0) {
+    const promptId = actualDisplayModeId.value
+    if (chapter.trimmed_prompt_ids?.includes(promptId)) {
+      await bookStore.fetchChapterTrim(activeBook.value.id, chapter.id, promptId)
+    }
+  }
+
+  console.log('[Reader][Click] Build pages', {
+    chapterIndex,
+    chapterId: chapter.id,
+    actualDisplayModeId: actualDisplayModeId.value,
+    trimmedIds: chapter.trimmed_prompt_ids,
+    originalLength: chapter.modes?.original?.length || 0,
+    trimmedLength: actualDisplayModeId.value > 0 ? (chapter.modes?.[`mode_${actualDisplayModeId.value}`]?.length || 0) : 0
+  })
+
+  let text = getChapterText(chapterIndex)
+  if (!hasValidLines(text)) {
+    console.warn('[Reader][Click] Content empty, retry fetch', {
+      chapterIndex,
+      chapterId: chapter.id,
+      actualDisplayModeId: actualDisplayModeId.value
+    })
+    await bookStore.fetchChapter(activeBook.value.id, chapter.id)
+    text = getChapterText(chapterIndex)
+  }
+
+  if (!hasValidLines(text)) {
+    console.warn('[Reader][Click] Content still empty, fallback placeholder', {
+      chapterIndex,
+      chapterId: chapter.id,
+      actualDisplayModeId: actualDisplayModeId.value
+    })
+    text = ['暂无内容']
+  }
+
+  const contentSize = text.join('').length
+  const mode = pageMode.value === 'click' ? 'page' : 'line'
+  const cacheKey = `${chapter.id}_${actualDisplayModeId.value}_${fontSize.value}_${contentSize}_${mode}`
+  let cachedEntry = paginationCache.get(cacheKey)
+
+  if (cachedEntry && cachedEntry.contentSize !== contentSize) {
+    paginationCache.delete(cacheKey)
+    cachedEntry = undefined
+  }
+
+  if (cachedEntry) {
+    console.log('[Reader][Click] paginate cache hit', {
+      chapterIndex,
+      pages: cachedEntry.pages?.length || cachedEntry.lines?.length
+    })
+  } else {
+    console.log('[Reader][Click] paginate start', {
+      chapterIndex,
+      chapterId: chapter.id,
+      textLines: text.length,
+      actualDisplayModeId: actualDisplayModeId.value
+    })
+  }
+
+  if (cachedEntry) {
+    if (mode === 'page' && cachedEntry.pages) {
+      const pages: ChapterPage[] = cachedEntry.pages.map((pageContent, pageIndex) => ({
+        chapterIndex,
+        pageIndex,
+        content: pageContent,
+        chapterTitle: chapter.title,
+        isFirstPage: pageIndex === 0
+      }))
+      virtualPages.value = pages
+      const pageMap = new Map<number, number>()
+      pages.forEach((page, pageIndex) => {
+        page.content.forEach(line => {
+          if (!pageMap.has(line.paraIndex)) {
+            pageMap.set(line.paraIndex, pageIndex)
+          }
+        })
+      })
+      ttsPageIndexMap.value = pageMap
+      isSwiperReady.value = true
+    }
+
+    if (mode === 'line' && cachedEntry.paragraphs) {
+      currentTextLines.value = cachedEntry.paragraphs
+    }
+  } else {
+    const payload = buildRenderPayload(chapterIndex, text.join('\n'), cacheKey, contentSize, mode)
+    isPaginating.value = true
+    await requestRenderjsPagination(payload)
+  }
+
+  const ttsLines = mode === 'line'
+    ? currentTextLines.value
+    : text.map(line => line.replace(/^[ \t\u3000\xA0]+/, ''))
+
+  if (mode === 'page') {
+    currentTextLines.value = ttsLines
+  }
+
+  if (isTtsSpeaking.value && ttsPlayer.value) {
+    console.log('[Reader][TTS] reset lines after rebuild', {
+      chapterIndex,
+      chapterId: chapter.id,
+      lines: ttsLines.length
+    })
+    ttsPlayer.value.setLines(ttsLines)
+    ttsCurrentIndex.value = 0
+    ttsPlayer.value.play(0)
+  }
+
+  if (mode === 'page') {
+    if (targetPage === 'last') {
+      activePageIndex.value = Math.max(0, virtualPages.value.length - 1)
+    } else if (targetPage === 'keep') {
+      activePageIndex.value = Math.min(activePageIndex.value, Math.max(0, virtualPages.value.length - 1))
+    } else {
+      activePageIndex.value = 0
+    }
+  }
+
   await nextTick()
-  isSwiperReady.value = true
+  isPaginating.value = false
+  isNavigationLocked.value = false
   isTextTransitioning.value = false
 }
 
-  // 预加载逻辑 (统一入口)
+const handlePageNavigation = async (direction: 'prev' | 'next') => {
+  if (!activeBook.value || isNavigationLocked.value || virtualPages.value.length === 0) return
+
+  const currentChapterIndex = activeBook.value.activeChapterIndex
+  const totalChapters = activeBook.value.chapters.length
+
+  if (direction === 'next') {
+    if (activePageIndex.value < virtualPages.value.length - 1) {
+      activePageIndex.value++
+      return
+    }
+    if (currentChapterIndex < totalChapters - 1) {
+      await switchChapter(currentChapterIndex + 1, 'start')
+    } else {
+      showNotification('已至末尾')
+    }
+    return
+  }
+
+  if (activePageIndex.value > 0) {
+    activePageIndex.value--
+    return
+  }
+
+  if (currentChapterIndex > 0) {
+    await switchChapter(currentChapterIndex - 1, 'end')
+  } else {
+    showNotification('已至首页')
+  }
+}
+
+const rebuildVirtualWindow = async (chapterIdx: number, targetPage: 'first' | 'last' | 'keep' = 'first') => {
+  await buildVirtualWindow(chapterIdx, targetPage)
+}
+
+// 预加载逻辑 (统一入口)
 const triggerPreload = async () => {
   if (!activeBook.value) return
   
@@ -601,9 +901,11 @@ watch(readingMode, (val) => {
   })
 }, { immediate: true })
 
-watch([fontSize, pageMode, isMagicActive], () => {
-  if (pageMode.value === 'click') setTimeout(() => refreshWindow(), 100)
-  else syncUI() // 滚动模式下也要同步
+watch([fontSize, pageMode, actualDisplayModeId], () => {
+  if (!activeBook.value) return
+  if (isPaginating.value) return
+  nextTick(() => measureLineHeight())
+  setTimeout(() => buildVirtualWindow(activeBook.value!.activeChapterIndex, 'keep'), 100)
 })
 
 // 监听状态栏隐藏设置变化
@@ -621,6 +923,7 @@ watch(hideStatusBar, (val) => {
 
 onLoad((options) => {
   uni.setKeepScreenOn({ keepScreenOn: true })
+  nextTick(() => measureLineHeight())
 
   // #ifdef APP-PLUS
   // 进入时根据设置控制状态栏和菜单栏
@@ -658,8 +961,18 @@ const init = async () => {
   ])
   uni.hideLoading()
 
+  // 0. 初始化默认偏好 (如果未设置)
+  if (userPreferredModeId.value === 0 && bookStore.prompts.length > 0) {
+    const defaultPrompt = bookStore.prompts.find(p => p.is_default)
+    if (defaultPrompt) {
+      console.log('[Reader] Setting default preference:', defaultPrompt.name)
+      userPreferredModeId.value = defaultPrompt.id
+      uni.setStorageSync('userPreferredModeId', defaultPrompt.id.toString())
+    }
+  }
+
   // 1. 决定起始章节索引
-  const startIndex = await determineStartChapter()
+   const startIndex = await determineStartChapter()
   if (activeBook.value) {
     activeBook.value.activeChapterIndex = startIndex
   }
@@ -669,6 +982,15 @@ const init = async () => {
   if (historyPromptId > 0 && activeBook.value) {
     activeBook.value.activeModeId = historyPromptId.toString()
     isMagicActive.value = true
+  }
+
+  // 3. 恢复用户精简模式偏好（需要检查当前章节是否有缓存）
+  if (userPreferredModeId.value > 0 && activeBook.value) {
+    const currentChapter = activeBook.value.chapters[activeBook.value.activeChapterIndex]
+    await checkAndAdjustMode(currentChapter)
+  } else {
+    actualDisplayModeId.value = 0
+    isMagicActive.value = false
   }
 
   // 3. 立即加载当前章节
@@ -683,8 +1005,8 @@ const init = async () => {
   }
 
   syncUI()
-  if (pageMode.value === 'click') refreshWindow()
-  
+  if (pageMode.value === 'click') rebuildVirtualWindow(activeBook.value.activeChapterIndex)
+
   // 初始化 TTS (此时 activeBook 已就绪)
   initTTS()
 }
@@ -865,24 +1187,6 @@ const handleScroll = (e: any) => {
   }
 }
 
-const onSwiperChange = (e: any) => {
-  if (!isSwiperReady.value || isWindowShifting.value || isSilentUpdate.value) return
-  const newIdx = e.detail.current
-  const prevCount = prevPages.value.length
-  const currCount = currPages.value.length
-  
-  if (newIdx < prevCount) {
-    isWindowShifting.value = true
-    switchChapter(activeBook.value!.activeChapterIndex - 1, 'end').then(() => { isWindowShifting.value = false })
-  } else if (newIdx >= prevCount + currCount) {
-    isWindowShifting.value = true
-    switchChapter(activeBook.value!.activeChapterIndex + 1, 'start').then(() => { isWindowShifting.value = false })
-  } else {
-    swiperCurrent.value = newIdx
-    currentPageIndex.value = newIdx
-  }
-}
-
 const handleContentClick = (e: any) => {
   // 清除之前的自动隐藏定时器
   if (menuAutoHideTimer) {
@@ -908,19 +1212,11 @@ const handleContentClick = (e: any) => {
     const x = e.detail.x
     if (x < info.windowWidth * 0.3) {
       // 左侧 30%：上一页
-      if (swiperCurrent.value > 0) {
-        swiperCurrent.value--
-      } else if (activeBook.value!.activeChapterIndex > 0) {
-        switchChapter(activeBook.value!.activeChapterIndex - 1, 'end')
-      }
+      handlePageNavigation('prev')
       return
     } else if (x > info.windowWidth * 0.7) {
       // 右侧 30%：下一页
-      if (swiperCurrent.value < combinedPages.value.length - 1) {
-        swiperCurrent.value++
-      } else {
-        switchChapter(activeBook.value!.activeChapterIndex + 1, 'start')
-      }
+      handlePageNavigation('next')
       return
     }
     // 中间区域：唤出菜单栏
@@ -971,6 +1267,46 @@ const showNotification = (msg: string) => {
   setTimeout(() => { showToast.value = false }, 2000)
 }
 
+const updateUserPreference = async (modeId: number) => {
+  userPreferredModeId.value = modeId
+  uni.setStorageSync('userPreferredModeId', modeId.toString())
+
+  const prompt = bookStore.prompts.find(p => p.id === modeId)
+
+  if (!activeBook.value || !activeChapter.value) {
+    if (prompt) {
+      showNotification(`偏好已更新为「${prompt.name}」`)
+    }
+    return
+  }
+
+  const previousModeId = actualDisplayModeId.value
+  const hasPreferred = await checkAndAdjustMode(activeChapter.value)
+
+  if (pageMode.value === 'click') {
+    await rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
+  } else {
+    syncUI()
+  }
+
+  if (!hasPreferred) {
+    if (prompt) {
+      showNotification(`偏好已更新为「${prompt.name}」，当前章节暂无该模式，已显示原文`)
+    } else {
+      showNotification('当前章节暂无该偏好模式，已显示原文')
+    }
+    return
+  }
+
+  if (prompt) {
+    showNotification(`偏好已更新为「${prompt.name}」`)
+  }
+  if (actualDisplayModeId.value !== previousModeId) {
+    showModeSwitchTip(activeChapter.value, actualDisplayModeId.value)
+  }
+}
+
+
 const handleTerminalClose = () => {
   showTerminal.value = false
   showNotification('AI 精简将在后台继续...')
@@ -1011,6 +1347,7 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
   const isTrimmed = activeChapter.value?.trimmed_prompt_ids?.some((id: number) => Number(id) === promptId)
   if (isTrimmed) {
     showConfigModal.value = false
+    // 切换到该模式（临时切换，不修改偏好）
     await switchToMode(promptId.toString())
     return
   }
@@ -1043,7 +1380,7 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
       rawContent,
       activeChapter.value.md5,
       promptId,
-      activeBook.value?.bookMD5 || '',
+      activeBook.value?.book_md5 || '',
       activeBook.value?.activeChapterIndex || 0,
       (text) => {
         streamingContent.value += text
@@ -1059,6 +1396,7 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
 
         activeBook.value!.activeModeId = promptId.toString()
         isMagicActive.value = true
+        actualDisplayModeId.value = promptId
 
         if (activeChapter.value) {
           await bookStore.saveChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId, streamingContent.value)
@@ -1067,15 +1405,15 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
           }
         }
 
-        if (showTerminal.value) {
-          setTimeout(() => {
-            showTerminal.value = false
-            if (pageMode.value === 'click') refreshWindow('keep')
-            showModeSwitchTip(activeChapter.value, promptId)
-          }, 800)
-        } else {
+      if (showTerminal.value) {
+        setTimeout(() => {
+          showTerminal.value = false
+          if (pageMode.value === 'click' && activeBook.value) rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
           showModeSwitchTip(activeChapter.value, promptId)
-        }
+        }, 800)
+      } else {
+        showModeSwitchTip(activeChapter.value, promptId)
+      }
       }
     )
     return
@@ -1095,31 +1433,74 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
       showTerminal.value = false
       showNotification('失败: ' + err)
     },
+      async () => {
+        const lines = streamingContent.value.split('\n')
+        currentTextLines.value = lines
+
+        activeBook.value!.activeModeId = promptId.toString()
+        isMagicActive.value = true
+        actualDisplayModeId.value = promptId
+
+        if (activeChapter.value) {
+          await bookStore.saveChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId, streamingContent.value)
+          if (!activeChapter.value.trimmed_prompt_ids.includes(promptId)) {
+            activeChapter.value.trimmed_prompt_ids.push(promptId)
+          }
+        }
+
+      if (showTerminal.value) {
+        setTimeout(() => {
+          showTerminal.value = false
+          if (pageMode.value === 'click' && activeBook.value) rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
+          showModeSwitchTip(activeChapter.value, promptId)
+        }, 800)
+      } else {
+        showModeSwitchTip(activeChapter.value, promptId)
+      }
+      }
+    )
+    // #endif
+
+    // #ifndef APP-PLUS
+  // 小程序端：使用 trimStreamByChapterId (按章节 ID)
+  trimStreamByChapterId(
+    activeBook.value!.id,
+    activeChapter.value!.id,
+    promptId,
+    (text) => {
+      streamingContent.value += text
+    },
+    (err) => {
+      console.error('[Reader] Stream error:', err)
+      showTerminal.value = false
+      showNotification('失败: ' + err)
+    },
     async () => {
       const lines = streamingContent.value.split('\n')
       currentTextLines.value = lines
 
       activeBook.value!.activeModeId = promptId.toString()
       isMagicActive.value = true
+      actualDisplayModeId.value = promptId
 
       if (activeChapter.value) {
         await bookStore.saveChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId, streamingContent.value)
         if (!activeChapter.value.trimmed_prompt_ids.includes(promptId)) {
-          activeChapter.value.trimmed_prompt_ids.push(promptId)
+           activeChapter.value.trimmed_prompt_ids.push(promptId)
         }
       }
 
       if (showTerminal.value) {
         setTimeout(() => {
           showTerminal.value = false
-          if (pageMode.value === 'click') refreshWindow('keep')
+          if (pageMode.value === 'click' && activeBook.value) rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
           showModeSwitchTip(activeChapter.value, promptId)
         }, 800)
       } else {
         showModeSwitchTip(activeChapter.value, promptId)
       }
     })
-    // #endif
+  // #endif
 
     // #ifndef APP-PLUS
   // 小程序端：使用 trimStreamByChapterId (按章节 ID)
@@ -1149,13 +1530,13 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
         }
       }
 
-      if (showTerminal.value) {
-        setTimeout(() => {
-          showTerminal.value = false
-          if (pageMode.value === 'click') refreshWindow('keep')
-          showModeSwitchTip(activeChapter.value, promptId)
-        }, 800)
-      } else {
+        if (showTerminal.value) {
+          setTimeout(() => {
+            showTerminal.value = false
+            if (pageMode.value === 'click' && activeBook.value) rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
+            showModeSwitchTip(activeChapter.value, promptId)
+          }, 800)
+        } else {
         showModeSwitchTip(activeChapter.value, promptId)
       }
     })
@@ -1177,32 +1558,42 @@ const switchToMode = async (id: string, showModalOnFailure = true) => {
     return
   }
 
-  // 1. 尝试从本地缓存加载
-  const lines = await bookStore.fetchChapterTrim(activeBook.value!.id, activeChapter.value!.id, parseInt(id))
+  const promptId = parseInt(id)
+
+  // 更新实际显示模式（不修改用户偏好）
+  if (promptId > 0) {
+    actualDisplayModeId.value = promptId
+  } else {
+    actualDisplayModeId.value = 0
+  }
+
+  // 尝试从本地缓存加载
+  const lines = await bookStore.fetchChapterTrim(activeBook.value!.id, activeChapter.value!.id, promptId)
 
   if (lines) {
+    // 成功切换
     activeBook.value!.activeModeId = id
     isMagicActive.value = true
     syncUI()
-    if (pageMode.value === 'click') refreshWindow('keep')
+    if (pageMode.value === 'click') rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
     triggerPreload()
-    
+
     // 显示模式切换提示
-    const promptId = parseInt(id)
     setTimeout(() => {
       showModeSwitchTip(activeChapter.value, promptId)
     }, 100)
   } else {
-    if (showModalOnFailure) {
-      showConfigModal.value = true
-    } else {
-      showNotification('暂无离线精简内容')
-    }
+    // 失败时重置为原文，不弹窗
+    actualDisplayModeId.value = 0
+    isMagicActive.value = false
+    syncUI()
+    if (pageMode.value === 'click' && activeBook.value) rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
+    showNotification('暂无离线精简内容')
   }
 }
 
 const getMagicButtonClass = () => {
-  if (isMagicActive.value) {
+  if (actualDisplayModeId.value > 0) {  // 使用 actualDisplayModeId
     switch (readingMode.value) {
       case 'light': return 'bg-teal-500 text-white rotate-12'
       case 'dark': return 'bg-teal-600 text-white rotate-12'
@@ -1217,22 +1608,69 @@ const getMagicButtonClass = () => {
   return 'bg-stone-200 text-stone-700'
 }
 
-const toggleMagic = () => {
-  if (isMagicActive.value) {
+const checkAndAdjustMode = async (chapter: any) => {
+  if (userPreferredModeId.value === 0) {
+    actualDisplayModeId.value = 0
     isMagicActive.value = false
-    syncUI() // 切回原文
-    if (pageMode.value === 'click') refreshWindow('keep')
+    return false
+  }
+
+  const promptId = userPreferredModeId.value
+  await bookStore.ensureTrimmedStatus(chapter.id)
+  const hasTrimmed = chapter.trimmed_prompt_ids?.includes(promptId)
+
+  if (hasTrimmed) {
+    const lines = await bookStore.fetchChapterTrim(activeBook.value!.id, chapter.id, promptId)
+    if (hasValidLines(lines || [])) {
+      actualDisplayModeId.value = promptId
+      isMagicActive.value = true
+      if (activeBook.value) {
+        activeBook.value.activeModeId = promptId.toString()
+      }
+      return true
+    }
+    console.warn('[Reader][Mode] Preferred trim empty, fallback original', {
+      chapterId: chapter.id,
+      promptId
+    })
+  }
+
+  actualDisplayModeId.value = 0
+  isMagicActive.value = false
+  return false
+}
+
+const toggleMagic = async () => {
+  if (actualDisplayModeId.value !== 0) {
+    actualDisplayModeId.value = 0
+    isMagicActive.value = false
+    syncUI()
+    if (pageMode.value === 'click' && activeBook.value) rebuildVirtualWindow(activeBook.value.activeChapterIndex, 'keep')
     showNotification('已切换为原文')
+    return
+  }
+
+  const targetModeId = userPreferredModeId.value
+  if (targetModeId === 0) {
+    showConfigModal.value = true
+    return
+  }
+
+  if (activeChapter.value) {
+    await bookStore.ensureTrimmedStatus(activeChapter.value.id)
+  }
+
+  const hasTrimmed = activeChapter.value?.trimmed_prompt_ids?.includes(targetModeId)
+  if (hasTrimmed) {
+    await switchToMode(targetModeId.toString(), false)
   } else {
-    const targetMode = activeBook.value?.activeModeId || (bookStore.prompts[0]?.id.toString())
-    if (targetMode) switchToMode(targetMode, true)
-    else showConfigModal.value = true
+    showConfigModal.value = true
   }
 }
 
 const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 'start') => {
   if (index < 0 || index >= activeBook.value!.chapters.length) return
-  
+
   // 手动切换章节时，如果正在听书，则停止
   if (isTtsSpeaking.value) {
     if (ttsPlayer.value) ttsPlayer.value.stop()
@@ -1241,29 +1679,10 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
   }
 
   const targetChapter = activeBook.value!.chapters[index]
-  
-  // 如果当前是精简模式，先查询目标章节的精简状态
-  if (isMagicActive.value && activeBook.value?.activeModeId) {
-    const promptId = parseInt(activeBook.value.activeModeId)
-    if (promptId > 0) {
-      console.log('[Debug] Querying trim status for chapter:', targetChapter.id)
-      await bookStore.ensureTrimmedStatus(targetChapter.id)
-      
-      const hasTrimmed = targetChapter.trimmed_prompt_ids?.includes(promptId)
-      if (!hasTrimmed) {
-        console.log('[Debug] Mode Keep Failed -> Reset to original')
-        const prevPromptId = parseInt(activeBook.value.activeModeId)
-        const prevPrompt = bookStore.prompts.find(p => p.id === prevPromptId)
-        const modeName = prevPrompt?.name || '当前模式'
-        showNotification(`「${modeName}」无精简内容，已切回原文`)
-        isMagicActive.value = false
-      } else {
-        console.log('[Debug] Mode Keep Success, loading trimmed content...')
-        // 关键修复：主动加载目标章节的精简内容
-        await bookStore.fetchChapterTrim(activeBook.value.id, targetChapter.id, promptId)
-      }
-    }
-  }
+  const previousActualModeId = actualDisplayModeId.value
+
+  // 检查并调整目标章节的模式（基于用户偏好）
+  await checkAndAdjustMode(targetChapter)
 
   isTextTransitioning.value = true
   clearTimeout(progressTimer)
@@ -1272,42 +1691,33 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     scrollTop.value = 1
     nextTick(() => { scrollTop.value = 0 })
   }
-  
-  // 判断是否相邻，用于无缝切换
-  let reuseDir: 'next' | 'prev' | undefined = undefined
-  if (Math.abs(index - activeBook.value!.activeChapterIndex) === 1) {
-      reuseDir = index > activeBook.value!.activeChapterIndex ? 'next' : 'prev'
-  }
 
   activeBook.value!.activeChapterIndex = index
-  
+
   if (pageMode.value === 'click') {
-    await refreshWindow(targetPosition === 'end' ? 'last' : 'first', reuseDir)
+    await rebuildVirtualWindow(index, targetPosition === 'end' ? 'last' : 'first')
   } else {
     await bookStore.setChapter(index)
-    syncUI()
-    isTextTransitioning.value = false
+    await buildVirtualWindow(index, 'first')
   }
 
    const chapId = activeBook.value!.chapters[index].id
    triggerPreload()
    handleProgressTracking(chapId)
 
-   // 如果保持精简模式，显示提示
-   if (isMagicActive.value && activeBook.value?.activeModeId) {
-     const promptId = parseInt(activeBook.value.activeModeId)
-     if (promptId > 0) {
-       setTimeout(() => {
-         showModeSwitchTip(activeBook.value!.chapters[index], promptId)
-       }, 300)
-     }
+   if (actualDisplayModeId.value !== previousActualModeId) {
+     const promptId = actualDisplayModeId.value
+     setTimeout(() => {
+       showModeSwitchTip(activeBook.value!.chapters[index], promptId)
+     }, 300)
    }
 }
 </script>
 
 <template>
-  <view :style="{ backgroundColor: modeColors[readingMode].bg, color: modeColors[readingMode].text }"
+  <view :style="{ backgroundColor: modeColors[readingMode].bg, color: modeColors[readingMode].text, backgroundImage: readingBgImage ? `url(${readingBgImage})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }"
         class="h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-300">
+    <view v-if="readingBgImage" class="absolute inset-0 z-0 pointer-events-none" :style="{ backgroundColor: bgOverlayColor }"></view>
 
     <!-- Top Bar -->
     <view v-if="menuVisible" class="fixed top-0 inset-x-0 z-[80] flex flex-col border-b bg-inherit shadow-sm transition-colors duration-300" :style="{ backgroundColor: modeColors[readingMode].bg }">
@@ -1316,8 +1726,11 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
         <view @click="handleBack" class="p-2 active:opacity-50 transition-opacity">
           <image :src="icons.back" mode="aspectFit" style="width: 44rpx; height: 44rpx;" class="opacity-70"></image>
         </view>
-        <text class="font-bold text-sm truncate max-w-[200px]">{{ activeBook?.title }}</text>
-        
+        <view class="flex flex-col items-center max-w-[200px]">
+          <text class="font-bold text-sm truncate max-w-[200px]">{{ activeBook?.title }}</text>
+          <text class="text-[10px] opacity-50 mt-0.5">{{ activeModeName }}</text>
+        </view>
+
         <!-- TTS Icon Button -->
         <view @click.stop="toggleTtsPanel" class="p-2 relative group active:opacity-50 transition-opacity">
           <view class="w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200"
@@ -1412,7 +1825,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     </view>
 
     <!-- Main Viewport -->
-    <view class="flex-1 min-h-0 w-full" @click="handleContentClick">
+    <view class="flex-1 min-h-0 w-full relative z-10" @click="handleContentClick">
       
       <!-- 1. Scroll Mode -->
       <scroll-view v-if="pageMode === 'scroll'" scroll-y class="h-full scroll-view-content" :scroll-top="scrollTop" @scroll="handleScroll">
@@ -1421,7 +1834,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
           
           <!-- Explicit UI Binding -->
           <view v-for="(para, idx) in currentTextLines" :key="idx" 
-                class="content-para mb-6 indent-8 leading-loose text-justify transition-colors duration-300"
+                class="content-para indent-8 leading-loose text-justify transition-colors duration-300"
                 :class="{ 'text-teal-500 font-medium': ttsCurrentIndex === idx }">
             {{ para }}
           </view>
@@ -1434,39 +1847,40 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
 
       <!-- 2. Click Mode (Swiper Window) -->
       <swiper v-else-if="isSwiperReady"
-        class="h-full" 
-        :current="swiperCurrent" 
-        @change="onSwiperChange"
+        class="h-full"
+        :current="activePageIndex"
         :duration="300">
-        <swiper-item v-for="(page, pIdx) in combinedPages" :key="pIdx">
+        <!-- 核心阅读区域：使用 pageItem.key 确保唯一性 -->
+        <swiper-item v-for="(pageItem, pIdx) in combinedPages" :key="pageItem.key">
           <view class="p-6 h-full flex flex-col transition-opacity duration-300" :style="{ fontSize: fontSize + 'px', paddingTop: (statusBarHeight + 60) + 'px' }" :class="{ 'opacity-0': isTextTransitioning }">
-            <view v-if="isFirstPageOfChapter(pIdx)" class="text-2xl font-bold mb-10 text-center">
-              {{ getPageTitle(pIdx) }}
-            </view>
-            <view v-for="(para, idx) in page" :key="idx" 
-                  class="mb-6 indent-8 leading-loose text-justify transition-colors duration-300"
-                  :class="{ 'text-teal-500 font-medium': ttsCurrentIndex !== -1 && currentTextLines[ttsCurrentIndex] === para }">
-              {{ para }}
+            <view class="h-full flex flex-col">
+              <view v-if="isFirstPageOfChapter(pIdx)" class="text-2xl font-bold mb-10 text-center">
+                {{ getPageTitle(pIdx) }}
+              </view>
+              <view v-for="(group, gIdx) in getParagraphGroups(pageItem.content)" :key="gIdx">
+                <view v-for="(line, idx) in group.lines" :key="idx"
+                      class="leading-loose text-justify transition-colors duration-300"
+                      :class="{
+                        'indent-8': line.isFirstLine,
+                        'text-teal-500 font-medium': ttsCurrentIndex !== -1 && line.paraIndex === ttsCurrentIndex
+                      }">
+                  {{ line.text }}
+                </view>
+              </view>
             </view>
           </view>
         </swiper-item>
       </swiper>
     </view>
 
-    <!-- Invisible Measurer -->
-    <view class="fixed top-0 left-0 w-full pointer-events-none invisible" style="z-index: -1;">
-      <view class="p-6" :style="{ fontSize: fontSize + 'px' }">
-        <view v-for="(para, idx) in textToMeasure" :key="idx" class="measurer-para mb-6 indent-8 leading-loose text-justify">
-          {{ para }}
-        </view>
-      </view>
+    <!-- Invisible Canvas for measurement -->
+    <canvas canvas-id="measure-canvas" class="fixed top-0 left-0 w-0 h-0 opacity-0 pointer-events-none"></canvas>
+    <view class="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
+      <view class="line-height-probe leading-loose" :style="{ fontSize: fontSize + 'px' }">测</view>
     </view>
+    <Renderjs :rjsChapter="renderjsPayload" @handelContentUpdated="updateContainerContent" />
 
     <!-- Overlays -->
-    <view class="fixed top-20 right-6 opacity-40 z-10 pointer-events-none" :style="{ top: (statusBarHeight + 60) + 'px' }">
-      <text class="text-[10px] font-mono border px-1 rounded">{{ activeModeName }}</text>
-    </view>
-
     <view v-if="pageMode === 'click'" class="fixed bottom-6 right-6 opacity-40 z-10">
       <text class="text-[10px] font-bold">{{ relativePageInfo }}</text>
     </view>
@@ -1518,8 +1932,8 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <!-- Modals -->
     <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :reading-mode="readingMode" :mode-colors="modeColors" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
     <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :reading-mode="readingMode" :mode-colors="modeColors" @close="showBatchModal = false" @confirm="(id) => handleStartProcess(id, true)" />
-    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" @close="showConfigModal = false" @start="handleStartProcess" />
-    <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="(val) => { pageMode = val; uni.setStorageSync('pageMode', val) }" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" />
+    <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" :user-preferred-mode-id="userPreferredModeId" @close="showConfigModal = false" @start="handleStartProcess" />
+    <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" :user-preferred-mode-id="userPreferredModeId" :reading-bg-image="readingBgImage" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="(val) => { pageMode = val; uni.setStorageSync('pageMode', val) }" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" @update:user-preferred-mode-id="updateUserPreference" @select:bgImage="chooseBackgroundImage" @clear:bgImage="clearBackgroundImage" />
     <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :reading-mode="readingMode" :mode-colors="modeColors" @close="handleTerminalClose" />
     <LoginConfirmModal v-model:visible="showLoginModal" :content="loginTipContent" :reading-mode="readingMode" @confirm="handleLoginConfirm" />
     <view v-if="showToast" class="fixed bottom-40 left-1/2 -translate-x-1/2 bg-stone-900 text-white px-4 py-2 rounded-full text-xs z-[110] shadow-2xl">{{ toastMsg }}</view>

@@ -21,10 +21,23 @@ const props = defineProps<{
   readingMode: 'light' | 'dark' | 'sepia',
   modeColors: ModeColors,
   pageMode: 'scroll' | 'click',
-  hideStatusBar: boolean
+  hideStatusBar: boolean,
+  userPreferredModeId?: number,
+  readingBgImage?: string
 }>()
 
-const emit = defineEmits(['close', 'update:activeMode', 'update:fontSize', 'update:readingMode', 'update:pageMode', 'update:hideStatusBar', 'addMode'])
+const emit = defineEmits([
+  'close',
+  'update:activeMode',
+  'update:fontSize',
+  'update:readingMode',
+  'update:pageMode',
+  'update:hideStatusBar',
+  'update:userPreferredModeId',
+  'select:bgImage',
+  'clear:bgImage'
+])
+
 
 const getModeName = (id: string) => {
   if (id === 'original') return '原文'
@@ -89,33 +102,85 @@ const mutedColor = computed(() => isDarkMode.value ? '#a8a29e' : '#78716c')
          </view>
       </view>
 
-      <!-- Reading Mode (Three Options) -->
-      <view class="mb-8">
-         <view class="text-[10px] font-bold uppercase tracking-widest mb-3" :style="{ color: mutedColor }">阅读模式</view>
-         <view class="rounded-xl p-1 flex" :style="{ backgroundColor: isDarkMode ? '#44403c' : '#fafaf9' }">
-           <view @click="emit('update:readingMode', 'light')"
-             class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
-             :style="readingMode === 'light' ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }) : { color: mutedColor }">
-             日间
-           </view>
-           <view @click="emit('update:readingMode', 'dark')"
-             class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
-             :style="readingMode === 'dark' ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }) : { color: mutedColor }">
-             夜间
-           </view>
-           <view @click="emit('update:readingMode', 'sepia')"
-             class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
-             :style="readingMode === 'sepia' ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }) : { color: mutedColor }">
-             护眼
-           </view>
-         </view>
-      </view>
+       <!-- Reading Mode (Three Options) -->
+       <view class="mb-8">
+          <view class="text-[10px] font-bold uppercase tracking-widest mb-3" :style="{ color: mutedColor }">阅读模式</view>
+          <view class="rounded-xl p-1 flex" :style="{ backgroundColor: isDarkMode ? '#44403c' : '#fafaf9' }">
+            <view @click="emit('update:readingMode', 'light')"
+              class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
+              :style="readingMode === 'light' ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }) : { color: mutedColor }">
+              日间
+            </view>
+            <view @click="emit('update:readingMode', 'dark')"
+              class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
+              :style="readingMode === 'dark' ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }) : { color: mutedColor }">
+              夜间
+            </view>
+            <view @click="emit('update:readingMode', 'sepia')"
+              class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
+              :style="readingMode === 'sepia' ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }) : { color: mutedColor }">
+              护眼
+            </view>
+          </view>
+       </view>
 
-      <!-- Hide StatusBar Toggle -->
-      <view class="flex items-center justify-between">
-         <text class="text-[10px] font-bold uppercase tracking-widest" :style="{ color: mutedColor }">隐藏状态栏</text>
-         <switch :checked="hideStatusBar" @change="emit('update:hideStatusBar', $event.detail.value)" color="#0d9488" />
-      </view>
+       <!-- AI Trim Mode Preference -->
+       <view class="mb-8">
+          <view class="flex justify-between items-center mb-3">
+            <view class="text-[10px] font-bold uppercase tracking-widest" :style="{ color: mutedColor }">AI 精简模式偏好</view>
+            <view class="text-[10px]" :style="{ color: mutedColor }">全局设置</view>
+          </view>
+          <view class="rounded-xl p-1 flex" :style="{ backgroundColor: isDarkMode ? '#44403c' : '#fafaf9' }">
+            <view
+              v-for="prompt in prompts"
+              :key="prompt.id"
+              @click="emit('update:userPreferredModeId', prompt.id)"
+              class="flex-1 py-2 rounded-lg text-xs font-bold text-center transition-all"
+              :style="userPreferredModeId === prompt.id
+                ? (isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' })
+                : { color: mutedColor }">
+              {{ prompt.name }}
+            </view>
+          </view>
+          <view class="text-[10px] mt-2" :style="{ color: mutedColor }">
+            说明：选择您偏好的阅读模式，全局生效。点击魔法棒可切换回原文。
+          </view>
+       </view>
+
+       <!-- Background Image -->
+       <view class="mb-8">
+          <view class="flex justify-between items-center mb-3">
+            <view class="text-[10px] font-bold uppercase tracking-widest" :style="{ color: mutedColor }">阅读背景图</view>
+            <view class="text-[10px]" :style="{ color: mutedColor }">本地相册</view>
+          </view>
+          <view class="rounded-xl p-3 flex items-center justify-between" :style="{ backgroundColor: isDarkMode ? '#44403c' : '#fafaf9' }">
+            <text class="text-xs" :style="{ color: mutedColor }">
+              {{ readingBgImage ? '已设置背景图' : '未设置' }}
+            </text>
+            <view class="flex gap-2">
+              <view @click="emit('select:bgImage')"
+                    class="px-3 py-1 rounded-lg text-xs font-bold"
+                    :style="isDarkMode ? { backgroundColor: '#57534e', color: '#fafaf9' } : { backgroundColor: '#ffffff', color: '#1c1917' }">
+                选择
+              </view>
+              <view v-if="readingBgImage" @click="emit('clear:bgImage')"
+                    class="px-3 py-1 rounded-lg text-xs font-bold"
+                    :style="{ color: mutedColor, border: '1px solid ' + panelBorder }">
+                清除
+              </view>
+            </view>
+          </view>
+          <view class="text-[10px] mt-2" :style="{ color: mutedColor }">
+            说明：支持本地相册图片，自动铺满显示。
+          </view>
+       </view>
+
+       <!-- Hide StatusBar Toggle -->
+       <view class="flex items-center justify-between">
+          <text class="text-[10px] font-bold uppercase tracking-widest" :style="{ color: mutedColor }">隐藏状态栏</text>
+          <switch :checked="hideStatusBar" @change="emit('update:hideStatusBar', $event.detail.value)" color="#0d9488" />
+       </view>
+
     </view>
   </view>
 </template>
