@@ -8,15 +8,16 @@ const props = defineProps<{
 }>()
 const emit = defineEmits(['click', 'sync', 'delete', 'longpress'])
 
-const statusText = computed(() => {
-  const map: Record<string, string> = { 'new': '新书籍', 'processing': '处理中', 'ready': '已就绪' }
-  return map[props.book.status] || props.book.status
+const syncLabels = computed(() => {
+  if (props.book.sync_state === 2) return ['云端']
+  if (props.book.sync_state === 1) return ['本地', '云端']
+  return ['本地']
 })
 
-const isCloud = computed(() => {
-  // sync_state 1 or 2 means synced to cloud
-  return props.book.sync_state === 1 || props.book.sync_state === 2;
-})
+const syncBadgeClass = (label: string) => {
+  if (label === '云端') return 'bg-blue-50 text-blue-600 border-blue-100'
+  return 'bg-emerald-50 text-emerald-600 border-emerald-100'
+}
 
 const handleLongPress = () => {
   emit('longpress', props.book)
@@ -41,11 +42,6 @@ const onCoverError = () => {
     @longpress="handleLongPress"
     class="bg-white p-4 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-stone-50 flex gap-5 active:scale-[0.98] transition-all duration-200 mb-4 relative overflow-hidden"
   >
-    <!-- Processing Overlay (Subtle) -->
-    <view v-if="book.status === 'processing'" class="absolute top-0 right-0 p-3">
-       <view class="w-1.5 h-1.5 rounded-full bg-stone-300 animate-pulse"></view>
-    </view>
-
     <!-- Cover Area -->
     <view class="w-16 h-22 shrink-0 relative overflow-hidden rounded-xl">
       <!-- Real Cover (if exists) -->
@@ -79,25 +75,18 @@ const onCoverError = () => {
       
       <!-- Bottom Tags Row -->
       <view class="flex items-center flex-wrap gap-2 mt-3">
+        <view
+          v-for="label in syncLabels"
+          :key="label"
+          :class="`flex items-center gap-1 border px-2.5 py-1 rounded-lg ${syncBadgeClass(label)}`"
+        >
+          <text class="text-[10px] font-bold tracking-wide">{{ label }}</text>
+        </view>
+
         <!-- AI Trimmed Badge -->
         <view v-if="book.book_trimmed_ids?.length" class="flex items-center gap-1 bg-stone-100 px-2.5 py-1 rounded-lg">
           <image src="/static/icons/sparkles.svg" class="w-3 h-3 opacity-60" />
           <text class="text-[10px] text-stone-600 font-bold tracking-wide">已精简</text>
-        </view>
-
-        <!-- Sync Status Badges -->
-        <view v-if="isCloud" class="flex items-center gap-1 bg-stone-50 border border-stone-100 px-2.5 py-1 rounded-lg">
-          <image src="/static/icons/cloud.svg" class="w-3 h-3 opacity-60" />
-          <text class="text-[10px] text-stone-500 font-bold tracking-wide">云端</text>
-        </view>
-
-        <view 
-          v-else 
-          @click.stop="emit('sync')"
-          class="flex items-center gap-1 bg-white border border-stone-200 px-2.5 py-1 rounded-lg active:bg-stone-50 transition-colors"
-        >
-          <image src="/static/icons/sync.svg" class="w-3 h-3 opacity-60" />
-          <text class="text-[10px] text-stone-600 font-bold tracking-wide">同步</text>
         </view>
       </view>
     </view>

@@ -7,7 +7,7 @@ export interface LocalBook {
   cloudId?: number;
   totalChapters: number;
   lastReadChapterId?: number | string;
-  processStatus: 'new' | 'processing' | 'ready';
+  userId?: number;
   platform: PlatformType;
   cover?: string;
   createdAt: number;

@@ -1,6 +1,7 @@
 // 基础配置
 // 统一使用云端服务器地址
-export const BASE_URL = "http://110.41.38.214:8088/api/v1";
+// export const BASE_URL = "http://110.41.38.214:8088/api/v1";
+export const BASE_URL = "http://192.168.3.178:8080/api/v1";
 
 const WS_BASE_URL = BASE_URL.replace("http://", "ws://").replace(
   "https://",
@@ -242,7 +243,7 @@ export const api = {
 
   // 删除书籍
   deleteBook: async (id: number) => {
-    return request({
+    return request<void>({
       url: `/books/${id}`,
       method: "DELETE",
     });

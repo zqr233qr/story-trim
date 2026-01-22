@@ -159,7 +159,7 @@ func promptSeeder(db *gorm.DB) error {
 
 // FirstRecodeIgnoreError 获取第一条记录，忽略错误
 func FirstRecodeIgnoreError(db *gorm.DB, dest interface{}) (bool, error) {
-	if err := db.First(&dest).Error; err != nil {
+	if err := db.First(dest).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
 		}

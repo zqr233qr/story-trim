@@ -2,18 +2,30 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
 
 	"github.com/zqr233qr/story-trim/internal/model"
+	"github.com/zqr233qr/story-trim/internal/storage"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type BookRepository struct {
-	db *gorm.DB
+	db      *gorm.DB
+	storage storage.Storage
 }
 
-func NewBookRepository(db *gorm.DB) *BookRepository {
-	return &BookRepository{db: db}
+// NewBookRepository 创建书籍仓库。
+func NewBookRepository(db *gorm.DB, storage storage.Storage) *BookRepository {
+	return &BookRepository{db: db, storage: storage}
+}
+
+// buildChapterObjectKey 构建章节内容对象存储的 Key。
+func buildChapterObjectKey(md5 string) string {
+	return fmt.Sprintf("chapters/%s.txt", md5)
 }
 
 func (r *BookRepository) CreateBook(ctx context.Context, book *model.Book, chapters []model.Chapter) error {
@@ -79,6 +91,18 @@ func (r *BookRepository) GetBookByID(ctx context.Context, id uint) (*model.Book,
 	return &b, nil
 }
 
+func (r *BookRepository) GetBookByIDWithUser(ctx context.Context, userID uint, id uint) (*model.Book, error) {
+	var b model.Book
+	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID), &b)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
+	return &b, nil
+}
+
 func (r *BookRepository) GetBookByMD5(ctx context.Context, userID uint, md5 string) (*model.Book, error) {
 	var b model.Book
 	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("user_id = ? AND book_md5 = ?", userID, md5), &b)
@@ -132,31 +156,86 @@ func (r *BookRepository) GetChaptersByIDs(ctx context.Context, ids []uint) ([]mo
 	return dbChaps, nil
 }
 
+// SaveRawContent 保存章节内容到对象存储并写入元信息。
 func (r *BookRepository) SaveRawContent(ctx context.Context, content *model.ChapterContent) error {
+	if content == nil {
+		return fmt.Errorf("content is required")
+	}
+	if content.Content == "" {
+		return fmt.Errorf("content text is required")
+	}
+
+	objectKey := buildChapterObjectKey(content.ChapterMD5)
+	exists, err := r.storage.Exists(ctx, objectKey)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		reader := strings.NewReader(content.Content)
+		if err := r.storage.Put(ctx, objectKey, reader, int64(len(content.Content)), "text/plain; charset=utf-8"); err != nil {
+			return err
+		}
+	}
+
 	dbContent := model.ChapterContent{
 		ChapterMD5: content.ChapterMD5,
-		Content:    content.Content,
+		ObjectKey:  objectKey,
+		Size:       int64(len(content.Content)),
 		WordsCount: content.WordsCount,
-		TokenCount: content.TokenCount,
 		CreatedAt:  content.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&dbContent).Error
 }
 
+// BatchSaveRawContents 批量保存章节内容到对象存储。
 func (r *BookRepository) BatchSaveRawContents(ctx context.Context, contents []*model.ChapterContent) error {
 	if len(contents) == 0 {
 		return nil
 	}
 
 	var dbContents []model.ChapterContent
+	md5s := make([]string, 0, len(contents))
 	for _, c := range contents {
+		if c == nil {
+			return fmt.Errorf("content is required")
+		}
+		if c.Content == "" {
+			return fmt.Errorf("content text is required")
+		}
+		md5s = append(md5s, c.ChapterMD5)
+	}
+
+	existing := make(map[string]struct{})
+	if len(md5s) > 0 {
+		var existsRows []model.ChapterContent
+		if err := r.db.WithContext(ctx).Where("chapter_md5 IN ?", md5s).Select("chapter_md5").Find(&existsRows).Error; err != nil {
+			return err
+		}
+		for _, row := range existsRows {
+			existing[row.ChapterMD5] = struct{}{}
+		}
+	}
+
+	missing := make([]*model.ChapterContent, 0)
+	for _, c := range contents {
+		objectKey := buildChapterObjectKey(c.ChapterMD5)
+		if _, ok := existing[c.ChapterMD5]; !ok {
+			missing = append(missing, c)
+		}
+
 		dbContents = append(dbContents, model.ChapterContent{
 			ChapterMD5: c.ChapterMD5,
-			Content:    c.Content,
+			ObjectKey:  objectKey,
+			Size:       int64(len(c.Content)),
 			WordsCount: c.WordsCount,
-			TokenCount: c.TokenCount,
 			CreatedAt:  c.CreatedAt,
 		})
+	}
+
+	if len(missing) > 0 {
+		if err := r.uploadMissingContents(ctx, missing); err != nil {
+			return err
+		}
 	}
 
 	return r.db.WithContext(ctx).
@@ -164,6 +243,7 @@ func (r *BookRepository) BatchSaveRawContents(ctx context.Context, contents []*m
 		CreateInBatches(dbContents, 100).Error
 }
 
+// GetRawContent 根据章节 MD5 获取原文内容。
 func (r *BookRepository) GetRawContent(ctx context.Context, md5 string) (*model.ChapterContent, error) {
 	var c model.ChapterContent
 	exist, err := FirstRecodeIgnoreError(r.db.WithContext(ctx).Where("chapter_md5 = ?", md5), &c)
@@ -173,7 +253,77 @@ func (r *BookRepository) GetRawContent(ctx context.Context, md5 string) (*model.
 	if !exist {
 		return nil, nil
 	}
+
+	reader, err := r.storage.Get(ctx, c.ObjectKey)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	c.Content = string(data)
 	return &c, nil
+}
+
+// uploadMissingContents 并发写入缺失的章节内容。
+func (r *BookRepository) uploadMissingContents(ctx context.Context, contents []*model.ChapterContent) error {
+	const maxConcurrent = 6
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(contents))
+
+	for _, c := range contents {
+		content := c
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			objectKey := buildChapterObjectKey(content.ChapterMD5)
+			reader := strings.NewReader(content.Content)
+			if err := r.storage.Put(ctx, objectKey, reader, int64(len(content.Content)), "text/plain; charset=utf-8"); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetContentMetasByMD5s 批量获取章节内容元信息。
+func (r *BookRepository) GetContentMetasByMD5s(ctx context.Context, md5s []string) (map[string]model.ChapterContent, error) {
+	if len(md5s) == 0 {
+		return map[string]model.ChapterContent{}, nil
+	}
+
+	var contents []model.ChapterContent
+	if err := r.db.WithContext(ctx).Where("chapter_md5 IN ?", md5s).Find(&contents).Error; err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]model.ChapterContent)
+	for _, content := range contents {
+		result[content.ChapterMD5] = content
+	}
+	return result, nil
+}
+
+// GetContentStream 根据对象 Key 获取内容流。
+func (r *BookRepository) GetContentStream(ctx context.Context, objectKey string) (io.ReadCloser, error) {
+	return r.storage.Get(ctx, objectKey)
 }
 
 func (r *BookRepository) GetTrimResult(ctx context.Context, md5 string, promptID uint) (*model.TrimResult, error) {
@@ -275,15 +425,31 @@ func (r *BookRepository) GetSummaryPrompt(ctx context.Context) (*model.Prompt, e
 	return &p, nil
 }
 
-func (r *BookRepository) DeleteBook(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Book{}).Error
+func (r *BookRepository) DeleteBook(ctx context.Context, userID uint, id uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("book_id = ? AND user_id = ?", id, userID).Delete(&model.ReadingHistory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("book_id = ?", id).Delete(&model.Chapter{}).Error; err != nil {
+			return err
+		}
+		result := tx.Where("id = ? AND user_id = ?", id, userID).Delete(&model.Book{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
 
 type BookRepositoryInterface interface {
 	CreateBook(ctx context.Context, book *model.Book, chapters []model.Chapter) error
 	UpsertChapters(ctx context.Context, bookID uint, chapters []model.Chapter) error
 	GetBookByID(ctx context.Context, id uint) (*model.Book, error)
-	DeleteBook(ctx context.Context, bookID uint) error
+	GetBookByIDWithUser(ctx context.Context, userID uint, id uint) (*model.Book, error)
+	DeleteBook(ctx context.Context, userID uint, bookID uint) error
 	GetBookByMD5(ctx context.Context, userID uint, md5 string) (*model.Book, error)
 	GetBooksByUserID(ctx context.Context, userID uint) ([]model.Book, error)
 	GetChaptersByBookID(ctx context.Context, bookID uint) ([]model.Chapter, error)
@@ -292,6 +458,8 @@ type BookRepositoryInterface interface {
 	SaveRawContent(ctx context.Context, content *model.ChapterContent) error
 	BatchSaveRawContents(ctx context.Context, contents []*model.ChapterContent) error
 	GetRawContent(ctx context.Context, md5 string) (*model.ChapterContent, error)
+	GetContentMetasByMD5s(ctx context.Context, md5s []string) (map[string]model.ChapterContent, error)
+	GetContentStream(ctx context.Context, objectKey string) (io.ReadCloser, error)
 	GetTrimResult(ctx context.Context, md5 string, promptID uint) (*model.TrimResult, error)
 	SaveTrimResult(ctx context.Context, res *model.TrimResult) error
 	UpsertReadingHistory(ctx context.Context, history *model.ReadingHistory) error

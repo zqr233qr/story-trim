@@ -11,16 +11,17 @@ import (
 	"github.com/zqr233qr/story-trim/internal/handler"
 	"github.com/zqr233qr/story-trim/internal/repository"
 	"github.com/zqr233qr/story-trim/internal/service"
+	"github.com/zqr233qr/story-trim/internal/storage"
 	"gorm.io/gorm"
 )
 
 // Injectors from wire.go:
 
-func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM) (*APIComponents, error) {
+func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM, store storage.Storage) (*APIComponents, error) {
 	authRepository := repository.NewAuthRepository(db)
 	authService := service.NewAuthService(authRepository, jwtSecret)
 	authHandler := handler.NewAuthHandler(authService)
-	bookRepository := repository.NewBookRepository(db)
+	bookRepository := repository.NewBookRepository(db, store)
 	taskRepository := repository.NewTaskRepository(db)
 	bookService := service.NewBookService(bookRepository, taskRepository)
 	bookHandler := handler.NewBookHandler(bookService)

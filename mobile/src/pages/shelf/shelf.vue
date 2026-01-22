@@ -66,34 +66,58 @@ const resetBookLock = () => {
 resetBookLock();
 
 // 1. 接收书籍基本信息
-const onBookInfo = async (info: { title: string; total: number; bookMD5: string; coverBase64?: string }) => {
-  console.log("[Logic] onBookInfo called:", info.title, "MD5:", info.bookMD5, "Chapters:", info.total);
+const onBookInfo = async (info: {
+  title: string;
+  total: number;
+  bookMD5: string;
+  coverBase64?: string;
+}) => {
+  console.log(
+    "[Logic] onBookInfo called:",
+    info.title,
+    "MD5:",
+    info.bookMD5,
+    "Chapters:",
+    info.total,
+  );
   if (info.coverBase64) {
-      console.log("[Logic] Received cover image, length:", info.coverBase64.length);
-      // 保存封面到本地
+    console.log(
+      "[Logic] Received cover image, length:",
+      info.coverBase64.length,
+    );
+    // 保存封面到本地
+    try {
+      // #ifdef APP-PLUS
+      const fs = uni.getFileSystemManager();
+      const fileName = `${info.bookMD5}.jpg`; // 统一存为 jpg
+      const dir = "_doc/covers";
+
+      // 确保目录存在 (异步稍微麻烦，这里假设已初始化或忽略错误)
       try {
-          // #ifdef APP-PLUS
-          const fs = uni.getFileSystemManager();
-          const fileName = `${info.bookMD5}.jpg`; // 统一存为 jpg
-          const dir = '_doc/covers';
-          
-          // 确保目录存在 (异步稍微麻烦，这里假设已初始化或忽略错误)
-          try { fs.accessSync(dir); } catch { try { fs.mkdirSync(dir, true); } catch(e){} }          
-          const filePath = `${dir}/${fileName}`;
-          // 去掉 Base64 头部
-          const base64Data = info.coverBase64.replace(/^data:image\/\w+;base64,/, "");
-          
-          fs.writeFile({
-              filePath: filePath,
-              data: base64Data,
-              encoding: 'base64',
-              success: () => console.log('[Logic] Cover saved to:', filePath),
-              fail: (e) => console.error('[Logic] Save cover failed:', e)
-          });
-          // #endif
-      } catch (e) {
-          console.error('[Logic] Save cover process error:', e);
+        fs.accessSync(dir);
+      } catch {
+        try {
+          fs.mkdirSync(dir, true);
+        } catch (e) {}
       }
+      const filePath = `${dir}/${fileName}`;
+      // 去掉 Base64 头部
+      const base64Data = info.coverBase64.replace(
+        /^data:image\/\w+;base64,/,
+        "",
+      );
+
+      fs.writeFile({
+        filePath: filePath,
+        data: base64Data,
+        encoding: "base64",
+        success: () => console.log("[Logic] Cover saved to:", filePath),
+        fail: (e) => console.error("[Logic] Save cover failed:", e),
+      });
+      // #endif
+    } catch (e) {
+      console.error("[Logic] Save cover process error:", e);
+    }
   }
 
   parseStartTime = Date.now();
@@ -116,17 +140,25 @@ const onBookInfo = async (info: { title: string; total: number; bookMD5: string;
 };
 
 // 2. 接收批量章节数据
-const onBatchChapters = async (batch: { chapters: any[]; progress: number }) => {
+const onBatchChapters = async (batch: {
+  chapters: any[];
+  progress: number;
+}) => {
   console.log("[Logic] onBatchChapters called, progress:", batch.progress);
-  
+
   if (!bookIdPromise) {
     console.log("[Logic] No bookIdPromise, returning early");
     return;
   }
-  
+
   try {
     const bookId = await bookIdPromise;
-    console.log("[Logic] Inserting chapters for book:", bookId, "count:", batch.chapters.length);
+    console.log(
+      "[Logic] Inserting chapters for book:",
+      bookId,
+      "count:",
+      batch.chapters.length,
+    );
     bookStore.uploadProgress = batch.progress;
     await bookStore.insertChapters(bookId, batch.chapters);
     console.log("[Logic] Chapters inserted successfully");
@@ -185,7 +217,7 @@ const refreshTasks = async () => {
       hasActiveTasks.value = res.data?.has_active || false;
     }
   } catch (e) {
-    console.warn('[Shelf] Check active tasks failed', e);
+    console.warn("[Shelf] Check active tasks failed", e);
   }
 };
 
@@ -198,48 +230,28 @@ const showActionSheet = ref(false);
 const actionBook = ref<any>(null);
 
 onShow(async () => {
-  console.log('[Shelf] onShow started');
+  console.log("[Shelf] onShow started");
   // #ifdef APP-PLUS
   await bookStore.init();
   // #endif
-  
+
   try {
-    console.log('[Shelf] Calling fetchBooks...');
+    console.log("[Shelf] Calling fetchBooks...");
     await bookStore.fetchBooks();
-    console.log('[Shelf] fetchBooks done');
+    console.log("[Shelf] fetchBooks done");
   } catch (e) {
-    console.error('[Shelf] fetchBooks error:', e);
-  }
-  
-  // 检查是否有正在运行的任务
-  try {
-    console.log('[Shelf] Calling refreshTasks...');
-    await refreshTasks();
-    console.log('[Shelf] refreshTasks done');
-  } catch (e) {
-    console.warn('[Shelf] refreshTasks error:', e);
+    console.error("[Shelf] fetchBooks error:", e);
   }
 
-  // 获取服务端解析规则
-  console.log('[Shelf] Preparing to fetch parser rules...');
+  // 检查是否有正在运行的任务
   try {
-    console.log('[Shelf] Calling api.getParserRules...');
-    const res = await api.getParserRules(); // 假设 api 已引入
-    console.log('[Shelf] api.getParserRules response:', res.code, res.data?.rules?.length);
-    
-    if (res.code === 0 && res.data.rules) {
-      currentRules.value = res.data.rules;
-      uni.setStorageSync('parser_rules', res.data);
-      console.log('[Shelf] Rules updated from server');
-    }
+    console.log("[Shelf] Calling refreshTasks...");
+    await refreshTasks();
+    console.log("[Shelf] refreshTasks done");
   } catch (e) {
-    console.warn('[Shelf] Fetch parser rules failed:', e);
-    const cached = uni.getStorageSync('parser_rules');
-    if (cached && cached.rules) {
-        currentRules.value = cached.rules;
-        console.log('[Shelf] Rules loaded from cache');
-    }
+    console.warn("[Shelf] refreshTasks error:", e);
   }
+
 });
 
 const handleBookClick = (book: any) => {
@@ -247,14 +259,31 @@ const handleBookClick = (book: any) => {
   uni.navigateTo({ url: `/pages/reader/reader?id=${book.id}` });
 };
 
-const triggerUpload = () => {
+const triggerUpload = async () => {
   console.log("[Logic] Triggering RenderJS");
+  currentRules.value = [];
+  try {
+    console.log("[Shelf] Fetching parser rules before import");
+    const timeoutMs = 1500;
+    const res = await Promise.race([
+      api.getParserRules(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("parser rules timeout")), timeoutMs),
+      ),
+    ]);
+    if (res.code === 0 && res.data.rules) {
+      currentRules.value = res.data.rules;
+    }
+  } catch (e) {
+    console.warn("[Shelf] Fetch parser rules failed:", e);
+  }
+
   renderTrigger.value++;
 };
 
 const handleSyncBook = async (book: any) => {
   if (!userStore.isLoggedIn()) {
-    openLoginModal('同步功能需要登录账号，登录后即可多端同步阅读进度。');
+    openLoginModal("同步功能需要登录账号，登录后即可多端同步阅读进度。");
     return;
   }
 
@@ -272,16 +301,50 @@ const handleSyncBook = async (book: any) => {
   }
 };
 
+const handleDownloadBook = async (book: any) => {
+  if (!userStore.isLoggedIn()) {
+    openLoginModal("下载功能需要登录账号，登录后即可同步离线内容。");
+    return;
+  }
+
+  try {
+    await bookStore.downloadBookFromCloud(book);
+    uni.showToast({ title: "下载完成", icon: "success" });
+    await bookStore.fetchBooks();
+  } catch (e) {
+    console.error("[Shelf] Download error:", e);
+    uni.showToast({ title: "下载失败", icon: "none" });
+  }
+};
+
 // 删除相关
 const showDeleteModal = ref(false);
 const bookToDelete = ref<any>(null);
 
 const handleDeleteBook = (book: any) => {
-  if (!userStore.isLoggedIn() && book.sync_state === 1) {
+  const currentUserId = Number(userStore.userId || 0);
+  if (!userStore.isLoggedIn()) {
+    if (book.user_id && book.user_id !== 0) {
+      uni.showToast({
+        title: "该书籍属于其他账号，无法删除",
+        icon: "none",
+        duration: 2000,
+      });
+      return;
+    }
+    if (book.sync_state === 1) {
+      uni.showToast({
+        title: "该书籍为云端书籍，未登录状态下无法删除",
+        icon: "none",
+        duration: 2000,
+      });
+      return;
+    }
+  } else if (book.user_id && book.user_id !== currentUserId) {
     uni.showToast({
-      title: '该书籍为云端书籍，未登录状态下无法删除',
-      icon: 'none',
-      duration: 2000
+      title: "该书籍属于其他账号，无法删除",
+      icon: "none",
+      duration: 2000,
     });
     return;
   }
@@ -295,12 +358,15 @@ const handleBookOptions = (book: any) => {
   uni.vibrateShort({});
 };
 
-const handleSheetAction = (action: 'sync' | 'delete') => {
+const handleSheetAction = (action: "sync" | "delete" | "download") => {
   if (!actionBook.value) return;
-  
-  if (action === 'sync') {
+  showActionSheet.value = false;
+
+  if (action === "sync") {
     handleSyncBook(actionBook.value);
-  } else if (action === 'delete') {
+  } else if (action === "download") {
+    handleDownloadBook(actionBook.value);
+  } else if (action === "delete") {
     handleDeleteBook(actionBook.value);
   }
 };
@@ -308,9 +374,9 @@ const handleSheetAction = (action: 'sync' | 'delete') => {
 const confirmDelete = () => {
   if (bookToDelete.value) {
     bookStore.deleteBook(
-      Number(bookToDelete.value.id), 
-      bookToDelete.value.sync_state || 0, 
-      bookToDelete.value.cloud_id
+      Number(bookToDelete.value.id),
+      bookToDelete.value.sync_state || 0,
+      bookToDelete.value.cloud_id,
     );
     bookToDelete.value = null;
   }
@@ -324,13 +390,17 @@ const handleAvatarClick = () => {
   logoutConfirmVisible.value = true;
 };
 
+// 打开 SQL 调试面板。
+const openDebugPanel = () => {
+  uni.navigateTo({ url: "/pages/debug/sql" });
+};
 
 // 过滤展示的书籍：未登录时隐藏仅云端书籍 (sync_state === 2)
 const displayBooks = computed(() => {
   if (userStore.isLoggedIn()) {
     return bookStore.books;
   }
-  return bookStore.books.filter(book => book.sync_state !== 2);
+  return bookStore.books.filter((book) => book.sync_state !== 2);
 });
 </script>
 
@@ -345,14 +415,25 @@ const displayBooks = computed(() => {
         <view class="flex justify-between items-center mb-8 pt-4">
           <view class="flex items-center gap-2">
             <view class="w-8 h-8">
-              <image src="/static/icons/logo-combined.svg" class="w-full h-full" />
+              <image
+                src="/static/icons/logo-combined.svg"
+                class="w-full h-full"
+              />
             </view>
             <text class="text-xl font-bold tracking-tight text-stone-800"
               >StoryTrim</text
             >
           </view>
-          
+
           <view class="flex items-center gap-3">
+            <!-- #ifdef APP-PLUS -->
+            <view
+              @click="openDebugPanel"
+              class="px-2 py-1 text-[10px] rounded-lg bg-stone-200 text-stone-600 active:opacity-50"
+            >
+              调试
+            </view>
+            <!-- #endif -->
             <view
               @click="handleAvatarClick"
               class="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-500 font-bold text-xs active:opacity-50"
@@ -372,8 +453,13 @@ const displayBooks = computed(() => {
           >
             <image src="/static/icons/upload.svg" class="w-6 h-6 opacity-60" />
           </view>
-          <text class="font-bold text-stone-900 tracking-tight">导入本地书籍</text>
-          <text class="text-[10px] text-stone-400 mt-1 uppercase tracking-widest font-medium">支持 TXT / EPUB 格式</text>
+          <text class="font-bold text-stone-900 tracking-tight"
+            >导入本地书籍</text
+          >
+          <text
+            class="text-[10px] text-stone-400 mt-1 uppercase tracking-widest font-medium"
+            >支持 TXT / EPUB 格式</text
+          >
         </view>
 
         <!-- Renderjs Bridge -->
@@ -388,7 +474,8 @@ const displayBooks = computed(() => {
         <!-- Book List Header -->
         <view class="flex items-end justify-between mb-5 px-1">
           <view>
-            <text class="text-xs font-black text-stone-900 uppercase tracking-[0.2em]"
+            <text
+              class="text-xs font-black text-stone-900 uppercase tracking-[0.2em]"
               >我的书架</text
             >
             <view class="w-4 h-0.5 bg-stone-900 mt-1"></view>
@@ -432,14 +519,12 @@ const displayBooks = computed(() => {
       v-model="showActionSheet"
       :title="actionBook?.title || '书籍操作'"
       :show-sync="actionBook?.sync_state === 0"
+      :show-download="actionBook?.sync_state === 2"
       @action="handleSheetAction"
     />
 
     <!-- Task Indicator (Floating Pill) - Only show when has tasks -->
-    <TaskIndicator 
-      :has-active-tasks="hasActiveTasks"
-      @click="showTaskCenter"
-    />
+    <TaskIndicator :has-active-tasks="hasActiveTasks" @click="showTaskCenter" />
 
     <!-- Task Dashboard Sheet -->
     <TaskProgressSheet
@@ -476,6 +561,22 @@ const displayBooks = computed(() => {
           >{{ bookStore.syncProgress }}%</text
         >
         <text class="text-xs text-stone-400">正在同步至云端...</text>
+      </view>
+    </view>
+
+    <!-- Download Progress Modal -->
+    <view
+      v-if="bookStore.downloadProgress > 0"
+      class="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center"
+    >
+      <view class="bg-white p-6 rounded-2xl w-64 flex flex-col items-center">
+        <view
+          class="w-12 h-12 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin mb-4"
+        ></view>
+        <text class="font-bold text-lg mb-1"
+          >{{ bookStore.downloadProgress }}%</text
+        >
+        <text class="text-xs text-stone-400">正在下载到本地...</text>
       </view>
     </view>
 
@@ -524,6 +625,7 @@ export default {
       }
     },
 
+
     // 归一化内容：去除所有非字母数字字符，转小写
     normalizeContent(content) {
       return content.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').toLowerCase();
@@ -538,7 +640,7 @@ export default {
     // 智能提取纯文本 (保留段落结构，移除样式和脚本)
     cleanHtmlContent(html) {
       if (!html) return '';
-      
+
       // 1. 提取 body 内容 (如果存在)
       const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
       let content = bodyMatch ? bodyMatch[1] : html;
@@ -594,12 +696,12 @@ export default {
         // 3-byte sequence (1110xxxx 10xxxxxx 10xxxxxx)
         if (bytes[i] >= 0xE0 && bytes[i] <= 0xEF) {
            if (i + 2 >= bytes.length) return true; // 截断
-           
+
            // Check for overlongs and surrogates
            if (bytes[i] == 0xE0 && (bytes[i+1] < 0xA0 || bytes[i+1] > 0xBF)) return false;
-           if (bytes[i] == 0xED && (bytes[i+1] < 0x80 || bytes[i+1] > 0x9F)) return false; 
+           if (bytes[i] == 0xED && (bytes[i+1] < 0x80 || bytes[i+1] > 0x9F)) return false;
            if (bytes[i] != 0xE0 && bytes[i] != 0xED && (bytes[i+1] < 0x80 || bytes[i+1] > 0xBF)) return false;
-           
+
            if (bytes[i+2] < 0x80 || bytes[i+2] > 0xBF) return false;
            i += 3;
            continue;
@@ -608,11 +710,11 @@ export default {
         // 4-byte sequence (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
         if (bytes[i] >= 0xF0 && bytes[i] <= 0xF4) {
            if (i + 3 >= bytes.length) return true; // 截断
-           
+
            if (bytes[i] == 0xF0 && (bytes[i+1] < 0x90 || bytes[i+1] > 0xBF)) return false;
            if (bytes[i] == 0xF4 && (bytes[i+1] < 0x80 || bytes[i+1] > 0x8F)) return false;
            if (bytes[i] != 0xF0 && bytes[i] != 0xF4 && (bytes[i+1] < 0x80 || bytes[i+1] > 0xBF)) return false;
-           
+
            if (bytes[i+2] < 0x80 || bytes[i+2] > 0xBF) return false;
            if (bytes[i+3] < 0x80 || bytes[i+3] > 0xBF) return false;
            i += 4;
@@ -674,7 +776,7 @@ export default {
              const isUtf8 = this.isUTF8(buffer);
              const encoding = isUtf8 ? 'utf-8' : 'gbk';
              console.log(`[RenderJS] Detected encoding: ${encoding}`);
-             
+
              const textReader = new FileReader();
              textReader.onload = (evt) => {
                 this.parseAndUpload(file.name, evt.target.result, ownerInstance);
@@ -695,11 +797,11 @@ export default {
       // 1. 尝试直接获取
       let nodes = xmlDoc.getElementsByTagName(tagName);
       if (nodes.length > 0) return Array.from(nodes);
-      
+
       // 2. 尝试带命名空间的获取 (常见 OPF 命名空间)
       nodes = xmlDoc.getElementsByTagNameNS("http://www.idpf.org/2007/opf", tagName);
       if (nodes.length > 0) return Array.from(nodes);
-      
+
       // 3. 暴力遍历：匹配 localName
       const allNodes = xmlDoc.getElementsByTagName("*");
       const result = [];
@@ -716,19 +818,19 @@ export default {
       console.log('[RenderJS] Parsing EPUB:', fileName);
       try {
         const zip = await JSZip.loadAsync(data);
-        
+
         // 1. 寻找 container.xml 获取 OPF 路径
         const containerXml = await zip.file("META-INF/container.xml").async("string");
         // 兼容单引号和双引号
         const opfPathMatch = containerXml.match(/full-path=["']([^"']+)["']/);
         if (!opfPathMatch) throw new Error("无效的 EPUB 格式 (未找到 OPF)");
-        
+
         const opfPath = opfPathMatch[1];
         console.log('[RenderJS] OPF Path:', opfPath);
-        
+
         const lastSlashIndex = opfPath.lastIndexOf('/');
         const opfDir = lastSlashIndex !== -1 ? opfPath.substring(0, lastSlashIndex) : '';
-        
+
         const opfContent = await zip.file(opfPath).async("string");
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(opfContent, "text/xml");
@@ -755,7 +857,7 @@ export default {
                     break;
                 }
             }
-            
+
             // 2. 如果没找到，尝试找 manifest item properties="cover-image"
             if (!coverId) {
                  const items = this.getElements(xmlDoc, "item");
@@ -805,7 +907,7 @@ export default {
         const manifest = {};
         const items = this.getElements(xmlDoc, "item");
         console.log(`[RenderJS] Found items in manifest: ${items.length}`);
-        
+
         for (let i = 0; i < items.length; i++) {
           manifest[items[i].getAttribute("id")] = items[i].getAttribute("href");
         }
@@ -813,11 +915,11 @@ export default {
         const spine = [];
         const itemrefs = this.getElements(xmlDoc, "itemref");
         console.log(`[RenderJS] Found itemrefs in spine: ${itemrefs.length}`);
-        
+
         for (let i = 0; i < itemrefs.length; i++) {
           spine.push(itemrefs[i].getAttribute("idref"));
         }
-        
+
         console.log(`[RenderJS] Parsed Spine: ${spine.length} items`);
 
         // 4. 读取内容
@@ -825,14 +927,14 @@ export default {
         for (let i = 0; i < spine.length; i++) {
           const id = spine[i];
           const href = manifest[id];
-          if (!href) continue; 
+          if (!href) continue;
 
           // 关键修复：解码 URL (如 "Chapter%201.html" -> "Chapter 1.html")
           const decodedHref = decodeURIComponent(href);
-          
+
           // 简单的路径拼接 (暂不支持 ../ 等复杂相对路径，EPUB 规范通常不建议)
           const fullPath = opfDir ? `${opfDir}/${decodedHref}` : decodedHref;
-          
+
           const file = zip.file(fullPath);
           if (!file) {
               // 尝试不带 opfDir 的情况 (部分不规范 EPUB)
@@ -846,22 +948,22 @@ export default {
                  continue;
               }
           }
-          
-          const targetZipFile = file || targetFile; 
+
+          const targetZipFile = file || targetFile;
 
           const html = await targetZipFile.async("string");
           // 使用新的清洗函数
           const chapterText = this.cleanHtmlContent(html);
-          
+
           // 如果内容太短（可能是只有图片的封面页），跳过
           if (chapterText.length < 5) continue;
 
           // 提取可能的章节标题
           let chapterTitle = `第 ${chapters.length + 1} 章节`;
-          
+
           // 提取标题时不使用 cleanHtmlContent，而是简单去除标签即可，防止过度清洗
           const simpleStrip = (s) => s.replace(/<[^>]+>/g, '').trim();
-          
+
           // 优先尝试读取 title 标签
           const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i);
           if (titleMatch && titleMatch[1]) {
@@ -882,7 +984,7 @@ export default {
             length: [...chapterText].length
           });
         }
-        
+
         console.log(`[RenderJS] Extracted ${chapters.length} valid chapters`);
 
         if (chapters.length === 0) {
@@ -893,7 +995,7 @@ export default {
         console.log('[RenderJS] Calculating Book MD5...');
         const bookMD5 = SparkMD5.ArrayBuffer.hash(data);
         console.log('[RenderJS] Book MD5:', bookMD5);
-        
+
         ownerInstance.callMethod('onBookInfo', {
           title: title,
           total: chapters.length,
@@ -937,13 +1039,13 @@ export default {
     },
 
     // --- TXT 智能解析算法 (移植自 Go 服务端) ---
-    
+
     // 获取解析规则：优先使用服务端下发的动态规则
     getParserRules() {
       if (this.dynamicRules && this.dynamicRules.length > 0) {
         return this.dynamicRules;
       }
-      
+
       // 兜底本地默认规则 (采用字符串形式，方便统一 new RegExp)
       return [
         {
@@ -1014,7 +1116,7 @@ export default {
       console.log('[RenderJS] 开始智能解析 TXT:', fileName);
       const totalLen = text.length;
       const rules = this.getParserRules(); // 使用新方法获取规则
-      
+
       let bestResult = {
         indices: [],
         ruleName: 'Fallback',
@@ -1029,7 +1131,7 @@ export default {
           // 注意：不管是本地规则还是服务端下发，统一使用 new RegExp 实例化
           // flags 默认为 'g'，如果服务端下发了 flags 则使用下发的
           const regex = new RegExp(rule.pattern, rule.flags || 'g');
-          
+
           while ((match = regex.exec(text)) !== null) {
             indices.push(match.index);
           }
@@ -1037,7 +1139,7 @@ export default {
           if (indices.length > 0) {
             const score = this.calculateScore(totalLen, indices, rule.weight);
             console.log(`[RenderJS] 规则 ${rule.name} 匹配到 ${indices.length} 章, 得分: ${score.toFixed(2)}`);
-            
+
             if (score > bestResult.score) {
               bestResult = { indices, ruleName: rule.name, score };
             }
@@ -1057,26 +1159,26 @@ export default {
         chapters.push({ index: 0, title: fileName.replace('.txt',''), content: text, md5: md5, length: [...text].length });
       } else {
         console.log(`[RenderJS] 胜出规则: ${bestResult.ruleName}, 最终提取章节数: ${winnerIndices.length}`);
-        
+
         for (let i = 0; i < winnerIndices.length; i++) {
           const start = winnerIndices[i];
           const end = (i === winnerIndices.length - 1) ? totalLen : winnerIndices[i+1];
-          
+
           // 获取标题行 (取前 200 个字符进行行提取)
           let slice = text.substring(start, start + 200);
           // 去除开头的换行符
           const originalSlice = slice;
           slice = slice.replace(/^[\r\n]+/, '');
           const prefixLen = originalSlice.length - slice.length; // 被裁掉的开头换行符长度
-          
+
           const lineEnd = slice.indexOf('\n');
           const titleLine = lineEnd !== -1 ? slice.substring(0, lineEnd) : slice;
           const title = titleLine.trim() || `第 ${i+1} 章节`;
-          
+
           // 计算标题行在原 text 中的偏移和长度，以便从 content 中移除
           // 标题行在 slice 中的结束位置是 lineEnd (如果有换行) 或 slice.length
-          const titleLineFullLen = (lineEnd !== -1 ? lineEnd + 1 : slice.length); 
-          
+          const titleLineFullLen = (lineEnd !== -1 ? lineEnd + 1 : slice.length);
+
           let content = text.substring(start + prefixLen + titleLineFullLen, end);
           if (content.trim().length < 5) continue;
 

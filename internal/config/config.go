@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	FileStorage FileStorageConfig   `mapstructure:"file_storage"`
+	Storage     StorageConfig       `mapstructure:"storage"`
 	LLM         LLM                 `mapstructure:"llm"`
 	Database    DatabaseConfig      `mapstructure:"database"`
 	Memory      MemoryConfig        `mapstructure:"memory"`
@@ -28,6 +29,24 @@ type ParserRule struct {
 	Weight  int    `mapstructure:"weight" json:"weight"`
 }
 
+// StorageConfig 定义文件存储的选择与配置。
+type StorageConfig struct {
+	Type  string      `mapstructure:"type"`
+	MinIO MinIOConfig `mapstructure:"minio"`
+}
+
+// MinIOConfig 定义 MinIO 连接配置。
+type MinIOConfig struct {
+	Endpoint         string `mapstructure:"endpoint"`
+	AccessKey        string `mapstructure:"access_key"`
+	SecretKey        string `mapstructure:"secret_key"`
+	Bucket           string `mapstructure:"bucket"`
+	UseSSL           bool   `mapstructure:"use_ssl"`
+	Region           string `mapstructure:"region"`
+	AutoCreateBucket bool   `mapstructure:"auto_create_bucket"`
+}
+
+// FileStorageConfig 定义本地文件上传配置。
 type FileStorageConfig struct {
 	UploadDir string `mapstructure:"upload_dir"`
 }

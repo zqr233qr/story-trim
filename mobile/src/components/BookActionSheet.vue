@@ -23,36 +23,52 @@
       </view>
 
       <!-- Actions -->
-      <view class="p-4 space-y-2">
-        <!-- Sync Action -->
-        <view 
-          v-if="showSync"
-          @click="handleAction('sync')"
-          class="flex items-center gap-4 p-4 rounded-2xl active:bg-stone-50 transition-colors"
-        >
-          <view class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
-            <image src="/static/icons/cloud.svg" class="w-5 h-5 opacity-80" />
-          </view>
-          <view class="flex-1">
-            <text class="text-base font-bold text-stone-700">同步至云端</text>
-            <text class="text-xs text-stone-400 block mt-0.5">备份书籍进度与精简记录</text>
-          </view>
-        </view>
-
-        <!-- Delete Action -->
-        <view 
-          @click="handleAction('delete')"
-          class="flex items-center gap-4 p-4 rounded-2xl active:bg-red-50 transition-colors"
-        >
-          <view class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
-            <image src="/static/icons/trash.svg" class="w-5 h-5 opacity-80" />
-          </view>
-          <view class="flex-1">
-            <text class="text-base font-bold text-red-500">删除书籍</text>
-            <text class="text-xs text-red-300 block mt-0.5">删除后不可恢复</text>
-          </view>
-        </view>
+  <view class="p-4 space-y-2">
+    <!-- Sync Action -->
+    <view 
+      v-if="showSync"
+      @click="handleAction('sync')"
+      class="flex items-center gap-4 p-4 rounded-2xl active:bg-stone-50 transition-colors"
+    >
+      <view class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+        <image src="/static/icons/cloud.svg" class="w-5 h-5 opacity-80" />
       </view>
+      <view class="flex-1">
+        <text class="text-base font-bold text-stone-700">同步至云端</text>
+        <text class="text-xs text-stone-400 block mt-0.5">备份书籍进度与精简记录</text>
+      </view>
+    </view>
+
+    <!-- Download Action -->
+    <view 
+      v-if="showDownload"
+      @click="handleAction('download')"
+      class="flex items-center gap-4 p-4 rounded-2xl active:bg-stone-50 transition-colors"
+    >
+      <view class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center">
+        <image src="/static/icons/upload.svg" class="w-5 h-5 opacity-80" />
+      </view>
+      <view class="flex-1">
+        <text class="text-base font-bold text-stone-700">下载到本地</text>
+        <text class="text-xs text-stone-400 block mt-0.5">支持离线阅读</text>
+      </view>
+    </view>
+
+    <!-- Delete Action -->
+    <view 
+      @click="handleAction('delete')"
+      class="flex items-center gap-4 p-4 rounded-2xl active:bg-red-50 transition-colors"
+    >
+      <view class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+        <image src="/static/icons/trash.svg" class="w-5 h-5 opacity-80" />
+      </view>
+      <view class="flex-1">
+        <text class="text-base font-bold text-red-500">删除书籍</text>
+        <text class="text-xs text-red-300 block mt-0.5">删除后不可恢复</text>
+      </view>
+    </view>
+  </view>
+
       
       <!-- Cancel Button -->
       <view class="px-4 pb-6 pt-2">
@@ -74,8 +90,10 @@ const props = withDefaults(defineProps<{
   modelValue: boolean;
   title: string;
   showSync?: boolean;
+  showDownload?: boolean;
 }>(), {
-  showSync: true
+  showSync: true,
+  showDownload: false
 });
 
 const emit = defineEmits(['update:modelValue', 'action']);
@@ -100,7 +118,7 @@ const close = () => {
   }, 300); // Wait for animation
 };
 
-const handleAction = (action: 'sync' | 'delete') => {
+const handleAction = (action: 'sync' | 'delete' | 'download') => {
   emit('action', action);
   close();
 };

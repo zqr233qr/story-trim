@@ -15,6 +15,7 @@ import (
 	"github.com/zqr233qr/story-trim/internal/handler"
 	"github.com/zqr233qr/story-trim/internal/middleware"
 	"github.com/zqr233qr/story-trim/internal/repository"
+	"github.com/zqr233qr/story-trim/internal/storage"
 	"github.com/zqr233qr/story-trim/pkg/logger"
 )
 
@@ -31,7 +32,12 @@ func main() {
 		panic(fmt.Sprintf("Failed to init database: %v", err))
 	}
 
-	deps, err := InitializeAPIComponents(db, cfg.Auth.JWTSecret, &cfg.LLM)
+	store, err := storage.NewStorage(cfg.Storage)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to init storage: %v", err))
+	}
+
+	deps, err := InitializeAPIComponents(db, cfg.Auth.JWTSecret, &cfg.LLM, store)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize components: %v", err))
 	}
@@ -55,9 +61,12 @@ func main() {
 		{
 			protected.GET("/books", deps.BookHandler.List)
 			protected.GET("/books/:id", deps.BookHandler.GetDetail)
+			protected.GET("/books/:id/content-zip", deps.BookHandler.DownloadContentZip)
+			protected.GET("/books/:id/content-db", deps.BookHandler.DownloadContentDBZip)
 			protected.GET("/books/:id/progress", deps.BookHandler.GetProgress)
 			protected.DELETE("/books/:id", deps.BookHandler.DeleteBook)
 			protected.POST("/books/sync-local", deps.BookHandler.SyncLocalBook)
+			protected.POST("/books/upload-zip", deps.BookHandler.SyncLocalBookZip)
 			protected.POST("/chapters/content", deps.BookHandler.GetChaptersContent)
 			protected.POST("/chapters/trim", deps.BookHandler.GetChaptersTrimmed)
 			protected.POST("/contents/trim", deps.BookHandler.GetContentsTrimmed)

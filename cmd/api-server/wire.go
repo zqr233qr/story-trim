@@ -9,6 +9,7 @@ import (
 	"github.com/zqr233qr/story-trim/internal/handler"
 	"github.com/zqr233qr/story-trim/internal/repository"
 	"github.com/zqr233qr/story-trim/internal/service"
+	"github.com/zqr233qr/story-trim/internal/storage"
 	"gorm.io/gorm"
 )
 
@@ -51,7 +52,7 @@ func provideTaskService(
 	return service.NewTaskService(repo, bookRepo, trimService, 4)
 }
 
-func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM) (*APIComponents, error) {
+func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM, store storage.Storage) (*APIComponents, error) {
 	wire.Build(
 		// Repositories
 		repository.NewAuthRepository,

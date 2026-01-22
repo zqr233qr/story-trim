@@ -1,15 +1,18 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
 	"github.com/zqr233qr/story-trim/internal/errno"
 	"github.com/zqr233qr/story-trim/internal/response"
 	"github.com/zqr233qr/story-trim/internal/service"
+	"github.com/zqr233qr/story-trim/pkg/logger"
 )
 
 type BookHandler struct {
@@ -56,6 +59,37 @@ func (h *BookHandler) SyncLocalBook(c *gin.Context) {
 	response.Success(c, resp)
 }
 
+// SyncLocalBookZip 上传压缩包并同步书籍。
+func (h *BookHandler) SyncLocalBookZip(c *gin.Context) {
+	var req service.SyncLocalBookZipReq
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, errno.ParamErrCode)
+		return
+	}
+
+	userID := GetUserID(c)
+	reader := c.Request.Body
+	if file, err := c.FormFile("file"); err == nil {
+		opened, err := file.Open()
+		if err != nil {
+			response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode, err.Error())
+			return
+		}
+		defer func() {
+			_ = opened.Close()
+		}()
+		reader = opened
+	}
+
+	resp, err := h.svc.SyncLocalBookZip(c.Request.Context(), &req, reader, userID)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode, err.Error())
+		return
+	}
+
+	response.Success(c, resp)
+}
+
 // ImportBookFile todo 暂未实现
 func (h *BookHandler) ImportBookFile(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
@@ -80,8 +114,12 @@ func (h *BookHandler) ImportBookFile(c *gin.Context) {
 func (h *BookHandler) DeleteBook(c *gin.Context) {
 	bookIDStr := c.Param("id")
 	bookID := cast.ToUint(bookIDStr)
-	err := h.svc.DeleteBook(c.Request.Context(), bookID, GetUserID(c))
+	err := h.svc.DeleteBook(c.Request.Context(), GetUserID(c), bookID)
 	if err != nil {
+		if err == errno.ErrBookNotFound {
+			response.Error(c, http.StatusNotFound, errno.BookErrCodeNotFound, "云端书籍不存在")
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode, err.Error())
 		return
 	}
@@ -104,6 +142,66 @@ func (h *BookHandler) GetDetail(c *gin.Context) {
 	}
 
 	response.Success(c, resp)
+}
+
+// DownloadContentZip 下载全书内容压缩包。
+type countingWriter struct {
+	io.Writer
+	count int64
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	atomic.AddInt64(&w.count, int64(n))
+	return n, err
+}
+
+func (w *countingWriter) Size() int64 {
+	return atomic.LoadInt64(&w.count)
+}
+
+// DownloadContentZip 下载全书内容压缩包。
+func (h *BookHandler) DownloadContentZip(c *gin.Context) {
+	bookIDStr := c.Param("id")
+	bookID := cast.ToUint(bookIDStr)
+	if bookID == 0 {
+		response.Error(c, http.StatusBadRequest, errno.ParamErrCode, "Invalid book ID")
+		return
+	}
+
+	fileName := fmt.Sprintf("book_%d.zip", bookID)
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	c.Status(http.StatusOK)
+
+	counter := &countingWriter{Writer: c.Writer}
+	if err := h.svc.WriteBookContentZip(c.Request.Context(), bookID, counter); err != nil {
+		logger.Error().Err(err).Uint("book_id", bookID).Msg("全量下载失败")
+		return
+	}
+	logger.Info().Uint("book_id", bookID).Int64("size", counter.Size()).Msg("全量下载完成")
+}
+
+// DownloadContentDBZip 下载全书 SQLite 压缩包。
+func (h *BookHandler) DownloadContentDBZip(c *gin.Context) {
+	bookIDStr := c.Param("id")
+	bookID := cast.ToUint(bookIDStr)
+	if bookID == 0 {
+		response.Error(c, http.StatusBadRequest, errno.ParamErrCode, "Invalid book ID")
+		return
+	}
+
+	fileName := fmt.Sprintf("book_%d.db.zip", bookID)
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	c.Status(http.StatusOK)
+
+	counter := &countingWriter{Writer: c.Writer}
+	if err := h.svc.WriteBookContentDBZip(c.Request.Context(), bookID, counter); err != nil {
+		logger.Error().Err(err).Uint("book_id", bookID).Msg("SQLite 全量下载失败")
+		return
+	}
+	logger.Info().Uint("book_id", bookID).Int64("size", counter.Size()).Msg("SQLite 全量下载完成")
 }
 
 func (h *BookHandler) GetProgress(c *gin.Context) {

@@ -20,6 +20,12 @@
         "navigationBarTitleText": "阅读器",
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/debug/sql",
+      "style": {
+        "navigationBarTitleText": "调试面板"
+      }
     }
   ],
   "globalStyle": {
