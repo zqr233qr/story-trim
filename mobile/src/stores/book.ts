@@ -12,6 +12,8 @@ import {
 import { taskApi } from "@/api/task";
 import type { Book, Chapter, Prompt } from "@/api";
 import { useUserStore } from "./user";
+import { useNetworkStore } from "./network";
+import { useToastStore } from "./toast";
 // #ifdef APP-PLUS
 import { AppRepository } from "@/adapter/app-repository";
 import { db } from "@/utils/sqlite";
@@ -42,6 +44,8 @@ export const useBookStore = defineStore("book", () => {
   const prompts = ref<Prompt[]>([]);
   const isLoading = ref(false);
   const uploadProgress = ref(0);
+  const networkStore = useNetworkStore();
+  const toastStore = useToastStore();
   const syncProgress = ref(0);
   const downloadProgress = ref(0);
 
@@ -60,42 +64,43 @@ export const useBookStore = defineStore("book", () => {
       const userStore = useUserStore();
       let cloudBooks: Book[] = [];
 
-       // 仅在已登录时尝试从云端同步
-       const currentUserId = userStore.isLoggedIn() ? Number(userStore.userId || 0) : 0;
-       if (userStore.isLoggedIn()) {
-         try {
-           const res = await api.getBooks();
-           // console.log('[FetchBooks] Cloud API result:', res.code, res.data?.length);
-           if (res.code === 0) {
-             cloudBooks = res.data || [];
-             console.log(
-               "[FetchBooks] Syncing",
-               cloudBooks.length,
-               "books from cloud",
-             );
- 
-             for (const cloudBook of cloudBooks) {
-               await repo.syncBookFromCloud(cloudBook, currentUserId);
-             }
-           }
-         } catch (e) {
-           console.warn("[FetchBooks] Failed to sync books from cloud", e);
-         }
-       }
- 
-       // 无论是否登录，都从本地加载书籍
-       const localBooks = await repo.getBooks();
-       const filteredBooks = localBooks.filter(
-         (b) => !b.userId || b.userId === 0 || b.userId === currentUserId,
-       );
-       console.log("[FetchBooks] Local DB books count:", filteredBooks.length);
+      // 仅在已登录且服务端可达时尝试从云端同步
+      const currentUserId = userStore.isLoggedIn() ? Number(userStore.userId || 0) : 0;
+      if (userStore.isLoggedIn() && networkStore.lastPingAt === 0) {
+        await networkStore.pingServer();
+      }
+      if (userStore.isLoggedIn() && networkStore.serverReachable) {
+        try {
+          const res = await api.getBooks();
+          // console.log('[FetchBooks] Cloud API result:', res.code, res.data?.length);
+          if (res.code === 0) {
+            cloudBooks = res.data || [];
+            console.log(
+              "[FetchBooks] Syncing",
+              cloudBooks.length,
+              "books from cloud",
+            );
 
+            for (const cloudBook of cloudBooks) {
+              await repo.syncBookFromCloud(cloudBook, currentUserId);
+            }
+          }
+        } catch (e) {
+          console.warn("[FetchBooks] Failed to sync books from cloud", e);
+        }
+      }
+
+      // 无论是否登录，都从本地加载书籍
+      const localBooks = await repo.getBooks();
+      const filteredBooks = localBooks.filter(
+        (b) => !b.userId || b.userId === 0 || b.userId === currentUserId,
+      );
+      console.log("[FetchBooks] Local DB books count:", filteredBooks.length);
 
       const bookMap = new Map<string, any>();
       const noMd5Books: any[] = [];
 
-       for (const b of filteredBooks) {
-
+      for (const b of filteredBooks) {
         if (b.bookMD5 && b.bookMD5.length > 5) {
           const key = b.bookMD5;
           if (!bookMap.has(key)) {
@@ -117,23 +122,21 @@ export const useBookStore = defineStore("book", () => {
 
       books.value = finalBooks.map((b) => {
         const cloudInfo = b.cloudId ? cloudMap.get(Number(b.cloudId)) : null;
-           return {
-             id: Number(b.id),
-             title: b.title,
-             book_md5: b.bookMD5,
-             total_chapters: b.totalChapters,
-             created_at: new Date(b.createdAt).toISOString(),
-             progress: 0,
-             activeChapterIndex: 0,
-             chapters: [],
-             sync_state: b.syncState || 0,
-             cloud_id: b.cloudId,
-             user_id: b.userId || 0,
-             full_trim_status: cloudInfo?.full_trim_status,
-             full_trim_progress: cloudInfo?.full_trim_progress,
-           };
-
-
+        return {
+          id: Number(b.id),
+          title: b.title,
+          book_md5: b.bookMD5,
+          total_chapters: b.totalChapters,
+          created_at: new Date(b.createdAt).toISOString(),
+          progress: 0,
+          activeChapterIndex: 0,
+          chapters: [],
+          sync_state: b.syncState || 0,
+          cloud_id: b.cloudId,
+          user_id: b.userId || 0,
+          full_trim_status: cloudInfo?.full_trim_status,
+          full_trim_progress: cloudInfo?.full_trim_progress,
+        };
       });
 
       books.value.sort(
@@ -163,6 +166,7 @@ export const useBookStore = defineStore("book", () => {
       isLoading.value = false;
     }
   };
+
 
   // 2. Add Book (此方法仅用于 H5/MP，App 端走 RenderJS -> createBookRecord)
   const createBookRecord = async (
@@ -272,21 +276,37 @@ export const useBookStore = defineStore("book", () => {
     // #ifdef APP-PLUS
     if (syncState === 2) {
       const cloudChapterId = chapter.cloud_id || chapterId;
+      const cacheKey = `chapter_${cloudChapterId}`;
+      if (!networkStore.serverReachable) {
+        const cached = uni.getStorageSync(cacheKey);
+        if (cached && Array.isArray(cached)) {
+          chapter.modes["original"] = cached;
+          chapter.isLoaded = true;
+        }
+        return;
+      }
       const res = await getBatchChapterContents([cloudChapterId]);
       if (res.code === 0 && res.data[0] && res.data[0].content) {
         const content = res.data[0].content;
         const lines = content.split("\n");
         chapter.modes["original"] = lines;
         chapter.isLoaded = true;
-        const cacheKey = `chapter_${cloudChapterId}`;
         uni.setStorageSync(cacheKey, lines);
       }
     } else {
+      const cacheKey = `chapter_${chapterId}`;
       const content = await repo.getChapterContent(bookId, chapterId);
+      if (!content) {
+        const cached = uni.getStorageSync(cacheKey);
+        if (cached && Array.isArray(cached)) {
+          chapter.modes["original"] = cached;
+          chapter.isLoaded = true;
+          return;
+        }
+      }
       const lines = content.split("\n");
       chapter.modes["original"] = lines;
       chapter.isLoaded = true;
-      const cacheKey = `chapter_${chapterId}`;
       uni.setStorageSync(cacheKey, lines);
     }
     // #endif
@@ -311,28 +331,7 @@ export const useBookStore = defineStore("book", () => {
       const res = await api.getPrompts();
       if (res.code === 0) prompts.value = res.data;
     } catch (e) {
-      console.warn("Failed to fetch prompts, using default");
-      // 离线兜底 Prompt
-      if (prompts.value.length === 0) {
-        prompts.value = [
-          {
-            id: 1,
-            name: "标准精简",
-            description: "去除冗余，保留核心剧情",
-            content: "",
-            is_system: true,
-            version: "1.0",
-          },
-          {
-            id: 2,
-            name: "极致浓缩",
-            description: "仅保留主线脉络",
-            content: "",
-            is_system: true,
-            version: "1.0",
-          },
-        ];
-      }
+      console.warn("Failed to fetch prompts", e);
     }
   };
 
@@ -682,10 +681,10 @@ export const useBookStore = defineStore("book", () => {
       // #endif
 
       books.value = books.value.filter((b) => Number(b.id) !== bookId);
-      uni.showToast({ title: "已删除", icon: "none" });
+      toastStore.show({ message: "已删除", type: "info" });
     } catch (e: any) {
       console.error("[DeleteBook] 删除失败:", e);
-      uni.showToast({ title: e?.message || "云端书籍不存在", icon: "none" });
+      toastStore.show({ message: e?.message || "云端书籍不存在", type: "error" });
     }
   };
 

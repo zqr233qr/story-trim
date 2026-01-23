@@ -12,9 +12,11 @@ import TaskIndicator from "@/components/TaskIndicator.vue";
 import TaskProgressSheet from "@/components/TaskProgressSheet.vue";
 import LoginConfirmModal from "@/components/LoginConfirmModal.vue";
 import SimpleAlertModal from "@/components/SimpleAlertModal.vue";
+import { useToastStore } from "@/stores/toast";
 
 const userStore = useUserStore();
 const bookStore = useBookStore();
+const toastStore = useToastStore();
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0);
 const renderTrigger = ref(0);
 const currentRules = ref<any[]>([]);
@@ -166,7 +168,7 @@ const onParseSuccess = async () => {
 
   bookStore.uploadProgress = 100;
   uni.hideLoading();
-  uni.showToast({ title: "导入成功", icon: "success" });
+  toastStore.show({ message: "导入成功", type: "success" });
 
   setTimeout(() => {
     bookStore.fetchBooks();
@@ -281,13 +283,13 @@ const handleSyncBook = async (book: any) => {
 
   try {
     await bookStore.syncBookToCloud(book.id);
-    uni.showToast({ title: "同步成功", icon: "success" });
+    toastStore.show({ message: "同步成功", type: "success" });
     await bookStore.fetchBooks();
   } catch (e: any) {
     if (e.message && e.message.includes("已存在云端")) {
-      uni.showToast({ title: "云端已存在本书", icon: "none" });
+      toastStore.show({ message: "云端已存在本书", type: "info" });
     } else {
-      uni.showToast({ title: "同步失败", icon: "none" });
+      toastStore.show({ message: "同步失败", type: "error" });
     }
     console.error("[Shelf] Sync error:", e);
   }
@@ -301,11 +303,11 @@ const handleDownloadBook = async (book: any) => {
 
   try {
     await bookStore.downloadBookFromCloud(book);
-    uni.showToast({ title: "下载完成", icon: "success" });
+    toastStore.show({ message: "下载完成", type: "success" });
     await bookStore.fetchBooks();
   } catch (e) {
     console.error("[Shelf] Download error:", e);
-    uni.showToast({ title: "下载失败", icon: "none" });
+    toastStore.show({ message: "下载失败", type: "error" });
   }
 };
 
@@ -317,27 +319,15 @@ const handleDeleteBook = (book: any) => {
   const currentUserId = Number(userStore.userId || 0);
   if (!userStore.isLoggedIn()) {
     if (book.user_id && book.user_id !== 0) {
-      uni.showToast({
-        title: "该书籍属于其他账号，无法删除",
-        icon: "none",
-        duration: 2000,
-      });
+      toastStore.show({ message: "该书籍属于其他账号，无法删除", type: "error" });
       return;
     }
     if (book.sync_state === 1) {
-      uni.showToast({
-        title: "该书籍为云端书籍，未登录状态下无法删除",
-        icon: "none",
-        duration: 2000,
-      });
+      toastStore.show({ message: "该书籍为云端书籍，未登录状态下无法删除", type: "error" });
       return;
     }
   } else if (book.user_id && book.user_id !== currentUserId) {
-    uni.showToast({
-      title: "该书籍属于其他账号，无法删除",
-      icon: "none",
-      duration: 2000,
-    });
+    toastStore.show({ message: "该书籍属于其他账号，无法删除", type: "error" });
     return;
   }
   bookToDelete.value = book;

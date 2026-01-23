@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import { useBookStore } from "./stores/book";
+import { useNetworkStore } from "./stores/network";
+import GlobalToast from "./components/GlobalToast.vue";
+
+
 
 const bookStore = useBookStore();
+const networkStore = useNetworkStore();
+
 
 onLaunch(async () => {
   console.log("App Launch");
@@ -10,14 +16,23 @@ onLaunch(async () => {
   // #ifdef APP-PLUS
   await bookStore.init();
   // #endif
+  networkStore.startPing();
 });
 onShow(() => {
   console.log("App Show");
+  networkStore.startPing();
 });
 onHide(() => {
   console.log("App Hide");
+  networkStore.stopPing();
 });
+
 </script>
+
+<template>
+  <GlobalToast />
+</template>
+
 <style>
 @import "@/style/tailwind.css";
 
@@ -26,3 +41,4 @@ view, text {
   box-sizing: border-box;
 }
 </style>
+

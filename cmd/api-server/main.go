@@ -86,6 +86,7 @@ func main() {
 
 		api.GET("/common/prompts", deps.BookHandler.ListPrompts)
 		api.GET("/common/parser-rules", commonHandler.GetParserRules)
+		api.GET("/common/ping", commonHandler.Ping)
 	}
 
 	deps.TaskService.Start()

@@ -1,3 +1,6 @@
+import { getActivePinia } from "pinia";
+import { useNetworkStore } from "@/stores/network";
+
 // 基础配置
 // 统一使用云端服务器地址
 // export const BASE_URL = "http://110.41.38.214:8088/api/v1";
@@ -7,6 +10,13 @@ const WS_BASE_URL = BASE_URL.replace("http://", "ws://").replace(
   "https://",
   "wss://",
 );
+
+const isServerReachable = () => {
+  const pinia = getActivePinia();
+  if (!pinia) return true;
+  const store = useNetworkStore(pinia);
+  return store.serverReachable;
+};
 
 // 统一响应结构
 export interface Response<T> {
@@ -22,6 +32,12 @@ export const request = <T>(
   const token = uni.getStorageSync("token");
   const finalUrl = BASE_URL + options.url;
   console.log("[API Request]", options.method || "GET", finalUrl);
+
+  const skipNetworkCheck = (options.header as Record<string, unknown> | undefined)?.skipNetworkCheck;
+  if (!skipNetworkCheck && !isServerReachable()) {
+    console.warn("[API Blocked] Server unreachable", finalUrl);
+    return Promise.reject(new Error("Server unreachable"));
+  }
 
   return new Promise((resolve, reject) => {
     uni.request({
@@ -129,6 +145,13 @@ export const api = {
     }),
   getPrompts: () =>
     request<Prompt[]>({ url: "/common/prompts", method: "GET" }),
+  ping: () =>
+    request<{ ok: boolean }>({
+      url: "/common/ping",
+      method: "GET",
+      timeout: 1000,
+      header: { skipNetworkCheck: true },
+    }),
 
   syncTrimmedStatus: (md5s: string[]) =>
     request<{ trimmed_map: Record<string, number[]> }>({

@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { pointsApi } from "@/api/points";
 import { useUserStore } from "@/stores/user";
+import { useToastStore } from "@/stores/toast";
 
 // 积分流水展示项。
 interface LedgerItem {
@@ -14,6 +15,7 @@ interface LedgerItem {
 }
 
 const userStore = useUserStore();
+const toastStore = useToastStore();
 const pointsBalance = ref(0);
 const records = ref<LedgerItem[]>([]);
 const isLoading = ref(false);
@@ -30,7 +32,7 @@ const loadPointsBalance = async () => {
       pointsBalance.value = res.data.balance || 0;
       return;
     }
-    uni.showToast({ title: res.msg || "获取积分失败", icon: "none" });
+    toastStore.show({ message: res.msg || "获取积分失败", type: "error" });
   } catch (error) {
     console.warn("[Points] load balance failed", error);
   }
@@ -81,7 +83,7 @@ const loadPointsLedger = async () => {
       }));
       return;
     }
-    uni.showToast({ title: res.msg || "获取积分流水失败", icon: "none" });
+    toastStore.show({ message: res.msg || "获取积分流水失败", type: "error" });
   } catch (error) {
     console.warn("[Points] load ledger failed", error);
   } finally {

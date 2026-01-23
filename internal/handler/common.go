@@ -14,6 +14,11 @@ func NewCommonHandler(cfg *config.Config) *CommonHandler {
 	return &CommonHandler{cfg: cfg}
 }
 
+// Ping 健康探测接口。
+func (h *CommonHandler) Ping(c *gin.Context) {
+	response.Success(c, gin.H{"ok": true})
+}
+
 func (h *CommonHandler) GetParserRules(c *gin.Context) {
 	// 如果配置中没有规则，返回空列表或默认规则
 	if len(h.cfg.Parser.Rules) == 0 {

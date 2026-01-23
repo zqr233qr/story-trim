@@ -4,11 +4,15 @@ import { onShow } from "@dcloudio/uni-app";
 import { useUserStore } from "@/stores/user";
 import { useBookStore } from "@/stores/book";
 import { pointsApi } from "@/api/points";
+import SimpleAlertModal from "@/components/SimpleAlertModal.vue";
+import { useToastStore } from "@/stores/toast";
 
 const userStore = useUserStore();
 const bookStore = useBookStore();
+const toastStore = useToastStore();
 const isLoggedIn = computed(() => userStore.isLoggedIn());
 const pointsBalance = ref(0);
+const showLogoutModal = ref(false);
 
 // 加载积分余额。
 const loadPointsBalance = async () => {
@@ -22,7 +26,7 @@ const loadPointsBalance = async () => {
       pointsBalance.value = res.data.balance || 0;
       return;
     }
-    uni.showToast({ title: res.msg || "获取积分失败", icon: "none" });
+    toastStore.show({ message: res.msg || "获取积分失败", type: "error" });
   } catch (error) {
     console.warn("[Profile] load points failed", error);
   }
@@ -38,17 +42,13 @@ const openPoints = () => {
 };
 
 // 退出登录并返回书架。
-const handleLogout = async () => {
+const handleLogout = () => {
   if (!isLoggedIn.value) return;
-  const res = await new Promise<UniApp.ShowModalRes>((resolve) => {
-    uni.showModal({
-      title: "退出登录",
-      content: "确定要退出当前账号吗？本地数据将保留，但无法同步云端进度。",
-      success: resolve,
-      fail: () => resolve({ confirm: false, cancel: true } as UniApp.ShowModalRes),
-    });
-  });
-  if (!res.confirm) return;
+  showLogoutModal.value = true;
+};
+
+const confirmLogout = async () => {
+  showLogoutModal.value = false;
   userStore.logout();
   await bookStore.fetchBooks();
   uni.navigateBack();
@@ -95,6 +95,17 @@ const handleLogin = () => {
           立即登录
         </button>
       </view>
-    </view>
-  </view>
-</template>
+     </view>
+     <SimpleAlertModal
+       :visible="showLogoutModal"
+       title="退出登录"
+       content="确定要退出当前账号吗？本地数据将保留，但无法同步云端进度。"
+       confirm-text="确认退出"
+       show-cancel
+       cancel-text="再想想"
+       @update:visible="showLogoutModal = $event"
+       @confirm="confirmLogout"
+     />
+   </view>
+ </template>
+

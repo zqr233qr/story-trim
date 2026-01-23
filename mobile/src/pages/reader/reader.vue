@@ -3,6 +3,8 @@ import { ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
 import { onLoad, onUnload, onBackPress } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { useBookStore } from '@/stores/book'
+import { useNetworkStore } from '@/stores/network'
+import { useToastStore } from '@/stores/toast'
 import { api } from '@/api'
 import { trimStreamByChapterId, trimStreamByMd5 } from '@/api/trim'
 import { taskApi } from '@/api/task'
@@ -14,10 +16,13 @@ import ChapterList from '@/components/ChapterList.vue'
 import ChapterTrimModal from '@/components/ChapterTrimModal.vue'
 import GenerationTerminal from '@/components/GenerationTerminal.vue'
 import LoginConfirmModal from '@/components/LoginConfirmModal.vue'
+import SimpleAlertModal from '@/components/SimpleAlertModal.vue'
 import Renderjs from './components/Renderjs.vue'
 
 const userStore = useUserStore()
 const bookStore = useBookStore()
+const networkStore = useNetworkStore()
+const toastStore = useToastStore()
 const instance = getCurrentInstance()
 
 // 登录引导相关
@@ -112,6 +117,9 @@ const showChapterList = ref(false)
 const showConfigModal = ref(false)
 const showChapterTrimModal = ref(false)
 const showSettings = ref(false)
+const showTrimConfirmModal = ref(false)
+const trimConfirmContent = ref('')
+const pendingTrimPayload = ref<{ promptId: number; chapterIds: number[] } | null>(null)
 
 // 指定章节精简积分余额。
 const pointsBalance = ref(0)
@@ -142,6 +150,9 @@ const generatingTitle = ref('')
 const streamingContent = ref('')
 const toastMsg = ref('')
 const showToast = ref(false)
+
+// 已读章节索引缓存。
+const readChapterIndexes = ref<number[]>([])
 const isAiLoading = ref(false)
 const isTextTransitioning = ref(false)
 const scrollTop = ref(0)
@@ -351,6 +362,45 @@ const getCurrentModeInfo = () => {
   const promptId = parseInt(activeBook.value.activeModeId)
   const prompt = bookStore.prompts.find(p => p.id === promptId)
   return prompt ? { name: prompt.name, description: prompt.description } : null
+}
+
+// 获取已读章节缓存 Key。
+const getReadIndexKey = () => {
+  const bookMd5 = activeBook.value?.book_md5
+  if (bookMd5) return `read_indexes_${bookMd5}`
+  return `read_indexes_${activeBook.value?.id || 0}`
+}
+
+// 读取已读章节缓存。
+const loadReadIndexes = () => {
+  const key = getReadIndexKey()
+  const raw = uni.getStorageSync(key)
+  if (!raw) {
+    readChapterIndexes.value = []
+    return
+  }
+  if (Array.isArray(raw)) {
+    readChapterIndexes.value = raw.map((v) => Number(v)).filter((v) => !Number.isNaN(v))
+    return
+  }
+  try {
+    const parsed = JSON.parse(raw as string)
+    readChapterIndexes.value = Array.isArray(parsed)
+      ? parsed.map((v) => Number(v)).filter((v) => !Number.isNaN(v))
+      : []
+  } catch (e) {
+    readChapterIndexes.value = []
+  }
+}
+
+// 写入已读章节缓存。
+const markChapterRead = (index: number) => {
+  if (index < 0) return
+  if (!readChapterIndexes.value.includes(index)) {
+    readChapterIndexes.value = [...readChapterIndexes.value, index]
+    const key = getReadIndexKey()
+    uni.setStorageSync(key, JSON.stringify(readChapterIndexes.value))
+  }
 }
 
 // 显示模式切换提示
@@ -1055,6 +1105,9 @@ const init = async () => {
     activeBook.value.activeChapterIndex = startIndex
   }
 
+  loadReadIndexes()
+  markChapterRead(startIndex)
+
   // 2. 恢复精简模式
   const historyPromptId = await getHistoryPromptId()
   if (historyPromptId > 0 && activeBook.value) {
@@ -1381,7 +1434,7 @@ const loadChapterTrimStatus = async () => {
 }
 
 // 打开指定章节精简弹窗。
-const openChapterTrimModal = () => {
+const openChapterTrimModal = async () => {
   if (!userStore.isLoggedIn()) {
     openLoginModal('指定章节精简需要登录账号后才能使用，是否现在去登录？')
     return
@@ -1391,8 +1444,17 @@ const openChapterTrimModal = () => {
     showNotification('仅云端书籍支持指定精简')
     return
   }
+  // #ifdef APP-PLUS
+  if (!networkStore.serverReachable) {
+    showNotification('网络不可用，暂不支持精简')
+    return
+  }
+  // #endif
   if (bookStore.prompts.length === 0) {
-    showNotification('暂无可用精简模式')
+    await bookStore.fetchPrompts()
+  }
+  if (bookStore.prompts.length === 0) {
+    showNotification('精简模式加载失败')
     return
   }
   chapterTrimPromptId.value = getDefaultTrimPromptId()
@@ -1408,21 +1470,18 @@ const handleChapterTrimPromptChange = (promptId: number) => {
 }
 
 // 提交指定章节精简任务。
-const handleConfirmChapterTrim = async (payload: { promptId: number; chapterIds: number[] }) => {
+const handleConfirmChapterTrim = (payload: { promptId: number; chapterIds: number[] }) => {
   if (!payload.chapterIds.length) return
+  pendingTrimPayload.value = payload
+  trimConfirmContent.value = `将精简 ${payload.chapterIds.length} 章，消耗 ${payload.chapterIds.length} 积分，是否继续？`
+  showTrimConfirmModal.value = true
+}
 
-  const confirmRes = await new Promise<UniApp.ShowModalRes>((resolve) => {
-    uni.showModal({
-      title: '确认精简',
-      content: `将精简 ${payload.chapterIds.length} 章，消耗 ${payload.chapterIds.length} 积分，是否继续？`,
-      success: resolve,
-      fail: () => resolve({ confirm: false, cancel: true } as UniApp.ShowModalRes)
-    })
-  })
+const submitChapterTrimTask = async () => {
+  const payload = pendingTrimPayload.value
+  if (!payload || !activeBook.value) return
 
-  if (!confirmRes.confirm) return
-
-  if (!activeBook.value) return
+  showTrimConfirmModal.value = false
   const bookId = activeBook.value.cloud_id || activeBook.value.id
   const res = await taskApi.startChapterTrimTask(bookId, payload.promptId, payload.chapterIds)
   if (res.code === 0) {
@@ -1714,7 +1773,7 @@ const switchToMode = async (id: string, showModalOnFailure = true) => {
       return
     }
   } catch (e) {
-    uni.showToast({ title: '系统错误', icon: 'none' })
+    toastStore.show({ message: '系统错误', type: 'error' })
     return
   }
 
@@ -1810,6 +1869,21 @@ const toggleMagic = async () => {
     return
   }
 
+  // #ifdef APP-PLUS
+  if (!networkStore.serverReachable) {
+    showNotification('网络不可用，暂不支持精简')
+    return
+  }
+  // #endif
+
+  if (bookStore.prompts.length === 0) {
+    await bookStore.fetchPrompts()
+    if (bookStore.prompts.length === 0) {
+      showNotification('精简模式加载失败')
+      return
+    }
+  }
+
   const targetModeId = userPreferredModeId.value
   if (targetModeId === 0) {
     showConfigModal.value = true
@@ -1853,6 +1927,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
   }
 
   activeBook.value!.activeChapterIndex = index
+  markChapterRead(index)
 
   if (pageMode.value === 'click') {
     await rebuildVirtualWindow(index, targetPosition === 'end' ? 'last' : 'first')
@@ -2090,7 +2165,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     </view>
 
     <!-- Modals -->
-    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :reading-mode="readingMode" :mode-colors="modeColors" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
+    <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :read-indexes="readChapterIndexes" :reading-mode="readingMode" :mode-colors="modeColors" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
     <ChapterTrimModal
       :show="showChapterTrimModal"
       :prompts="bookStore.prompts"
@@ -2102,6 +2177,17 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
       @close="showChapterTrimModal = false"
       @confirm="handleConfirmChapterTrim"
       @change-prompt="handleChapterTrimPromptChange"
+    />
+    <SimpleAlertModal
+      :visible="showTrimConfirmModal"
+      title="确认精简"
+      :content="trimConfirmContent"
+      confirm-text="开始精简"
+      show-cancel
+      cancel-text="再想想"
+      @update:visible="showTrimConfirmModal = $event"
+      @confirm="submitChapterTrimTask"
+      @cancel="pendingTrimPayload = null"
     />
     <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" :user-preferred-mode-id="userPreferredModeId" @close="showConfigModal = false" @start="handleStartProcess" />
     <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" :user-preferred-mode-id="userPreferredModeId" :reading-bg-image="readingBgImage" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="(val) => { pageMode = val; uni.setStorageSync('pageMode', val) }" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" @update:user-preferred-mode-id="updateUserPreference" @select:bgImage="chooseBackgroundImage" @clear:bgImage="clearBackgroundImage" />
