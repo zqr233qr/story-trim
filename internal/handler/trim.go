@@ -23,11 +23,13 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 type TrimStreamByMD5Request struct {
-	Content         string `json:"content" binding:"required"`
-	MD5             string `json:"md5" binding:"required"`
-	BookFingerprint string `json:"book_fingerprint" binding:"required"`
-	ChapterIndex    int    `json:"chapter_index"`
-	PromptID        uint   `json:"prompt_id" binding:"required"`
+	Content      string `json:"content" binding:"required"`
+	MD5          string `json:"md5" binding:"required"`
+	BookMD5      string `json:"book_md5" binding:"required"`
+	BookTitle    string `json:"book_title" binding:"required"`
+	ChapterTitle string `json:"chapter_title" binding:"required"`
+	ChapterIndex int    `json:"chapter_index"`
+	PromptID     uint   `json:"prompt_id" binding:"required"`
 }
 
 func (h *TrimHandler) TrimStreamByMD5(c *gin.Context) {
@@ -49,6 +51,9 @@ func (h *TrimHandler) TrimStreamByMD5(c *gin.Context) {
 		c.Request.Context(),
 		userID,
 		req.MD5,
+		req.BookMD5,
+		req.BookTitle,
+		req.ChapterTitle,
 		req.Content,
 		req.PromptID,
 	)

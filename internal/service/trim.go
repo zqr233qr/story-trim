@@ -16,17 +16,19 @@ import (
 )
 
 type TrimService struct {
-	bookRepo   repository.BookRepositoryInterface
-	tmpl       *template.Template
-	llmService LlmServiceInterface
+	bookRepo      repository.BookRepositoryInterface
+	pointsService PointsServiceInterface
+	tmpl          *template.Template
+	llmService    LlmServiceInterface
 }
 
-func NewTrimService(bookRepo repository.BookRepositoryInterface, llmService LlmServiceInterface) *TrimService {
+// NewTrimService 创建精简服务。
+func NewTrimService(bookRepo repository.BookRepositoryInterface, pointsService PointsServiceInterface, llmService LlmServiceInterface) *TrimService {
 	tmpl, err := template.ParseFS(templates.FS, "trimPrompt.tmpl")
 	if err != nil {
 		panic("failed to load templates: " + err.Error())
 	}
-	return &TrimService{bookRepo: bookRepo, tmpl: tmpl, llmService: llmService}
+	return &TrimService{bookRepo: bookRepo, pointsService: pointsService, tmpl: tmpl, llmService: llmService}
 }
 
 func (s *TrimService) RenderPrompt(name string, data interface{}) (string, error) {
@@ -37,13 +39,33 @@ func (s *TrimService) RenderPrompt(name string, data interface{}) (string, error
 	return buf.String(), nil
 }
 
-func (s *TrimService) TrimStreamByMD5(ctx context.Context, userID uint, chapterMD5 string, rawContent string, promptID uint) (<-chan string, error) {
+func (s *TrimService) TrimStreamByMD5(ctx context.Context, userID uint, chapterMD5 string, bookMD5 string, bookTitle string, chapterTitle string, rawContent string, promptID uint) (<-chan string, error) {
+	if userID > 0 {
+		extra := map[string]string{}
+		prompt, err := s.bookRepo.GetPromptByID(ctx, promptID)
+		if err == nil && prompt != nil {
+			extra["prompt_name"] = prompt.Name
+		}
+		extra["book_title"] = bookTitle
+		extra["chapter_title"] = chapterTitle
+		extra["book_md5"] = bookMD5
+		extra["chapter_md5"] = chapterMD5
+		charged, err := s.ensureTrimPoints(ctx, userID, promptID, 0, bookMD5, chapterMD5, "chapter_md5", chapterMD5, extra)
+		if err != nil {
+			return nil, err
+		}
+		if charged {
+			logger.Info().Msg("points charged for md5 trim")
+		}
+	}
+
 	cache, err := s.bookRepo.GetTrimResult(ctx, chapterMD5, promptID)
 	if err == nil && cache != nil {
 		if userID > 0 {
 			go s.bookRepo.RecordUserTrim(context.Background(), &model.UserProcessedChapter{
 				UserID:     userID,
 				PromptID:   promptID,
+				BookMD5:    bookMD5,
 				ChapterMD5: chapterMD5,
 				CreatedAt:  time.Now(),
 			})
@@ -51,13 +73,40 @@ func (s *TrimService) TrimStreamByMD5(ctx context.Context, userID uint, chapterM
 		return s.mockStreaming(cache.TrimContent), nil
 	}
 
-	return s.trimChapter(ctx, userID, 0, 0, chapterMD5, rawContent, promptID)
+	return s.trimChapter(ctx, userID, 0, 0, bookMD5, chapterMD5, rawContent, promptID)
 }
 
 func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bookID uint, chapterID uint, promptID uint) (<-chan string, error) {
 	chap, err := s.bookRepo.GetChapterByID(ctx, chapterID)
 	if err != nil {
 		return nil, errno.ErrChapterNotFound
+	}
+
+	book, err := s.bookRepo.GetBookByID(ctx, bookID)
+	if err != nil {
+		return nil, err
+	}
+	if book == nil {
+		return nil, errno.ErrBookNotFound
+	}
+	bookMD5 := book.BookMD5
+
+	if userID > 0 {
+		extra := map[string]string{}
+		extra["book_title"] = book.Title
+		extra["chapter_title"] = chap.Title
+		if prompt, err := s.bookRepo.GetPromptByID(ctx, promptID); err == nil && prompt != nil {
+			extra["prompt_name"] = prompt.Name
+		}
+		extra["book_md5"] = bookMD5
+		extra["chapter_md5"] = chap.ChapterMD5
+		charged, err := s.ensureTrimPoints(ctx, userID, promptID, bookID, bookMD5, chap.ChapterMD5, "chapter_id", fmt.Sprintf("%d", chapterID), extra)
+		if err != nil {
+			return nil, err
+		}
+		if charged {
+			logger.Info().Msg("points charged for chapter trim")
+		}
 	}
 
 	cache, err := s.bookRepo.GetTrimResult(ctx, chap.ChapterMD5, promptID)
@@ -68,6 +117,7 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 				BookID:     bookID,
 				ChapterID:  chapterID,
 				PromptID:   promptID,
+				BookMD5:    bookMD5,
 				ChapterMD5: chap.ChapterMD5,
 				CreatedAt:  time.Now(),
 			})
@@ -75,10 +125,10 @@ func (s *TrimService) TrimStreamByChapterID(ctx context.Context, userID uint, bo
 		return s.mockStreaming(cache.TrimContent), nil
 	}
 
-	return s.trimChapter(ctx, userID, bookID, chapterID, chap.ChapterMD5, "", promptID)
+	return s.trimChapter(ctx, userID, bookID, chapterID, bookMD5, chap.ChapterMD5, "", promptID)
 }
 
-func (s *TrimService) trimChapter(ctx context.Context, userID uint, bookID uint, chapterID uint, chapterMD5 string, rawContent string, promptID uint) (<-chan string, error) {
+func (s *TrimService) trimChapter(ctx context.Context, userID uint, bookID uint, chapterID uint, bookMD5 string, chapterMD5 string, rawContent string, promptID uint) (<-chan string, error) {
 	content := ""
 
 	if chapterID > 0 {
@@ -179,8 +229,10 @@ func (s *TrimService) trimChapter(ctx context.Context, userID uint, bookID uint,
 				BookID:     bookID,
 				ChapterID:  chapterID,
 				PromptID:   promptID,
+				BookMD5:    bookMD5,
 				ChapterMD5: chapterMD5,
 			}); err != nil {
+
 				logger.Error().Err(err).Msg("failed to record user trim")
 				return
 			}
@@ -239,10 +291,22 @@ func (s *TrimService) mockStreaming(content string) <-chan string {
 	return ch
 }
 
+// ensureTrimPoints 校验并扣除积分，返回是否扣费。
+func (s *TrimService) ensureTrimPoints(ctx context.Context, userID uint, promptID uint, bookID uint, bookMD5 string, chapterMD5 string, refType, refID string, extra map[string]string) (bool, error) {
+	handled, err := s.bookRepo.HasUserProcessedChapter(ctx, userID, promptID, bookID, bookMD5, chapterMD5)
+	if err != nil {
+		return false, err
+	}
+	if handled {
+		return false, nil
+	}
+	if err := s.pointsService.SpendForTrim(ctx, userID, 1, refType, refID, extra); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *TrimService) TrimChatByChapterID(ctx context.Context, userID uint, chapterID uint, promptID uint) error {
-	// 测试
-	time.Sleep(time.Second)
-	return nil
 	chapter, err := s.bookRepo.GetChapterByID(ctx, chapterID)
 	if err != nil {
 		return err
@@ -309,11 +373,20 @@ func (s *TrimService) TrimChatByChapterID(ctx context.Context, userID uint, chap
 	}
 
 	// 记录用户处理记录
+	book, err := s.bookRepo.GetBookByID(ctx, chapter.BookID)
+	if err != nil {
+		return err
+	}
+	bookMD5 := ""
+	if book != nil {
+		bookMD5 = book.BookMD5
+	}
 	if err := s.bookRepo.RecordUserTrim(context.Background(), &model.UserProcessedChapter{
 		UserID:     userID,
 		BookID:     chapter.BookID,
 		ChapterID:  chapterID,
 		PromptID:   promptID,
+		BookMD5:    bookMD5,
 		ChapterMD5: chapter.ChapterMD5,
 	}); err != nil {
 		logger.Error().Err(err).Msg("failed to record user trim")
@@ -324,7 +397,7 @@ func (s *TrimService) TrimChatByChapterID(ctx context.Context, userID uint, chap
 }
 
 type TrimServiceInterface interface {
-	TrimStreamByMD5(ctx context.Context, userID uint, chapterMD5 string, rawContent string, promptID uint) (<-chan string, error)
+	TrimStreamByMD5(ctx context.Context, userID uint, chapterMD5 string, bookMD5 string, bookTitle string, chapterTitle string, rawContent string, promptID uint) (<-chan string, error)
 	TrimStreamByChapterID(ctx context.Context, userID uint, bookID uint, chapterID uint, promptID uint) (<-chan string, error)
 	TrimChatByChapterID(ctx context.Context, userID uint, chapterID uint, promptID uint) error
 }

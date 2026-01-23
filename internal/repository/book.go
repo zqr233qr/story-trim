@@ -381,6 +381,62 @@ func (r *BookRepository) RecordUserTrim(ctx context.Context, action *model.UserP
 	}).Create(action).Error
 }
 
+// HasUserProcessedChapter 检查用户是否处理过指定章节。
+func (r *BookRepository) HasUserProcessedChapter(ctx context.Context, userID uint, promptID uint, bookID uint, bookMD5 string, chapterMD5 string) (bool, error) {
+	query := r.db.WithContext(ctx).
+		Model(&model.UserProcessedChapter{}).
+		Where("user_id = ? AND prompt_id = ? AND chapter_md5 = ?", userID, promptID, chapterMD5)
+	if bookID > 0 && bookMD5 != "" {
+		query = query.Where("book_id = ? OR book_md5 = ?", bookID, bookMD5)
+	} else if bookID > 0 {
+		query = query.Where("book_id = ?", bookID)
+	} else if bookMD5 != "" {
+		query = query.Where("book_md5 = ?", bookMD5)
+	}
+	return ExistWithoutObject(query)
+}
+
+// GetProcessedChapterMD5s 获取已处理的章节 MD5。
+func (r *BookRepository) GetProcessedChapterMD5s(ctx context.Context, userID, promptID uint, bookID uint, bookMD5 string, chapterMD5s []string) ([]string, error) {
+	if len(chapterMD5s) == 0 {
+		return []string{}, nil
+	}
+	query := r.db.WithContext(ctx).
+		Model(&model.UserProcessedChapter{}).
+		Where("user_id = ? AND prompt_id = ?", userID, promptID)
+	if bookID > 0 && bookMD5 != "" {
+		query = query.Where("book_id = ? OR book_md5 = ?", bookID, bookMD5)
+	} else if bookID > 0 {
+		query = query.Where("book_id = ?", bookID)
+	} else if bookMD5 != "" {
+		query = query.Where("book_md5 = ?", bookMD5)
+	}
+	var md5s []string
+	if err := query.Where("chapter_md5 IN ?", chapterMD5s).Pluck("chapter_md5", &md5s).Error; err != nil {
+		return nil, err
+	}
+	return md5s, nil
+}
+
+// GetTrimmedChapterMD5sByPrompt 获取指定模式已精简章节 MD5。
+func (r *BookRepository) GetTrimmedChapterMD5sByPrompt(ctx context.Context, userID, promptID uint, bookID uint, bookMD5 string) ([]string, error) {
+	query := r.db.WithContext(ctx).
+		Model(&model.UserProcessedChapter{}).
+		Where("user_id = ? AND prompt_id = ?", userID, promptID)
+	if bookID > 0 && bookMD5 != "" {
+		query = query.Where("book_id = ? OR book_md5 = ?", bookID, bookMD5)
+	} else if bookID > 0 {
+		query = query.Where("book_id = ?", bookID)
+	} else if bookMD5 != "" {
+		query = query.Where("book_md5 = ?", bookMD5)
+	}
+	var md5s []string
+	if err := query.Pluck("chapter_md5", &md5s).Error; err != nil {
+		return nil, err
+	}
+	return md5s, nil
+}
+
 func (r *BookRepository) GetAllBookTrimmedPromptIDs(ctx context.Context, userID, bookID uint) (map[uint][]uint, error) {
 	type result struct {
 		ChapterID uint
@@ -465,6 +521,9 @@ type BookRepositoryInterface interface {
 	UpsertReadingHistory(ctx context.Context, history *model.ReadingHistory) error
 	GetReadingHistory(ctx context.Context, userID, bookID uint) (*model.ReadingHistory, error)
 	RecordUserTrim(ctx context.Context, action *model.UserProcessedChapter) error
+	HasUserProcessedChapter(ctx context.Context, userID uint, promptID uint, bookID uint, bookMD5 string, chapterMD5 string) (bool, error)
+	GetProcessedChapterMD5s(ctx context.Context, userID, promptID uint, bookID uint, bookMD5 string, chapterMD5s []string) ([]string, error)
+	GetTrimmedChapterMD5sByPrompt(ctx context.Context, userID, promptID uint, bookID uint, bookMD5 string) ([]string, error)
 	GetAllBookTrimmedPromptIDs(ctx context.Context, userID, bookID uint) (map[uint][]uint, error)
 	GetPromptByID(ctx context.Context, id uint) (*model.Prompt, error)
 	ListSystemPrompts(ctx context.Context) ([]model.Prompt, error)

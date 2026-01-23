@@ -24,11 +24,12 @@ type TrimResult struct {
 
 type UserProcessedChapter struct {
 	ID         uint      `json:"id" gorm:"primaryKey"`
-	UserID     uint      `json:"user_id" gorm:"index;not null"`
+	UserID     uint      `json:"user_id" gorm:"index;not null;index:idx_user_prompt_md5,priority:1"`
 	BookID     uint      `json:"book_id" gorm:"index;not null"`
 	ChapterID  uint      `json:"chapter_id" gorm:"index;not null"`
-	PromptID   uint      `json:"prompt_id" gorm:"index;not null"`
-	ChapterMD5 string    `json:"chapter_md5" gorm:"size:32;not null"`
+	PromptID   uint      `json:"prompt_id" gorm:"index;not null;index:idx_user_prompt_md5,priority:2"`
+	BookMD5    string    `json:"book_md5" gorm:"size:32;index:idx_user_prompt_md5,priority:3"`
+	ChapterMD5 string    `json:"chapter_md5" gorm:"size:32;not null;index:idx_user_prompt_md5,priority:4"`
 	CreatedAt  time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 

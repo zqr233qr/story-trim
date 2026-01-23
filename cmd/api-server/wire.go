@@ -14,13 +14,15 @@ import (
 )
 
 type APIComponents struct {
-	AuthHandler    *handler.AuthHandler
-	BookHandler    *handler.BookHandler
-	TrimHandler    *handler.TrimHandler
-	TaskHandler    *handler.TaskHandler
-	ContentHandler *handler.ContentHandler
-	AuthService    service.AuthServiceInterface
-	TaskService    service.TaskServiceInterface
+	AuthHandler        *handler.AuthHandler
+	BookHandler        *handler.BookHandler
+	TrimHandler        *handler.TrimHandler
+	TaskHandler        *handler.TaskHandler
+	ChapterTrimHandler *handler.ChapterTrimHandler
+	ContentHandler     *handler.ContentHandler
+	PointsHandler      *handler.PointsHandler
+	AuthService        service.AuthServiceInterface
+	TaskService        service.TaskServiceInterface
 }
 
 func NewAPIComponents(
@@ -28,28 +30,34 @@ func NewAPIComponents(
 	bookHandler *handler.BookHandler,
 	trimHandler *handler.TrimHandler,
 	taskHandler *handler.TaskHandler,
+	chapterTrimHandler *handler.ChapterTrimHandler,
 	contentHandler *handler.ContentHandler,
+	pointsHandler *handler.PointsHandler,
 	authService service.AuthServiceInterface,
 	taskService service.TaskServiceInterface,
 ) *APIComponents {
 	return &APIComponents{
-		AuthHandler:    authHandler,
-		BookHandler:    bookHandler,
-		TrimHandler:    trimHandler,
-		TaskHandler:    taskHandler,
-		ContentHandler: contentHandler,
-		AuthService:    authService,
-		TaskService:    taskService,
+		AuthHandler:        authHandler,
+		BookHandler:        bookHandler,
+		TrimHandler:        trimHandler,
+		TaskHandler:        taskHandler,
+		ChapterTrimHandler: chapterTrimHandler,
+		ContentHandler:     contentHandler,
+		PointsHandler:      pointsHandler,
+		AuthService:        authService,
+		TaskService:        taskService,
 	}
 }
 
 // Helper to provide the constant maxWorkers for TaskService
 func provideTaskService(
 	repo repository.TaskRepositoryInterface,
+	taskItemRepo repository.TaskItemRepositoryInterface,
 	bookRepo repository.BookRepositoryInterface,
 	trimService service.TrimServiceInterface,
+	pointsService service.PointsServiceInterface,
 ) *service.TaskService {
-	return service.NewTaskService(repo, bookRepo, trimService, 4)
+	return service.NewTaskService(repo, taskItemRepo, bookRepo, trimService, pointsService, 4)
 }
 
 func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM, store storage.Storage) (*APIComponents, error) {
@@ -61,10 +69,16 @@ func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM, sto
 		wire.Bind(new(repository.BookRepositoryInterface), new(*repository.BookRepository)),
 		repository.NewTaskRepository,
 		wire.Bind(new(repository.TaskRepositoryInterface), new(*repository.TaskRepository)),
+		repository.NewTaskItemRepository,
+		wire.Bind(new(repository.TaskItemRepositoryInterface), new(*repository.TaskItemRepository)),
+		repository.NewPointsRepository,
+		wire.Bind(new(repository.PointsRepositoryInterface), new(*repository.PointsRepository)),
 		repository.NewContentRepository,
 		wire.Bind(new(repository.ContentRepositoryInterface), new(*repository.ContentRepository)),
 
 		// Services
+		service.NewPointsService,
+		wire.Bind(new(service.PointsServiceInterface), new(*service.PointsService)),
 		service.NewAuthService,
 		wire.Bind(new(service.AuthServiceInterface), new(*service.AuthService)),
 		service.NewBookService,
@@ -83,7 +97,9 @@ func InitializeAPIComponents(db *gorm.DB, jwtSecret string, llm *config.LLM, sto
 		handler.NewBookHandler,
 		handler.NewTrimHandler,
 		handler.NewTaskHandler,
+		handler.NewChapterTrimHandler,
 		handler.NewContentHandler,
+		handler.NewPointsHandler,
 
 		// Components
 		NewAPIComponents,

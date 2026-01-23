@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
-import { onLoad, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onUnload, onBackPress } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { useBookStore } from '@/stores/book'
 import { api } from '@/api'
 import { trimStreamByChapterId, trimStreamByMd5 } from '@/api/trim'
+import { taskApi } from '@/api/task'
+import { pointsApi } from '@/api/points'
 import { TTSPlayer } from '@/utils/tts'
 import ModeConfigModal from '@/components/ModeConfigModal.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ChapterList from '@/components/ChapterList.vue'
-import BatchTaskModal from '@/components/BatchTaskModal.vue'
+import ChapterTrimModal from '@/components/ChapterTrimModal.vue'
 import GenerationTerminal from '@/components/GenerationTerminal.vue'
 import LoginConfirmModal from '@/components/LoginConfirmModal.vue'
 import Renderjs from './components/Renderjs.vue'
@@ -88,14 +90,35 @@ interface PaginationCacheEntry {
   mode: 'page' | 'line'
 }
 
+// 章节精简状态信息。
+interface ChapterTrimStatus {
+  trimmedIds: number[]
+  processingIds: number[]
+}
+
+// 章节精简展示项。
+interface ChapterTrimOption {
+  id: number
+  index: number
+  title: string
+  status: 'available' | 'trimmed' | 'processing'
+}
+
 // --- 1. 状态定义 ---
 const bookId = ref(0)
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0)
 const menuVisible = ref(false)
 const showChapterList = ref(false)
 const showConfigModal = ref(false)
-const showBatchModal = ref(false)
+const showChapterTrimModal = ref(false)
 const showSettings = ref(false)
+
+// 指定章节精简积分余额。
+const pointsBalance = ref(0)
+// 当前选择的精简模式（用于拉取状态）。
+const chapterTrimPromptId = ref(0)
+// 指定章节精简状态。
+const chapterTrimStatus = ref<ChapterTrimStatus>({ trimmedIds: [], processingIds: [] })
 const isMagicActive = ref(false)
 const readingMode = ref<'light' | 'dark' | 'sepia'>(uni.getStorageSync('readingMode') as 'light' | 'dark' | 'sepia' || 'light')
 const readingBgImage = ref(uni.getStorageSync('readingBgImage') || '')
@@ -381,6 +404,36 @@ const activeModeName = computed(() => {
   const modeId = actualDisplayModeId.value.toString()
   const prompt = bookStore.prompts.find(p => p.id.toString() === modeId || p.id === parseInt(modeId))
   return prompt ? prompt.name : modeId
+})
+
+// 获取默认精简模式。
+const getDefaultTrimPromptId = () => {
+  if (userPreferredModeId.value > 0) return userPreferredModeId.value
+  const activeId = Number(activeBook.value?.activeModeId || 0)
+  if (activeId > 0) return activeId
+  return bookStore.prompts[0]?.id || 0
+}
+
+const chapterTrimOptions = computed<ChapterTrimOption[]>(() => {
+  const chapters = activeBook.value?.chapters || []
+  const processingSet = new Set(chapterTrimStatus.value.processingIds)
+  const trimmedSet = new Set(chapterTrimStatus.value.trimmedIds)
+
+  return chapters.map((chapter, index) => {
+    const chapterId = chapter.cloud_id || chapter.id
+    let status: ChapterTrimOption['status'] = 'available'
+    if (processingSet.has(chapterId)) {
+      status = 'processing'
+    } else if (trimmedSet.has(chapterId)) {
+      status = 'trimmed'
+    }
+    return {
+      id: chapterId,
+      index: index + 1,
+      title: chapter.title,
+      status
+    }
+  })
 })
 
 const combinedPages = computed(() => {
@@ -953,6 +1006,31 @@ onUnload(() => {
   // #endif
 })
 
+// 返回拦截：优先关闭弹窗。
+onBackPress(() => {
+  const hasModal = showChapterList.value
+    || showConfigModal.value
+    || showChapterTrimModal.value
+    || showSettings.value
+    || showTerminal.value
+    || showLoginModal.value
+    || showTtsPanel.value
+
+  if (hasModal) {
+    showChapterList.value = false
+    showConfigModal.value = false
+    showChapterTrimModal.value = false
+    showSettings.value = false
+    showTerminal.value = false
+    showLoginModal.value = false
+    showTtsPanel.value = false
+    menuVisible.value = false
+    return true
+  }
+
+  return false
+})
+
 const init = async () => {
   uni.showLoading({ title: '加载中...' })
   await Promise.all([
@@ -1267,6 +1345,103 @@ const showNotification = (msg: string) => {
   setTimeout(() => { showToast.value = false }, 2000)
 }
 
+// 加载积分余额。
+const loadPointsBalance = async () => {
+  try {
+    const res = await pointsApi.getBalance()
+    if (res.code === 0) {
+      pointsBalance.value = res.data.balance || 0
+      return
+    }
+    showNotification(res.msg || '获取积分失败')
+  } catch (e) {
+    console.warn('[Reader] load points failed', e)
+  }
+}
+
+// 加载章节精简状态。
+const loadChapterTrimStatus = async () => {
+  if (!activeBook.value) return
+  const promptId = chapterTrimPromptId.value || getDefaultTrimPromptId()
+  if (!promptId) return
+  const bookId = activeBook.value.cloud_id || activeBook.value.id
+  try {
+    const res = await taskApi.getChapterTrimStatus(bookId, promptId)
+    if (res.code === 0 && res.data) {
+      chapterTrimStatus.value = {
+        trimmedIds: res.data.trimmed_chapter_ids || [],
+        processingIds: res.data.processing_chapter_ids || []
+      }
+      return
+    }
+    showNotification(res.msg || '获取精简状态失败')
+  } catch (e) {
+    console.warn('[Reader] load chapter trim status failed', e)
+  }
+}
+
+// 打开指定章节精简弹窗。
+const openChapterTrimModal = () => {
+  if (!userStore.isLoggedIn()) {
+    openLoginModal('指定章节精简需要登录账号后才能使用，是否现在去登录？')
+    return
+  }
+  if (!activeBook.value) return
+  if (activeBook.value.sync_state === 0) {
+    showNotification('仅云端书籍支持指定精简')
+    return
+  }
+  if (bookStore.prompts.length === 0) {
+    showNotification('暂无可用精简模式')
+    return
+  }
+  chapterTrimPromptId.value = getDefaultTrimPromptId()
+  showChapterTrimModal.value = true
+  loadPointsBalance()
+  loadChapterTrimStatus()
+}
+
+// 切换指定章节精简的模式。
+const handleChapterTrimPromptChange = (promptId: number) => {
+  chapterTrimPromptId.value = promptId
+  loadChapterTrimStatus()
+}
+
+// 提交指定章节精简任务。
+const handleConfirmChapterTrim = async (payload: { promptId: number; chapterIds: number[] }) => {
+  if (!payload.chapterIds.length) return
+
+  const confirmRes = await new Promise<UniApp.ShowModalRes>((resolve) => {
+    uni.showModal({
+      title: '确认精简',
+      content: `将精简 ${payload.chapterIds.length} 章，消耗 ${payload.chapterIds.length} 积分，是否继续？`,
+      success: resolve,
+      fail: () => resolve({ confirm: false, cancel: true } as UniApp.ShowModalRes)
+    })
+  })
+
+  if (!confirmRes.confirm) return
+
+  if (!activeBook.value) return
+  const bookId = activeBook.value.cloud_id || activeBook.value.id
+  const res = await taskApi.startChapterTrimTask(bookId, payload.promptId, payload.chapterIds)
+  if (res.code === 0) {
+    showChapterTrimModal.value = false
+    showNotification('任务已创建，可在书架查看进度')
+    return
+  }
+
+  if (res.code === 6001) {
+    showNotification('积分不足')
+    return
+  }
+  if (res.code === 4004) {
+    showNotification('章节已精简或处理中')
+    return
+  }
+  showNotification(res.msg || '任务创建失败')
+}
+
 const updateUserPreference = async (modeId: number) => {
   userPreferredModeId.value = modeId
   uni.setStorageSync('userPreferredModeId', modeId.toString())
@@ -1316,32 +1491,15 @@ const watchBatchTask = (taskId: string, bookName: string) => {
   // ... (Keep existing logic)
 }
 
-const handleStartProcess = async (modeId: string | number, isBatch: boolean = false) => {
+const handleStartProcess = async (modeId: string | number) => {
   // 权限检查：AI 处理功能需要登录
   if (!userStore.isLoggedIn()) {
-    showBatchModal.value = false;
-    showConfigModal.value = false;
-    openLoginModal('AI 精简功能需要登录账号后才能使用，是否现在去登录？');
-    return;
+    showConfigModal.value = false
+    openLoginModal('AI 精简功能需要登录账号后才能使用，是否现在去登录？')
+    return
   }
 
   const promptId = typeof modeId === 'string' ? parseInt(modeId) : modeId
-
-  // 全书精简模式
-  if (isBatch) {
-    showBatchModal.value = false
-
-    if (!activeBook.value) return
-
-    const cloudBookId = activeBook.value.cloud_id || activeBook.value.id
-    const success = await bookStore.startFullTrimTask(cloudBookId, promptId)
-    if (success) {
-      showNotification('已加入后台处理，可在书架页查看进度')
-    } else {
-      showNotification('启动失败')
-    }
-    return
-  }
 
   // 单章精简 (混合模式)
   const isTrimmed = activeChapter.value?.trimmed_prompt_ids?.some((id: number) => Number(id) === promptId)
@@ -1381,6 +1539,8 @@ const handleStartProcess = async (modeId: string | number, isBatch: boolean = fa
       activeChapter.value.md5,
       promptId,
       activeBook.value?.book_md5 || '',
+      activeBook.value?.title || '',
+      activeChapter.value?.title || '',
       activeBook.value?.activeChapterIndex || 0,
       (text) => {
         streamingContent.value += text
@@ -1881,7 +2041,7 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <Renderjs :rjsChapter="renderjsPayload" @handelContentUpdated="updateContainerContent" />
 
     <!-- Overlays -->
-    <view v-if="pageMode === 'click'" class="fixed bottom-6 right-6 opacity-40 z-10">
+    <view v-if="pageMode === 'click'" class="fixed bottom-3 right-6 opacity-40 z-10">
       <text class="text-[10px] font-bold">{{ relativePageInfo }}</text>
     </view>
 
@@ -1914,9 +2074,9 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
           <image :src="icons.prev" mode="aspectFit" style="width: 44rpx; height: 44rpx;" class="opacity-70"></image>
           <text class="text-[10px] text-stone-400">上一章</text>
         </view>
-        <view @click.stop="showBatchModal = true" class="flex flex-col items-center gap-1 w-14 active:opacity-50 transition-opacity">
+        <view @click.stop="openChapterTrimModal" class="flex flex-col items-center gap-1 w-14 active:opacity-50 transition-opacity">
           <image :src="icons.batch" mode="aspectFit" style="width: 44rpx; height: 44rpx;" class="opacity-70"></image>
-          <text class="text-[10px] text-stone-400">全书处理</text>
+          <text class="text-[10px] text-stone-400">指定精简</text>
         </view>
         <view @click.stop="switchChapter(activeBook!.activeChapterIndex + 1)" class="flex flex-col items-center gap-1 w-14 active:opacity-50 transition-opacity">
           <image :src="icons.next" mode="aspectFit" style="width: 44rpx; height: 44rpx;" class="opacity-70"></image>
@@ -1931,7 +2091,18 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
 
     <!-- Modals -->
     <ChapterList :show="showChapterList" :chapters="activeBook?.chapters || []" :active-chapter-index="activeBook?.activeChapterIndex || 0" :active-mode-id="activeBook?.activeModeId" :reading-mode="readingMode" :mode-colors="modeColors" @close="showChapterList = false" @select="(idx) => { showChapterList = false; switchChapter(idx) }" />
-    <BatchTaskModal :show="showBatchModal" :book-title="activeBook?.title || ''" :prompts="bookStore.prompts" :reading-mode="readingMode" :mode-colors="modeColors" @close="showBatchModal = false" @confirm="(id) => handleStartProcess(id, true)" />
+    <ChapterTrimModal
+      :show="showChapterTrimModal"
+      :prompts="bookStore.prompts"
+      :chapters="chapterTrimOptions"
+      :balance="pointsBalance"
+      :current-chapter-id="activeChapter?.cloud_id || activeChapter?.id || 0"
+      :preferred-mode-id="userPreferredModeId"
+      :reading-mode="readingMode"
+      @close="showChapterTrimModal = false"
+      @confirm="handleConfirmChapterTrim"
+      @change-prompt="handleChapterTrimPromptChange"
+    />
     <ModeConfigModal :show="showConfigModal" :book-title="activeBook?.title || ''" :chapter-title="activeChapter?.title || ''" :prompts="bookStore.prompts" :trimmed-ids="activeChapter?.trimmed_prompt_ids || []" :reading-mode="readingMode" :mode-colors="modeColors" :user-preferred-mode-id="userPreferredModeId" @close="showConfigModal = false" @start="handleStartProcess" />
     <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" :user-preferred-mode-id="userPreferredModeId" :reading-bg-image="readingBgImage" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="(val) => { pageMode = val; uni.setStorageSync('pageMode', val) }" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" @update:user-preferred-mode-id="updateUserPreference" @select:bgImage="chooseBackgroundImage" @clear:bgImage="clearBackgroundImage" />
     <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :reading-mode="readingMode" :mode-colors="modeColors" @close="handleTerminalClose" />

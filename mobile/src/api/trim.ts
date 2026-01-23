@@ -106,6 +106,8 @@ export function trimStreamByMd5(
   md5: string,
   promptId: number,
   bookMD5: string,
+  bookTitle: string,
+  chapterTitle: string,
   chapterIndex: number,
   onData: (text: string) => void,
   onError: (err: string) => void,
@@ -135,6 +137,8 @@ export function trimStreamByMd5(
         prompt_id: promptId,
         md5,
         book_md5: bookMD5,
+        book_title: bookTitle,
+        chapter_title: chapterTitle,
         chapter_index: chapterIndex
       })
     });

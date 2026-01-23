@@ -76,6 +76,10 @@ func main() {
 			protected.GET("/tasks/progress", deps.TaskHandler.GetTasksProgress)
 			protected.GET("/tasks/active", deps.TaskHandler.GetActiveTasks)
 			protected.GET("/tasks/active/count", deps.TaskHandler.GetActiveTasksCount)
+			protected.POST("/chapters/trim-task", deps.ChapterTrimHandler.SubmitChapterTrimTask)
+			protected.GET("/chapters/trim-status", deps.ChapterTrimHandler.GetChapterTrimStatus)
+			protected.GET("/users/me/points", deps.PointsHandler.GetBalance)
+			protected.GET("/users/me/points/ledger", deps.PointsHandler.GetLedger)
 			protected.POST("/chapters/status", deps.ContentHandler.GetChapterTrimStatus)
 			protected.POST("/contents/status", deps.ContentHandler.GetContentTrimStatus)
 		}

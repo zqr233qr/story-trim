@@ -207,6 +207,7 @@ export const useBookStore = defineStore("book", () => {
               id: Number(book.id),
               cloud_id: cloudBookId,
               title: res.data.book.title,
+              book_md5: res.data.book.book_md5 || book.bookMD5,
               total_chapters: res.data.book.total_chapters,
               created_at: res.data.book.created_at,
               progress: 0,
@@ -233,6 +234,7 @@ export const useBookStore = defineStore("book", () => {
             id: Number(book.id),
             cloud_id: book.cloudId,
             title: book.title,
+            book_md5: book.bookMD5,
             total_chapters: book.totalChapters,
             created_at: new Date(book.createdAt).toISOString(),
             progress: 0,
@@ -431,7 +433,7 @@ export const useBookStore = defineStore("book", () => {
       } else {
         // 云端书籍：根据章节 ID 查询
         const cloudChapterId = chapter.cloud_id || chapterId;
-        const res = await getChapterTrimStatusById(cloudChapterId);
+        const res = await getChapterTrimStatusById(cloudChapterId, activeBook.value.book_md5, chapter.md5);
         if (res.code === 0 && res.data.prompt_ids) {
           chapter.trimmed_prompt_ids = res.data.prompt_ids;
           return res.data.prompt_ids.length > 0;

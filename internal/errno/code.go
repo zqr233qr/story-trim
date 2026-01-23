@@ -29,11 +29,15 @@ var (
 	TrimErrCodeNotFound   = 4001
 	TrimErrCodeInvalid    = 4002
 	TrimErrCodeGenerating = 4003
+	TrimErrCodeDuplicate  = 4004
 
 	TaskErrCode         = 5000
 	TaskErrCodeNotFound = 5001
 	TaskErrCodeRunning  = 5002
 	TaskErrCodeFailed   = 5003
+
+	PointsErrCode          = 6000
+	PointsErrCodeNotEnough = 6001
 )
 
 var (
@@ -56,10 +60,13 @@ var (
 	ErrTrimNotFound   = &Code{Code: TrimErrCodeNotFound, Message: "精简结果不存在"}
 	ErrTrimInvalid    = &Code{Code: TrimErrCodeInvalid, Message: "无效的精简参数"}
 	ErrTrimGenerating = &Code{Code: TrimErrCodeGenerating, Message: "精简进行中"}
+	ErrTrimDuplicate  = &Code{Code: TrimErrCodeDuplicate, Message: "章节已精简或处理中"}
 
 	ErrTaskNotFound = &Code{Code: TaskErrCodeNotFound, Message: "任务不存在"}
 	ErrTaskRunning  = &Code{Code: TaskErrCodeRunning, Message: "任务进行中"}
 	ErrTaskFailed   = &Code{Code: TaskErrCodeFailed, Message: "任务失败"}
+
+	ErrPointsNotEnough = &Code{Code: PointsErrCodeNotEnough, Message: "积分不足"}
 )
 
 var codeMsgMap = map[int]string{
@@ -85,9 +92,11 @@ func init() {
 	register(ErrTrimNotFound)
 	register(ErrTrimInvalid)
 	register(ErrTrimGenerating)
+	register(ErrTrimDuplicate)
 	register(ErrTaskNotFound)
 	register(ErrTaskRunning)
 	register(ErrTaskFailed)
+	register(ErrPointsNotEnough)
 }
 
 func GetMsg(code int) string {

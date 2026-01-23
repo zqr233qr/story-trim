@@ -26,6 +26,18 @@
       "style": {
         "navigationBarTitleText": "调试面板"
       }
+    },
+    {
+      "path": "pages/user/profile",
+      "style": {
+        "navigationBarTitleText": "用户中心"
+      }
+    },
+    {
+      "path": "pages/user/points",
+      "style": {
+        "navigationBarTitleText": "积分明细"
+      }
     }
   ],
   "globalStyle": {

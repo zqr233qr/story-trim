@@ -95,11 +95,15 @@ export function updateReadingProgress(bookId: number, chapterId: number, promptI
  * 根据章节ID查询已精简状态
  * 对应后端: POST /chapters/status
  */
-export function getChapterTrimStatusById(chapterId: number): Promise<Response<{ prompt_ids: number[] }>> {
+export function getChapterTrimStatusById(
+  chapterId: number,
+  bookMD5?: string,
+  chapterMD5?: string
+): Promise<Response<{ prompt_ids: number[] }>> {
   return request({
     url: '/chapters/status',
     method: 'POST',
-    data: { chapter_id: chapterId }
+    data: { chapter_id: chapterId, book_md5: bookMD5, chapter_md5: chapterMD5 }
   });
 }
 

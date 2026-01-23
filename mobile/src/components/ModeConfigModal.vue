@@ -27,11 +27,18 @@ const emit = defineEmits(['close', 'start'])
 
 const selectedId = ref<number | string>('')
 
-watch(() => [props.prompts, props.userPreferredModeId], ([newPs, newPrefId]) => {
-  if (newPs && newPs.length > 0 && !selectedId.value) {
-    // 优先使用用户偏好，否则使用第一个
-    selectedId.value = newPrefId ? newPrefId : newPs[0].id
+// 解析默认精简模式。
+const resolveDefaultPromptId = () => {
+  const preferredId = props.userPreferredModeId
+  if (preferredId && props.prompts.some((p) => p.id === preferredId)) {
+    return preferredId
   }
+  return props.prompts[0]?.id || ''
+}
+
+watch(() => [props.show, props.prompts, props.userPreferredModeId], ([visible]) => {
+  if (!visible) return
+  selectedId.value = resolveDefaultPromptId()
 }, { immediate: true })
 
 const panelBg = computed(() => {

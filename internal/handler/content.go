@@ -19,7 +19,9 @@ func NewContentHandler(svc service.ContentServiceInterface) *ContentHandler {
 
 func (h *ContentHandler) GetChapterTrimStatus(c *gin.Context) {
 	var req struct {
-		ChapterID uint `json:"chapter_id" binding:"required"`
+		ChapterID  uint   `json:"chapter_id" binding:"required"`
+		BookMD5    string `json:"book_md5"`
+		ChapterMD5 string `json:"chapter_md5"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, errno.ParamErrCode)
@@ -27,7 +29,7 @@ func (h *ContentHandler) GetChapterTrimStatus(c *gin.Context) {
 	}
 
 	userID := GetUserID(c)
-	promptIDs, err := h.svc.GetChapterTrimStatus(c.Request.Context(), userID, req.ChapterID)
+	promptIDs, err := h.svc.GetChapterTrimStatus(c.Request.Context(), userID, req.ChapterID, req.BookMD5, req.ChapterMD5)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, errno.InternalServerErrCode)
 		return

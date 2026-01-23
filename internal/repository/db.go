@@ -28,11 +28,15 @@ func NewDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		&model.ChapterContent{},
 		&model.Prompt{},
 		&model.Task{},
+		&model.TaskItem{},
 		&model.TrimResult{},
 		&model.UserProcessedChapter{},
+		&model.UserPoints{},
+		&model.PointsLedger{},
 		&model.ReadingHistory{},
 		&model.User{},
 	)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to auto migrate database: %w", err)
 	}
@@ -55,7 +59,7 @@ func promptSeeder(db *gorm.DB) error {
 			Name:           "轻量去水",
 			Description:    "无损净化，去广告去乱码，保留原汁原味",
 			IsSystem:       true,
-			IsDefault:      true, // Default
+			IsDefault:      false,
 			TargetRatioMin: 0.85, TargetRatioMax: 0.95,
 			BoundaryRatioMin: 0.8, BoundaryRatioMax: 0.98,
 			PromptContent: `### 执行细则 (Mode: Light)
@@ -101,7 +105,7 @@ func promptSeeder(db *gorm.DB) error {
 			Name:           "极简速读",
 			Description:    "只看干货，保留核心冲突，剧情极速推进",
 			IsSystem:       true,
-			IsDefault:      false,
+			IsDefault:      true,
 			TargetRatioMin: 0.35, TargetRatioMax: 0.45,
 			BoundaryRatioMin: 0.3, BoundaryRatioMax: 0.5,
 			PromptContent: `### 执行细则 (Mode: Speed)
@@ -135,7 +139,7 @@ func promptSeeder(db *gorm.DB) error {
     * **禁抒情**：不要写心理活动（如“嘲讽像针扎一样”），只写心理状态（如“他感到痛苦”）。
 
 2.  **情报提取逻辑 (Information Extraction)**
-    * 请将本章压缩为 **3-5 个逻辑紧密的句子**，组成 1-2 个自然段。
+    * 请将本章压缩为 **3-5 个逻辑紧密的句子**，组成合适个数的自然段，尽量不要在同一个自然段写入过多内容。
     * 只保留：**谁（Who） + 做了什么/遭遇了什么（Event） + 结果如何（Result）**。
 
 3.  **示例对照 (Few-Shot)**

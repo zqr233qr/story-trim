@@ -12,17 +12,21 @@ import (
 )
 
 type AuthService struct {
-	repo      repository.AuthRepositoryInterface
-	jwtSecret []byte
+	repo          repository.AuthRepositoryInterface
+	pointsService PointsServiceInterface
+	jwtSecret     []byte
 }
 
-func NewAuthService(repo repository.AuthRepositoryInterface, secret string) *AuthService {
+// NewAuthService 创建认证服务。
+func NewAuthService(repo repository.AuthRepositoryInterface, pointsService PointsServiceInterface, secret string) *AuthService {
 	return &AuthService{
-		repo:      repo,
-		jwtSecret: []byte(secret),
+		repo:          repo,
+		pointsService: pointsService,
+		jwtSecret:     []byte(secret),
 	}
 }
 
+// Register 注册新用户并赠送积分。
 func (s *AuthService) Register(ctx context.Context, username, password string) error {
 	existing, _ := s.repo.GetByUsername(ctx, username)
 	if existing != nil {
@@ -39,7 +43,15 @@ func (s *AuthService) Register(ctx context.Context, username, password string) e
 		PasswordHash: string(hash),
 		CreatedAt:    time.Now(),
 	}
-	return s.repo.Create(ctx, user)
+	if err := s.repo.Create(ctx, user); err != nil {
+		return err
+	}
+
+	if err := s.pointsService.GrantRegisterBonus(ctx, user.ID, 100); err != nil {
+		_ = s.repo.DeleteByID(ctx, user.ID)
+		return err
+	}
+	return nil
 }
 
 func (s *AuthService) Login(ctx context.Context, username, password string) (string, error) {

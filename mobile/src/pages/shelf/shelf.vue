@@ -24,14 +24,6 @@ const alertVisible = ref(false);
 const alertMsg = ref("");
 const alertTitle = ref("提示");
 
-const logoutConfirmVisible = ref(false);
-
-const handleLogoutConfirm = () => {
-  userStore.logout();
-  bookStore.fetchBooks();
-  refreshTasks();
-  logoutConfirmVisible.value = false;
-};
 
 // 登录引导相关
 const showLoginModal = ref(false);
@@ -387,7 +379,7 @@ const handleAvatarClick = () => {
     uni.navigateTo({ url: "/pages/login/login" });
     return;
   }
-  logoutConfirmVisible.value = true;
+  uni.navigateTo({ url: "/pages/user/profile" });
 };
 
 // 打开 SQL 调试面板。
@@ -594,15 +586,6 @@ const displayBooks = computed(() => {
       :content="alertMsg"
     />
 
-    <!-- Simple Alert Modal (Logout Confirm) -->
-    <SimpleAlertModal
-      v-model:visible="logoutConfirmVisible"
-      title="退出登录"
-      content="确定要退出当前账号吗？本地数据将保留，但无法同步云端进度。"
-      confirm-text="退出"
-      show-cancel
-      @confirm="handleLogoutConfirm"
-    />
   </view>
 </template>
 

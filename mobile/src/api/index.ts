@@ -191,6 +191,8 @@ export const api = {
     promptId: number,
     md5: string | undefined,
     bookMD5: string,
+    bookTitle: string,
+    chapterTitle: string,
     chapterIndex: number,
     onData: (chunk: string) => void,
     onError: (err: string) => void,
@@ -213,6 +215,8 @@ export const api = {
           prompt_id: promptId,
           md5: md5 || "",
           book_md5: bookMD5,
+          book_title: bookTitle,
+          chapter_title: chapterTitle,
           chapter_index: chapterIndex,
         }),
       });

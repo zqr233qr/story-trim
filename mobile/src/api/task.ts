@@ -29,6 +29,23 @@ export const taskApi = {
     })
   },
 
+  // 启动指定章节精简任务
+  startChapterTrimTask: (bookId: number, promptId: number, chapterIds: number[]): Promise<Response<{ task_id: string }>> => {
+    return request({
+      url: '/chapters/trim-task',
+      method: 'POST',
+      data: { book_id: bookId, prompt_id: promptId, chapter_ids: chapterIds }
+    })
+  },
+
+  // 获取指定章节精简状态
+  getChapterTrimStatus: (bookId: number, promptId: number): Promise<Response<{ trimmed_chapter_ids: number[]; processing_chapter_ids: number[] }>> => {
+    return request({
+      url: `/chapters/trim-status?book_id=${bookId}&prompt_id=${promptId}`,
+      method: 'GET'
+    })
+  },
+
   // 获取任务进度
   getTaskProgress: (taskId: string): Promise<Response<TaskProgress>> => {
     return request({

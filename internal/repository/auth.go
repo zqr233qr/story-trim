@@ -44,8 +44,14 @@ func (r *AuthRepository) GetByUsername(ctx context.Context, username string) (*m
 	return &u, nil
 }
 
+// DeleteByID 删除用户记录。
+func (r *AuthRepository) DeleteByID(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.User{}).Error
+}
+
 type AuthRepositoryInterface interface {
 	Create(ctx context.Context, user *model.User) error
 	GetByID(ctx context.Context, id uint) (*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
+	DeleteByID(ctx context.Context, id uint) error
 }
