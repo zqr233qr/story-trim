@@ -12,11 +12,14 @@ import TaskIndicator from "@/components/TaskIndicator.vue";
 import TaskProgressSheet from "@/components/TaskProgressSheet.vue";
 import LoginConfirmModal from "@/components/LoginConfirmModal.vue";
 import SimpleAlertModal from "@/components/SimpleAlertModal.vue";
+import AppLayout from "@/components/AppLayout.vue";
 import { useToastStore } from "@/stores/toast";
+import { useLoadingStore } from "@/stores/loading";
 
 const userStore = useUserStore();
 const bookStore = useBookStore();
 const toastStore = useToastStore();
+const loadingStore = useLoadingStore();
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0);
 const renderTrigger = ref(0);
 const currentRules = ref<any[]>([]);
@@ -167,7 +170,7 @@ const onParseSuccess = async () => {
   console.log(`[Logic] Parse finished in ${time}ms`);
 
   bookStore.uploadProgress = 100;
-  uni.hideLoading();
+  loadingStore.hide();
   toastStore.show({ message: "导入成功", type: "success" });
 
   setTimeout(() => {
@@ -177,7 +180,7 @@ const onParseSuccess = async () => {
 };
 
 const onUploadError = (msg: string) => {
-  uni.hideLoading();
+  loadingStore.hide();
   bookStore.uploadProgress = 0;
   alertTitle.value = "导入失败";
   alertMsg.value = msg;
@@ -186,6 +189,7 @@ const onUploadError = (msg: string) => {
 
 const showParsingLoading = () => {
   console.log("[Logic] showParsingLoading called");
+  loadingStore.show();
 };
 
 // 暴露方法给 renderjs
@@ -387,7 +391,8 @@ const displayBooks = computed(() => {
 </script>
 
 <template>
-  <view class="flex flex-col h-screen bg-stone-50">
+  <AppLayout>
+    <view class="flex flex-col h-screen bg-stone-50">
     <scroll-view scroll-y class="flex-1">
       <view
         class="p-6 pb-32"
@@ -409,12 +414,12 @@ const displayBooks = computed(() => {
 
           <view class="flex items-center gap-3">
             <!-- #ifdef APP-PLUS -->
-            <view
-              @click="openDebugPanel"
-              class="px-2 py-1 text-[10px] rounded-lg bg-stone-200 text-stone-600 active:opacity-50"
-            >
-              调试
-            </view>
+<!--            <view-->
+<!--              @click="openDebugPanel"-->
+<!--              class="px-2 py-1 text-[10px] rounded-lg bg-stone-200 text-stone-600 active:opacity-50"-->
+<!--            >-->
+<!--              调试-->
+<!--            </view>-->
             <!-- #endif -->
             <view
               @click="handleAvatarClick"
@@ -454,7 +459,7 @@ const displayBooks = computed(() => {
         ></view>
 
         <!-- Book List Header -->
-        <view class="flex items-end justify-between mb-5 px-1">
+        <view class="flex items-end justify-between mb-3 px-1">
           <view>
             <text
               class="text-xs font-black text-stone-900 uppercase tracking-[0.2em]"
@@ -476,6 +481,7 @@ const displayBooks = computed(() => {
             @sync="handleSyncBook(book)"
             @delete="handleDeleteBook"
             @longpress="handleBookOptions"
+            @more="handleBookOptions"
           />
 
           <view v-if="displayBooks.length === 0" class="py-20 text-center">
@@ -576,7 +582,8 @@ const displayBooks = computed(() => {
       :content="alertMsg"
     />
 
-  </view>
+    </view>
+  </AppLayout>
 </template>
 
 <script module="filePicker" lang="renderjs">

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
-import { onLoad, onUnload, onBackPress } from '@dcloudio/uni-app'
+import { onLoad, onUnload, onBackPress, onShow, onHide } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { useBookStore } from '@/stores/book'
 import { useNetworkStore } from '@/stores/network'
 import { useToastStore } from '@/stores/toast'
+import { useLoadingStore } from '@/stores/loading'
 import { api } from '@/api'
 import { trimStreamByChapterId, trimStreamByMd5 } from '@/api/trim'
 import { taskApi } from '@/api/task'
@@ -17,12 +18,14 @@ import ChapterTrimModal from '@/components/ChapterTrimModal.vue'
 import GenerationTerminal from '@/components/GenerationTerminal.vue'
 import LoginConfirmModal from '@/components/LoginConfirmModal.vue'
 import SimpleAlertModal from '@/components/SimpleAlertModal.vue'
+import AppLayout from '@/components/AppLayout.vue'
 import Renderjs from './components/Renderjs.vue'
 
 const userStore = useUserStore()
 const bookStore = useBookStore()
 const networkStore = useNetworkStore()
 const toastStore = useToastStore()
+const loadingStore = useLoadingStore()
 const instance = getCurrentInstance()
 
 // 登录引导相关
@@ -148,8 +151,6 @@ const actualDisplayModeId = ref(0)
 const showTerminal = ref(false)
 const generatingTitle = ref('')
 const streamingContent = ref('')
-const toastMsg = ref('')
-const showToast = ref(false)
 
 // 已读章节索引缓存。
 const readChapterIndexes = ref<number[]>([])
@@ -328,6 +329,7 @@ const stopTTS = () => {
 const recordedChapterId = ref(0) // 本章节进度记录锁
 let progressTimer: any = null
 let menuAutoHideTimer: any = null // 菜单栏自动隐藏定时器
+let volumeKeyListening = false // 音量键监听状态
 
 // 图标常量 (本地静态文件)
 const icons = {
@@ -406,7 +408,7 @@ const markChapterRead = (index: number) => {
 // 显示模式切换提示
 const showModeSwitchTip = (chapter: any, promptId: number) => {
   if (!chapter || !isMagicActive.value) {
-    showNotification('已切换为原文')
+    toastStore.show({ message: '已切换为原文', type: 'info', duration: 1200 })
     return
   }
   
@@ -418,9 +420,9 @@ const showModeSwitchTip = (chapter: any, promptId: number) => {
   
   if (trimmed) {
     const ratio = calculateTrimRatio(original, trimmed)
-    showNotification(`已切换为「${prompt.name}」，精简 ${ratio}%`)
+    toastStore.show({ message: `已切换为「${prompt.name}」，精简 ${ratio}%`, type: 'info', duration: 1200 })
   } else {
-    showNotification(`已切换为「${prompt.name}」`)
+    toastStore.show({ message: `已切换为「${prompt.name}」`, type: 'info', duration: 1200 })
   }
 }
 
@@ -576,6 +578,22 @@ const mapRenderPages = (pages: any[]) => {
   )
 }
 
+// 基于分页结果生成 TTS 段落数组，确保索引一致。
+const buildTtsParagraphsFromPages = (pages: PageLine[][]) => {
+  const grouped = new Map<number, string[]>()
+  pages.forEach((page) => {
+    page.forEach((line) => {
+      if (!grouped.has(line.paraIndex)) {
+        grouped.set(line.paraIndex, [])
+      }
+      grouped.get(line.paraIndex)!.push(line.text)
+    })
+  })
+  return Array.from(grouped.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map((item) => item[1].join(''))
+}
+
 const measureLineHeight = () => {
   const query = uni.createSelectorQuery().in(instance)
   query.select('.line-height-probe').boundingClientRect()
@@ -660,6 +678,7 @@ const updateContainerContent = ({ params, chapterPageList }: any) => {
       })
     })
     ttsPageIndexMap.value = pageMap
+    currentTextLines.value = buildTtsParagraphsFromPages(mappedPages)
 
     const entry: PaginationCacheEntry = {
       pages: mappedPages,
@@ -858,6 +877,7 @@ const buildVirtualWindow = async (chapterIndex: number, targetPage: 'first' | 'l
         })
       })
       ttsPageIndexMap.value = pageMap
+      currentTextLines.value = buildTtsParagraphsFromPages(cachedEntry.pages)
       isSwiperReady.value = true
     }
 
@@ -872,7 +892,7 @@ const buildVirtualWindow = async (chapterIndex: number, targetPage: 'first' | 'l
 
   const ttsLines = mode === 'line'
     ? currentTextLines.value
-    : text.map(line => line.replace(/^[ \t\u3000\xA0]+/, ''))
+    : currentTextLines.value
 
   if (mode === 'page') {
     currentTextLines.value = ttsLines
@@ -934,6 +954,51 @@ const handlePageNavigation = async (direction: 'prev' | 'next') => {
   } else {
     showNotification('已至首页')
   }
+}
+
+// 处理音量上键翻页。
+const handleVolumeUp = () => {
+  if (pageMode.value !== 'click') return
+  handlePageNavigation('prev')
+}
+
+// 处理音量下键翻页。
+const handleVolumeDown = () => {
+  if (pageMode.value !== 'click') return
+  handlePageNavigation('next')
+}
+
+// 启用音量键翻页监听。
+const enableVolumeKeyPaging = () => {
+  // #ifdef APP-PLUS
+  if (!plus?.key || volumeKeyListening) return
+  plus.key.setVolumeButtonEnabled(false)
+  plus.key.addEventListener('volumeupbutton', handleVolumeUp)
+  plus.key.addEventListener('volumedownbutton', handleVolumeDown)
+  volumeKeyListening = true
+  // #endif
+}
+
+// 停用音量键翻页监听并恢复系统音量键。
+const disableVolumeKeyPaging = () => {
+  // #ifdef APP-PLUS
+  if (!plus?.key) return
+  if (volumeKeyListening) {
+    plus.key.removeEventListener('volumeupbutton', handleVolumeUp)
+    plus.key.removeEventListener('volumedownbutton', handleVolumeDown)
+    volumeKeyListening = false
+  }
+  plus.key.setVolumeButtonEnabled(true)
+  // #endif
+}
+
+// 同步音量键翻页状态（仅点击翻页模式启用）。
+const syncVolumeKeyPaging = () => {
+  if (pageMode.value === 'click') {
+    enableVolumeKeyPaging()
+    return
+  }
+  disableVolumeKeyPaging()
 }
 
 const rebuildVirtualWindow = async (chapterIdx: number, targetPage: 'first' | 'last' | 'keep' = 'first') => {
@@ -1005,6 +1070,9 @@ watch(readingMode, (val) => {
 }, { immediate: true })
 
 watch([fontSize, pageMode, actualDisplayModeId], () => {
+  // #ifdef APP-PLUS
+  syncVolumeKeyPaging()
+  // #endif
   if (!activeBook.value) return
   if (isPaginating.value) return
   nextTick(() => measureLineHeight())
@@ -1021,6 +1089,18 @@ watch(hideStatusBar, (val) => {
   if (val) {
     menuVisible.value = false
   }
+  // #endif
+})
+
+onShow(() => {
+  // #ifdef APP-PLUS
+  syncVolumeKeyPaging()
+  // #endif
+})
+
+onHide(() => {
+  // #ifdef APP-PLUS
+  disableVolumeKeyPaging()
   // #endif
 })
 
@@ -1048,8 +1128,9 @@ onUnload(() => {
   clearTimeout(progressTimer)
   saveProgress() // 保存进度
   if (ttsPlayer.value) ttsPlayer.value.stop() // 停止听书
-  
+
   // #ifdef APP-PLUS
+  disableVolumeKeyPaging()
   // 退出时恢复状态栏显示
   console.log('[StatusBar] Restore status bar')
   plus.navigator.setFullscreen(false)
@@ -1082,12 +1163,17 @@ onBackPress(() => {
 })
 
 const init = async () => {
-  uni.showLoading({ title: '加载中...' })
+  const shouldShowLoading = networkStore.serverReachable
+  if (shouldShowLoading) {
+    loadingStore.show()
+  }
   await Promise.all([
     bookStore.fetchBookDetail(bookId.value),
     bookStore.fetchPrompts()
   ])
-  uni.hideLoading()
+  if (shouldShowLoading) {
+    loadingStore.hide()
+  }
 
   // 0. 初始化默认偏好 (如果未设置)
   if (userPreferredModeId.value === 0 && bookStore.prompts.length > 0) {
@@ -1393,9 +1479,7 @@ const handleBack = () => {
 }
 
 const showNotification = (msg: string) => {
-  toastMsg.value = msg
-  showToast.value = true
-  setTimeout(() => { showToast.value = false }, 2000)
+  toastStore.show({ message: msg, type: 'info' })
 }
 
 // 加载积分余额。
@@ -1950,8 +2034,9 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
 </script>
 
 <template>
-  <view :style="{ backgroundColor: modeColors[readingMode].bg, color: modeColors[readingMode].text, backgroundImage: readingBgImage ? `url(${readingBgImage})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }"
-        class="h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-300">
+  <AppLayout>
+    <view :style="{ backgroundColor: modeColors[readingMode].bg, color: modeColors[readingMode].text, backgroundImage: readingBgImage ? `url(${readingBgImage})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }"
+          class="h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-300">
     <view v-if="readingBgImage" class="absolute inset-0 z-0 pointer-events-none" :style="{ backgroundColor: bgOverlayColor }"></view>
 
     <!-- Top Bar -->
@@ -2193,8 +2278,8 @@ const switchChapter = async (index: number, targetPosition: 'start' | 'end' = 's
     <SettingsPanel :show="showSettings" :modes="bookStore.prompts.map(p => p.id.toString())" :prompts="bookStore.prompts" :active-mode="activeBook?.activeModeId || ''" :font-size="fontSize" :reading-mode="readingMode" :mode-colors="modeColors" :page-mode="pageMode" :hide-status-bar="hideStatusBar" :user-preferred-mode-id="userPreferredModeId" :reading-bg-image="readingBgImage" @close="showSettings = false" @update:active-mode="switchToMode" @update:font-size="fontSize = $event" @update:reading-mode="(val) => { readingMode = val; uni.setStorageSync('readingMode', val) }" @update:page-mode="(val) => { pageMode = val; uni.setStorageSync('pageMode', val) }" @update:hide-status-bar="(val) => { hideStatusBar = val; uni.setStorageSync('hideStatusBar', val ? 'true' : 'false') }" @update:user-preferred-mode-id="updateUserPreference" @select:bgImage="chooseBackgroundImage" @clear:bgImage="clearBackgroundImage" />
     <GenerationTerminal :show="showTerminal" :content="streamingContent" :title="generatingTitle" :reading-mode="readingMode" :mode-colors="modeColors" @close="handleTerminalClose" />
     <LoginConfirmModal v-model:visible="showLoginModal" :content="loginTipContent" :reading-mode="readingMode" @confirm="handleLoginConfirm" />
-    <view v-if="showToast" class="fixed bottom-40 left-1/2 -translate-x-1/2 bg-stone-900 text-white px-4 py-2 rounded-full text-xs z-[110] shadow-2xl">{{ toastMsg }}</view>
-  </view>
+    </view>
+  </AppLayout>
 </template>
 
 <style>

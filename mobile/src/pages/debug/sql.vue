@@ -2,6 +2,7 @@
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import { db } from "@/utils/sqlite";
+import AppLayout from "@/components/AppLayout.vue";
 
 const sqlText = ref("SELECT * FROM books LIMIT 20");
 const resultText = ref("");
@@ -43,7 +44,8 @@ onShow(async () => {
 </script>
 
 <template>
-  <view class="min-h-screen bg-stone-50 p-4">
+  <AppLayout>
+    <view class="min-h-screen bg-stone-50 p-4">
     <view class="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
       <text class="text-sm font-bold text-stone-800">SQL 调试面板</text>
       <textarea
@@ -66,5 +68,6 @@ onShow(async () => {
         <text class="text-xs text-stone-700 whitespace-pre-wrap">{{ resultText }}</text>
       </scroll-view>
     </view>
-  </view>
+    </view>
+  </AppLayout>
 </template>

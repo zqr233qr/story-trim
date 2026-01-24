@@ -6,7 +6,7 @@ const props = defineProps<{
   book: Book & { full_trim_status?: string; full_trim_progress?: number }
   deleting?: boolean
 }>()
-const emit = defineEmits(['click', 'sync', 'delete', 'longpress'])
+const emit = defineEmits(['click', 'sync', 'delete', 'longpress', 'more'])
 
 const syncLabels = computed(() => {
   if (props.book.sync_state === 2) return ['云端']
@@ -64,7 +64,15 @@ const onCoverError = () => {
       </view>
     </view>
 
-    <view class="flex-1 min-w-0 flex flex-col justify-between py-1">
+    <view class="flex-1 min-w-0 flex flex-col justify-between py-1 relative">
+      <view class="absolute bottom-0 right-0">
+        <view
+          @click.stop="emit('more', book)"
+          class="w-7 h-7 rounded-full bg-white/90 border border-stone-100 text-stone-400 flex items-center justify-center text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-95 transition-transform"
+        >
+          ⋯
+        </view>
+      </view>
       <!-- Top Info -->
       <view>
         <text class="font-bold text-stone-900 truncate text-lg tracking-tight block">{{ book.title }}</text>

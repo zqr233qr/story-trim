@@ -4,6 +4,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { pointsApi } from "@/api/points";
 import { useUserStore } from "@/stores/user";
 import { useToastStore } from "@/stores/toast";
+import AppLayout from "@/components/AppLayout.vue";
 
 // 积分流水展示项。
 interface LedgerItem {
@@ -110,7 +111,8 @@ const recordList = computed(() => records.value);
 </script>
 
 <template>
-  <view class="min-h-screen bg-stone-50 p-6">
+  <AppLayout>
+    <view class="min-h-screen bg-stone-50 p-6">
     <view class="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
       <text class="text-xs text-stone-400 font-semibold tracking-[0.2em]">积分余额</text>
       <text class="block text-3xl font-black text-stone-900 mt-2">{{ pointsBalance }}</text>
@@ -135,5 +137,7 @@ const recordList = computed(() => records.value);
         </view>
       </view>
     </view>
-  </view>
+    </view>
+  </AppLayout>
 </template>
+

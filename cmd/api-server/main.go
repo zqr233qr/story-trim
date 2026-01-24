@@ -45,7 +45,7 @@ func main() {
 	commonHandler := handler.NewCommonHandler(cfg)
 
 	r := gin.New()
-	r.Use(middleware.RequestLogger())
+	//r.Use(middleware.RequestLogger())
 	r.Use(gin.Recovery())
 
 	api := r.Group("/api/v1")

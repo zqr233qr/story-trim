@@ -62,7 +62,24 @@ type MemoryConfig struct {
 }
 
 type DatabaseConfig struct {
-	Source string `mapstructure:"source"`
+	Type   string      `mapstructure:"type"`
+	Source string      `mapstructure:"source"`
+	MySQL  MySQLConfig `mapstructure:"mysql"`
+}
+
+// MySQLConfig 定义 MySQL 连接配置。
+type MySQLConfig struct {
+	DSN       string `mapstructure:"dsn"`
+	Host      string `mapstructure:"host"`
+	Port      int    `mapstructure:"port"`
+	User      string `mapstructure:"user"`
+	Password  string `mapstructure:"password"`
+	DBName    string `mapstructure:"dbname"`
+	Charset   string `mapstructure:"charset"`
+	ParseTime *bool  `mapstructure:"parse_time"`
+	Loc       string `mapstructure:"loc"`
+	MaxIdle   int    `mapstructure:"max_idle"`
+	MaxOpen   int    `mapstructure:"max_open"`
 }
 
 type LLM struct {

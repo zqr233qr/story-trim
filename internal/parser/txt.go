@@ -43,6 +43,16 @@ var DefaultRules = []Rule{
 		Weight:  90,
 	},
 	{
+		Name:    "Padded_Chinese",
+		Pattern: `(?m)^\d{1,6}[章回节][ \t\f]?.*`, // 0001章 标题 / 0001章标题
+		Weight:  85,
+	},
+	{
+		Name:    "Merged_Chinese",
+		Pattern: `(?m)^(?:第)?[0-9零一二三四五六七八九十百千万]+(?:[章回节][ \t\f]?|[ \t\f]+).*`, // 支持 第一章 / 0001章 / 0001 标题
+		Weight:  90,
+	},
+	{
 		Name:    "Strict_English",
 		Pattern: `(?m)^Chapter\s+\d+.*`,
 		Weight:  80,

@@ -7,11 +7,11 @@ const toastStore = useToastStore();
 const typeClasses = computed(() => {
   switch (toastStore.type) {
     case "success":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      return "bg-emerald-50/80 text-emerald-700";
     case "error":
-      return "bg-rose-50 text-rose-700 border-rose-200";
+      return "bg-rose-50/80 text-rose-700";
     default:
-      return "bg-stone-50 text-stone-700 border-stone-200";
+      return "bg-stone-50/80 text-stone-700";
   }
 });
 </script>
@@ -23,7 +23,7 @@ const typeClasses = computed(() => {
   >
     <view
       :class="typeClasses"
-      class="px-4 py-2 rounded-xl border shadow-lg text-sm font-semibold transition-opacity duration-200 animate-fade"
+      class="px-4 py-1.5 rounded-full shadow-[0_6px_16px_rgba(0,0,0,0.08)] text-xs font-medium transition-opacity duration-200 animate-fade backdrop-blur"
     >
       {{ toastStore.message }}
     </view>

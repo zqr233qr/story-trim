@@ -2,6 +2,8 @@
 FROM golang:1.23-alpine AS builder
 WORKDIR /app
 
+ENV GOTOOLCHAIN=local
+
 # Install build dependencies (CGO requires gcc)
 RUN apk add --no-cache build-base
 

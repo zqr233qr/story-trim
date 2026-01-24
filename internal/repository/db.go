@@ -3,10 +3,13 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/zqr233qr/story-trim/internal/config"
 	"github.com/zqr233qr/story-trim/internal/model"
 	"github.com/zqr233qr/story-trim/pkg/logger"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -14,11 +17,44 @@ import (
 )
 
 func NewDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(cfg.Source), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-	})
+	dialect := strings.ToLower(cfg.Type)
+	if dialect == "" {
+		dialect = "sqlite"
+	}
+
+	var (
+		db  *gorm.DB
+		err error
+	)
+
+	switch dialect {
+	case "mysql":
+		dsn, buildErr := buildMySQLDSN(cfg.MySQL)
+		if buildErr != nil {
+			return nil, buildErr
+		}
+		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+			Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+		})
+	default:
+		db, err = gorm.Open(sqlite.Open(cfg.Source), &gorm.Config{
+			Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+		})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
+	}
+
+	if dialect == "mysql" {
+		sqlDB, err := db.DB()
+		if err == nil {
+			if cfg.MySQL.MaxIdle > 0 {
+				sqlDB.SetMaxIdleConns(cfg.MySQL.MaxIdle)
+			}
+			if cfg.MySQL.MaxOpen > 0 {
+				sqlDB.SetMaxOpenConns(cfg.MySQL.MaxOpen)
+			}
+		}
 	}
 
 	// 自动迁移表结构
@@ -49,6 +85,56 @@ func NewDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 
 	logger.Info().Msg("Database connected and migrated successfully")
 	return db, nil
+}
+
+// buildMySQLDSN 构造 MySQL 连接字符串。
+func buildMySQLDSN(cfg config.MySQLConfig) (string, error) {
+	if cfg.DSN != "" {
+		return cfg.DSN, nil
+	}
+
+	host := cfg.Host
+	if host == "" {
+		return "", fmt.Errorf("mysql host is required")
+	}
+	user := cfg.User
+	if user == "" {
+		return "", fmt.Errorf("mysql user is required")
+	}
+	name := cfg.DBName
+	if name == "" {
+		return "", fmt.Errorf("mysql dbname is required")
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = 3306
+	}
+	charset := cfg.Charset
+	if charset == "" {
+		charset = "utf8mb4"
+	}
+	loc := cfg.Loc
+	if loc == "" {
+		loc = "Local"
+	}
+	parseTime := true
+	if cfg.ParseTime != nil {
+		parseTime = *cfg.ParseTime
+	}
+
+	escapedLoc := url.QueryEscape(loc)
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s",
+		user,
+		cfg.Password,
+		host,
+		port,
+		name,
+		charset,
+		parseTime,
+		escapedLoc,
+	)
+	return dsn, nil
 }
 
 // promptSeeder 初始化数据库中的提示数据

@@ -2,8 +2,8 @@
     "name" : "StoryTrim",
     "appid" : "__UNI__AE0A47B",
     "description" : "AI 赋能的本地阅读器",
-    "versionName" : "1.0.0",
-    "versionCode" : "100",
+    "versionName" : "1.0.1",
+    "versionCode" : 101,
     "transformPx" : false,
     /* 5+App特有相关 */
     "app-plus" : {
@@ -50,7 +50,9 @@
                 "UIBackgroundModes" : [ "audio" ]
             },
             /* SDK配置 */
-            "sdkConfigs" : {},
+            "sdkConfigs" : {
+                "oauth" : {}
+            },
             "icons" : {
                 "android" : {
                     "hdpi" : "unpackage/res/icons/72x72.png",
@@ -87,14 +89,14 @@
         "nativePlugins" : {
             "nrb-tts-plugin" : {
                 "__plugin_info__" : {
-                    "name" : "语音合成TTS - [试用版，仅用于自定义调试基座]",
+                    "name" : "语音合成TTS",
                     "description" : "原生语音合成TTS",
                     "platforms" : "Android,iOS",
                     "url" : "https://ext.dcloud.net.cn/plugin?id=4133",
-                    "android_package_name" : "",
+                    "android_package_name" : "uni.app.UNIAE0A47B",
                     "ios_bundle_id" : "",
                     "isCloud" : true,
-                    "bought" : 0,
+                    "bought" : 1,
                     "pid" : "4133",
                     "parameters" : {}
                 }

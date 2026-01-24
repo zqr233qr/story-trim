@@ -1,16 +1,21 @@
 <template>
-  <view class="content">
+  <AppLayout>
+    <view class="content">
+
     <image class="logo" src="/static/logo.png" />
     <view class="text-area">
       <text class="title">{{ title }}</text>
     </view>
-  </view>
+    </view>
+  </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import AppLayout from '@/components/AppLayout.vue'
 const title = ref('Hello')
 </script>
+
 
 <style>
 .content {

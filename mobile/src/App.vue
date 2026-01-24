@@ -2,7 +2,6 @@
 import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import { useBookStore } from "./stores/book";
 import { useNetworkStore } from "./stores/network";
-import GlobalToast from "./components/GlobalToast.vue";
 
 
 
@@ -28,10 +27,6 @@ onHide(() => {
 });
 
 </script>
-
-<template>
-  <GlobalToast />
-</template>
 
 <style>
 @import "@/style/tailwind.css";

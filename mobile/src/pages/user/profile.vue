@@ -5,6 +5,7 @@ import { useUserStore } from "@/stores/user";
 import { useBookStore } from "@/stores/book";
 import { pointsApi } from "@/api/points";
 import SimpleAlertModal from "@/components/SimpleAlertModal.vue";
+import AppLayout from "@/components/AppLayout.vue";
 import { useToastStore } from "@/stores/toast";
 
 const userStore = useUserStore();
@@ -61,7 +62,8 @@ const handleLogin = () => {
 </script>
 
 <template>
-  <view class="min-h-screen bg-stone-50 p-6">
+  <AppLayout>
+    <view class="min-h-screen bg-stone-50 p-6">
     <view class="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
       <text class="text-xs text-stone-400 font-semibold tracking-[0.2em]">账户信息</text>
       <view class="mt-4">
@@ -106,6 +108,7 @@ const handleLogin = () => {
        @update:visible="showLogoutModal = $event"
        @confirm="confirmLogout"
      />
-   </view>
- </template>
+    </view>
+  </AppLayout>
+</template>
 

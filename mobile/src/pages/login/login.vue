@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { api } from '@/api'
+import AppLayout from '@/components/AppLayout.vue'
 
 const userStore = useUserStore()
 const statusBarHeight = ref(uni.getSystemInfoSync().statusBarHeight || 0)
@@ -77,7 +78,8 @@ const skipLogin = () => {
 </script>
 
 <template>
-  <view class="min-h-screen bg-stone-50 flex flex-col justify-center items-center p-6" :style="{ paddingTop: statusBarHeight + 'px' }">
+  <AppLayout>
+    <view class="min-h-screen bg-stone-50 flex flex-col justify-center items-center p-6" :style="{ paddingTop: statusBarHeight + 'px' }">
     <view class="w-full max-w-sm">
       <!-- Logo Area -->
       <view class="text-center mb-12">
@@ -116,5 +118,6 @@ const skipLogin = () => {
         </text>
       </view>
     </view>
-  </view>
+    </view>
+  </AppLayout>
 </template>

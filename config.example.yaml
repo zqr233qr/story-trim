@@ -35,7 +35,20 @@ llm:
 
 # 数据库配置
 database:
-  source: "story-trim.db" # 数据库文件路径 (对于SQLite)
+  type: "sqlite" # sqlite 或 mysql
+  source: "story-trim.db" # SQLite 文件路径
+  mysql:
+    dsn: "" # 可选：完整 DSN（优先）
+    host: "127.0.0.1"
+    port: 3306
+    user: "storytrim"
+    password: "storytrim"
+    dbname: "storytrim"
+    charset: "utf8mb4"
+    parse_time: true
+    loc: "Local"
+    max_idle: 10
+    max_open: 50
 
 # 应用内存/行为配置
 memory:
@@ -62,6 +75,9 @@ parser:
     - name: "Normal_Chinese"
       pattern: "(?:^|\\n)第[0-9零一二三四五六七八九十百千万]+[章回节].*"
       weight: 90
+    - name: "Merged_Chinese"
+      pattern: "(?:^|\\n)(?:第)?[0-9零一二三四五六七八九十百千万]+(?:[章回节][ \\t\\f]?|[ \\t\\f]+).*"
+      weight: 95
     - name: "Strict_English"
       pattern: "(?:^|\\n)Chapter\\s+\\d+.*"
       weight: 80
