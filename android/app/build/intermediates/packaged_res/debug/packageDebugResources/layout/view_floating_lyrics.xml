@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root_container"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <!-- 歌词文本 -->
+    <TextView
+        android:id="@+id/lyrics_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.2"
+        android:maxLines="3"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <!-- 控制栏（未锁定时显示） -->
+    <LinearLayout
+        android:id="@+id/control_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <!-- 减小字体 -->
+        <ImageButton
+            android:id="@+id/btn_decrease"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="减小字体"
+            android:src="@drawable/ic_text_decrease" />
+
+        <!-- 增大字体 -->
+        <ImageButton
+            android:id="@+id/btn_increase"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="增大字体"
+            android:src="@drawable/ic_text_increase" />
+
+        <!-- 颜色选择 -->
+        <ImageButton
+            android:id="@+id/btn_color"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="选择颜色"
+            android:src="@drawable/ic_color" />
+
+        <!-- 锁定/解锁 -->
+        <ImageButton
+            android:id="@+id/btn_lock"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="锁定"
+            android:src="@drawable/ic_lock" />
+
+        <!-- 播放/暂停 -->
+        <ImageButton
+            android:id="@+id/btn_play_pause"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginHorizontal="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="播放/暂停"
+            android:src="@drawable/ic_play" />
+
+        <!-- 关闭 -->
+        <ImageButton
+            android:id="@+id/btn_close"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="关闭"
+            android:src="@drawable/ic_close" />
+
+    </LinearLayout>
+
+    <!-- 颜色选择面板（默认隐藏） -->
+    <LinearLayout
+        android:id="@+id/color_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <View
+            android:id="@+id/color_white"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_color_selector" />
+
+        <View
+            android:id="@+id/color_cyan"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_color_selector" />
+
+        <View
+            android:id="@+id/color_green"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_color_selector" />
+
+        <View
+            android:id="@+id/color_yellow"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_color_selector" />
+
+        <View
+            android:id="@+id/color_pink"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_color_selector" />
+
+        <View
+            android:id="@+id/color_orange"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_color_selector" />
+
+    </LinearLayout>
+
+</LinearLayout>

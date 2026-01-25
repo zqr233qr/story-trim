@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Stone Palette (from Tailwind) -->
+    <color name="stone_50">#FAFAF9</color>
+    <color name="stone_100">#F5F5F4</color>
+    <color name="stone_200">#E7E5E4</color>
+    <color name="stone_300">#D6D3D1</color>
+    <color name="stone_400">#A8A29E</color>
+    <color name="stone_500">#78716C</color>
+    <color name="stone_600">#57534E</color>
+    <color name="stone_700">#44403C</color>
+    <color name="stone_800">#1C1917</color>
+    <color name="stone_900">#0C0A09</color>
+
+    <color name="teal_500">#14b8a6</color>
+    <color name="teal_600">#0d9488</color>
+</resources>

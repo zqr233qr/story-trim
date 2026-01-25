@@ -1,0 +1,106 @@
+[
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/dialog_tts_control_panel.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/dialog_tts_control_panel.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/activity_register.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/activity_register.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_mode_config.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_mode_config.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/view_floating_lyrics.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/view_floating_lyrics.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/dialog_reader_settings.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/dialog_reader_settings.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/activity_shelf.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/activity_shelf.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_content_text.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_content_text.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/dialog_ai_trim_config.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/dialog_ai_trim_config.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/dialog_mode_config.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/dialog_mode_config.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_chapter_trim.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_chapter_trim.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/activity_debug_sql.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/activity_debug_sql.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_ai_trim_option.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_ai_trim_option.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_content_title.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_content_title.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_book_card.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_book_card.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/activity_main.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/fragment_chapter_trim.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/fragment_chapter_trim.xml"
+    },
+    {
+        "merged": "com.storytrim.app-mergeDebugResources-53:/layout/item_ai_trim_option.xml",
+        "source": "com.storytrim.app-main-56:/layout/item_ai_trim_option.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/activity_login.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/activity_login.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/widget_lyrics.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/widget_lyrics.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_mode_grid.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_mode_grid.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/dialog_generation_terminal.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/dialog_generation_terminal.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/item_chapter.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/item_chapter.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/fragment_chapter_list.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/fragment_chapter_list.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/fragment_generation_terminal.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/fragment_generation_terminal.xml"
+    },
+    {
+        "merged": "com.storytrim.app-mergeDebugResources-53:/layout/dialog_ai_trim_config.xml",
+        "source": "com.storytrim.app-main-56:/layout/dialog_ai_trim_config.xml"
+    },
+    {
+        "merged": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-mergeDebugResources-53:/layout/activity_reader.xml",
+        "source": "/Users/zqr/.gradle/daemon/8.7/com.storytrim.app-main-56:/layout/activity_reader.xml"
+    }
+]

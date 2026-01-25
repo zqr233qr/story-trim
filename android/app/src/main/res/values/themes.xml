@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.StoryTrim" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@color/stone_900</item>
+        <item name="colorPrimaryVariant">@color/stone_700</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/teal_500</item>
+        <item name="colorSecondaryVariant">@color/teal_600</item>
+        <item name="colorOnSecondary">@color/white</item>
+        
+        <!-- Status Bar Configuration -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    
+    <!-- Specific theme for activities requiring NoActionBar (redundant with parent, but kept for clarity) -->
+    <style name="Theme.StoryTrim.NoActionBar" parent="Theme.StoryTrim">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>

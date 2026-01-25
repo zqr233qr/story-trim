@@ -27,11 +27,13 @@ tmp/
 *.tmp
 *_trimmed.txt
 test_novel.txt
+android/app/build
 
 # db
 
 storytrim.db
 
+legado
 
 
 # Uploads

@@ -1,0 +1,43 @@
+// Top-level build file where you can add configuration options common to all sub-projects/apps.
+plugins {
+    id 'com.android.application' version '8.6.0' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+    id 'com.google.devtools.ksp' version '1.9.22-1.0.17' apply false
+    id 'com.google.dagger.hilt.android' version '2.51' apply false
+}
+
+ext {
+    minSdk = 24
+    targetSdk = 34
+    compileSdk = 34
+    versionCode = 1
+    versionName = "1.0"
+
+    // Core libs
+    coreKtx = '1.12.0'
+    appcompat = '1.6.1'
+    material = '1.11.0'
+    constraintlayout = '2.1.4'
+    lifecycle = '2.7.0'
+    navigation = '2.7.7'
+    activity = '1.8.2'
+
+    // Network
+    retrofit = '2.9.0'
+    okhttp = '4.12.0'
+    gson = '2.10.1'
+
+    // Database
+    room = '2.6.1'
+
+    // DI
+    hilt = '2.51'
+
+    // Coroutines
+    coroutines = '1.7.3'
+
+    // Testing
+    junit = '4.13.2'
+    espresso = '3.5.1'
+    androidJunit = '1.1.5'
+}

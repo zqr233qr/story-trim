@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="stone_100">#F5F5F4</color>
+    <color name="stone_200">#E7E5E4</color>
+    <color name="stone_300">#D6D3D1</color>
+    <color name="stone_400">#A8A29E</color>
+    <color name="stone_50">#FAFAF9</color>
+    <color name="stone_500">#78716C</color>
+    <color name="stone_600">#57534E</color>
+    <color name="stone_700">#44403C</color>
+    <color name="stone_800">#1C1917</color>
+    <color name="stone_900">#0C0A09</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_500">#14b8a6</color>
+    <color name="teal_600">#0d9488</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="white">#FFFFFFFF</color>
+    <string name="app_name">StoryTrim</string>
+    <string name="floating_lyrics_channel_desc">悬浮歌词服务</string>
+    <string name="floating_lyrics_channel_name">悬浮歌词</string>
+    <string name="floating_lyrics_title">桌面歌词</string>
+    <string name="tts_notification_action_next">下一章</string>
+    <string name="tts_notification_action_pause">暂停</string>
+    <string name="tts_notification_action_play">播放</string>
+    <string name="tts_notification_action_prev">上一章</string>
+    <string name="tts_notification_action_stop">停止</string>
+    <string name="tts_notification_channel_desc">用于后台听书播放控制</string>
+    <string name="tts_notification_channel_name">听书服务</string>
+    <string name="tts_notification_content">正在播放：%s</string>
+    <string name="tts_notification_title">正在听书</string>
+    <style name="Theme.StoryTrim" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        
+        <item name="colorPrimary">@color/stone_900</item>
+        <item name="colorPrimaryVariant">@color/stone_700</item>
+        <item name="colorOnPrimary">@color/white</item>
+        
+        <item name="colorSecondary">@color/teal_500</item>
+        <item name="colorSecondaryVariant">@color/teal_600</item>
+        <item name="colorOnSecondary">@color/white</item>
+        
+        
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <style name="Theme.StoryTrim.NoActionBar" parent="Theme.StoryTrim">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>

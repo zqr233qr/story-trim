@@ -1,0 +1,304 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#FAF9F6"
+    android:paddingBottom="24dp">
+
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:background="@drawable/scrollbar_thumb"
+        android:backgroundTint="#D6D3D1"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="20dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="阅读设置"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="@color/stone_900"
+        android:paddingHorizontal="24dp"
+        android:paddingBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="字号"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="@color/stone_600"
+        android:paddingHorizontal="24dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="20dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:text="A"
+            android:textSize="13sp"
+            android:textColor="@color/stone_600" />
+
+        <SeekBar
+            android:id="@+id/seekFontSize"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="12dp"
+            android:max="12"
+            android:progress="4"
+            android:progressTint="@color/teal_600"
+            android:thumbTint="@color/teal_600" />
+
+        <TextView
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:text="A"
+            android:textSize="18sp"
+            android:textColor="@color/stone_800" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="翻页模式"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="@color/stone_600"
+        android:paddingHorizontal="24dp" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/togglePageMode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="20dp"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPageScroll"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="滚动"
+            android:textColor="@color/segmented_button_text"
+            app:backgroundTint="@color/segmented_button_bg"
+            app:strokeColor="@color/segmented_button_stroke"
+            app:strokeWidth="1dp"
+            app:cornerRadius="16dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="6dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPageClick"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="点击"
+            android:textColor="@color/segmented_button_text"
+            app:backgroundTint="@color/segmented_button_bg"
+            app:strokeColor="@color/segmented_button_stroke"
+            app:strokeWidth="1dp"
+            app:cornerRadius="16dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="6dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="阅读模式"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="@color/stone_600"
+        android:paddingHorizontal="24dp" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/toggleReadingMode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="20dp"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReadingLight"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="日间"
+            android:textColor="@color/segmented_button_text"
+            app:backgroundTint="@color/segmented_button_bg"
+            app:strokeColor="@color/segmented_button_stroke"
+            app:strokeWidth="1dp"
+            app:cornerRadius="16dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="6dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReadingDark"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="夜间"
+            android:textColor="@color/segmented_button_text"
+            app:backgroundTint="@color/segmented_button_bg"
+            app:strokeColor="@color/segmented_button_stroke"
+            app:strokeWidth="1dp"
+            app:cornerRadius="16dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="6dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReadingSepia"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="护眼"
+            android:textColor="@color/segmented_button_text"
+            app:backgroundTint="@color/segmented_button_bg"
+            app:strokeColor="@color/segmented_button_stroke"
+            app:strokeWidth="1dp"
+            app:cornerRadius="16dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="6dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="AI 精简模式偏好"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/stone_700" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="全局设置"
+            android:textSize="11sp"
+            android:textColor="@color/stone_400" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerPreferredModes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="说明：选择偏好的阅读模式，全局生效。点击魔法棒可切换回原文。"
+        android:textSize="10sp"
+        android:textColor="@color/stone_400"
+        android:paddingHorizontal="24dp"
+        android:layout_marginBottom="20dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="阅读背景图"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/stone_700" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="本地相册"
+            android:textSize="11sp"
+            android:textColor="@color/stone_400" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvBgStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="未设置"
+            android:textSize="12sp"
+            android:textColor="@color/stone_500" />
+
+        <TextView
+            android:id="@+id/btnSelectBg"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="选择"
+            android:paddingHorizontal="12dp"
+            android:gravity="center"
+            android:background="@drawable/bg_chip_outline"
+            android:textColor="@color/stone_600" />
+
+        <TextView
+            android:id="@+id/btnClearBg"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:text="清除"
+            android:paddingHorizontal="12dp"
+            android:gravity="center"
+            android:visibility="gone"
+            android:background="@drawable/bg_chip_outline"
+            android:textColor="@color/stone_600" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="说明：支持本地相册图片，自动铺满显示。"
+        android:textSize="10sp"
+        android:textColor="@color/stone_400"
+        android:paddingHorizontal="24dp"
+        android:layout_marginBottom="20dp" />
+</LinearLayout>

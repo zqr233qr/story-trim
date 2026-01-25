@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StoryTrim</string>
+
+    <!-- TTS Notifications -->
+    <string name="tts_notification_channel_name">听书服务</string>
+    <string name="tts_notification_channel_desc">用于后台听书播放控制</string>
+    <string name="tts_notification_title">正在听书</string>
+    <string name="tts_notification_action_play">播放</string>
+    <string name="tts_notification_action_pause">暂停</string>
+    <string name="tts_notification_action_stop">停止</string>
+    <string name="tts_notification_action_prev">上一章</string>
+    <string name="tts_notification_action_next">下一章</string>
+    <string name="tts_notification_content">正在播放：%s</string>
+
+    <!-- Floating Lyrics -->
+    <string name="floating_lyrics_channel_name">悬浮歌词</string>
+    <string name="floating_lyrics_channel_desc">悬浮歌词服务</string>
+    <string name="floating_lyrics_title">桌面歌词</string>
+</resources>

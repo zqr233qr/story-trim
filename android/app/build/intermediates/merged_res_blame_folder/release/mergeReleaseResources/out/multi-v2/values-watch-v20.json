@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.storytrim.app-mergeReleaseResources-52:/values-watch-v20/values-watch-v20.xml",
+            "map": [
+                {
+                    "source": "/Users/zqr/.gradle/caches/transforms-4/6df77e7b0cc0c83a0ef65d3286603e58/transformed/appcompat-1.6.1/res/values-watch-v20/values-watch-v20.xml",
+                    "from": {
+                        "startLines": "2,5,8",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,214,385",
+                        "endLines": "4,7,10",
+                        "endColumns": "12,12,12",
+                        "endOffsets": "209,380,553"
+                    }
+                }
+            ]
+        }
+    ]
+}

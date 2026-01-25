@@ -1,0 +1,259 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.storytrim.app"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:5:5-67
+11-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:6:5-79
+12-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:6:22-76
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+13-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:7:5-77
+13-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:7:22-74
+14    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+14-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:8:5-92
+14-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:8:22-89
+15    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+15-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:9:5-77
+15-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:9:22-74
+16    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+16-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:10:5-78
+16-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:10:22-75
+17    <uses-permission android:name="android.permission.WAKE_LOCK" />
+17-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:11:5-68
+17-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:11:22-65
+18
+19    <queries>
+19-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:80:5-84:15
+20        <intent>
+20-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:81:9-83:18
+21            <action android:name="android.intent.action.TTS_SERVICE" />
+21-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:82:13-72
+21-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:82:21-69
+22        </intent>
+23    </queries>
+24
+25    <permission
+25-->[androidx.core:core:1.12.0] /Users/zqr/.gradle/caches/transforms-4/a0945ef7e872afc7c4419cb8614e7f3e/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
+26        android:name="com.storytrim.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+26-->[androidx.core:core:1.12.0] /Users/zqr/.gradle/caches/transforms-4/a0945ef7e872afc7c4419cb8614e7f3e/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
+27        android:protectionLevel="signature" />
+27-->[androidx.core:core:1.12.0] /Users/zqr/.gradle/caches/transforms-4/a0945ef7e872afc7c4419cb8614e7f3e/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
+28
+29    <uses-permission android:name="com.storytrim.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+29-->[androidx.core:core:1.12.0] /Users/zqr/.gradle/caches/transforms-4/a0945ef7e872afc7c4419cb8614e7f3e/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
+29-->[androidx.core:core:1.12.0] /Users/zqr/.gradle/caches/transforms-4/a0945ef7e872afc7c4419cb8614e7f3e/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
+30
+31    <application
+31-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:13:5-78:19
+32        android:name="com.storytrim.app.StoryTrimApplication"
+32-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:14:9-45
+33        android:allowBackup="true"
+33-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:15:9-35
+34        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+34-->[androidx.core:core:1.12.0] /Users/zqr/.gradle/caches/transforms-4/a0945ef7e872afc7c4419cb8614e7f3e/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
+35        android:dataExtractionRules="@xml/data_extraction_rules"
+35-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:16:9-65
+36        android:debuggable="true"
+37        android:extractNativeLibs="false"
+38        android:fullBackupContent="@xml/backup_rules"
+38-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:17:9-54
+39        android:icon="@android:drawable/ic_dialog_info"
+39-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:18:9-56
+40        android:label="@string/app_name"
+40-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:19:9-41
+41        android:roundIcon="@android:drawable/ic_dialog_info"
+41-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:20:9-61
+42        android:supportsRtl="true"
+42-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:21:9-35
+43        android:testOnly="true"
+44        android:theme="@style/Theme.StoryTrim.NoActionBar"
+44-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:22:9-59
+45        android:usesCleartextTraffic="true" >
+45-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:23:9-44
+46        <activity
+46-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:26:9-33:20
+47            android:name="com.storytrim.app.MainActivity"
+47-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:27:13-41
+48            android:exported="true" >
+48-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:28:13-36
+49            <intent-filter>
+49-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:29:13-32:29
+50                <action android:name="android.intent.action.MAIN" />
+50-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:30:17-69
+50-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:30:25-66
+51
+52                <category android:name="android.intent.category.LAUNCHER" />
+52-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:31:17-77
+52-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:31:27-74
+53            </intent-filter>
+54        </activity>
+55        <activity
+55-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:35:9-38:34
+56            android:name="com.storytrim.app.ui.login.LoginActivity"
+56-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:36:13-51
+57            android:exported="false"
+57-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:37:13-37
+58            android:label="登录" />
+58-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:38:13-31
+59        <activity
+59-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:40:9-43:34
+60            android:name="com.storytrim.app.ui.login.RegisterActivity"
+60-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:41:13-54
+61            android:exported="false"
+61-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:42:13-37
+62            android:label="注册" />
+62-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:43:13-31
+63        <activity
+63-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:45:9-48:34
+64            android:name="com.storytrim.app.ui.shelf.ShelfActivity"
+64-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:46:13-51
+65            android:exported="false"
+65-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:47:13-37
+66            android:label="书架" />
+66-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:48:13-31
+67        <activity
+67-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:50:9-53:34
+68            android:name="com.storytrim.app.ui.reader.ReaderActivity"
+68-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:51:13-53
+69            android:exported="false"
+69-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:52:13-37
+70            android:label="阅读" />
+70-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:53:13-31
+71        <activity
+71-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:55:9-58:38
+72            android:name="com.storytrim.app.ui.debug.DebugSqlActivity"
+72-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:56:13-54
+73            android:exported="false"
+73-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:57:13-37
+74            android:label="SQL 调试" />
+74-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:58:13-35
+75
+76        <service
+76-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:60:9-63:61
+77            android:name="com.storytrim.app.ui.reader.tts.TtsForegroundService"
+77-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:61:13-63
+78            android:exported="false"
+78-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:62:13-37
+79            android:foregroundServiceType="mediaPlayback" />
+79-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:63:13-58
+80        <service
+80-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:65:9-68:61
+81            android:name="com.storytrim.app.ui.reader.tts.FloatingLyricsService"
+81-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:66:13-64
+82            android:exported="false"
+82-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:67:13-37
+83            android:foregroundServiceType="mediaPlayback" />
+83-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:68:13-58
+84
+85        <receiver
+85-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:70:9-76:20
+86            android:name="androidx.media.session.MediaButtonReceiver"
+86-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:71:13-70
+87            android:exported="true" >
+87-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:72:13-36
+88            <intent-filter>
+88-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:73:13-75:29
+89                <action android:name="android.intent.action.MEDIA_BUTTON" />
+89-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:74:17-77
+89-->/Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:74:25-74
+90            </intent-filter>
+91        </receiver>
+92
+93        <provider
+93-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+94            android:name="androidx.startup.InitializationProvider"
+94-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:25:13-67
+95            android:authorities="com.storytrim.app.androidx-startup"
+95-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:26:13-68
+96            android:exported="false" >
+96-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:27:13-37
+97            <meta-data
+97-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+98                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+98-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:30:17-75
+99                android:value="androidx.startup" />
+99-->[androidx.emoji2:emoji2:1.2.0] /Users/zqr/.gradle/caches/transforms-4/8b4957946eb71e97e3c878498b84cb97/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:31:17-49
+100            <meta-data
+100-->[androidx.lifecycle:lifecycle-process:2.7.0] /Users/zqr/.gradle/caches/transforms-4/8046e3e9d1dd8139608d62a7d4d5beae/transformed/jetified-lifecycle-process-2.7.0/AndroidManifest.xml:29:13-31:52
+101                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+101-->[androidx.lifecycle:lifecycle-process:2.7.0] /Users/zqr/.gradle/caches/transforms-4/8046e3e9d1dd8139608d62a7d4d5beae/transformed/jetified-lifecycle-process-2.7.0/AndroidManifest.xml:30:17-78
+102                android:value="androidx.startup" />
+102-->[androidx.lifecycle:lifecycle-process:2.7.0] /Users/zqr/.gradle/caches/transforms-4/8046e3e9d1dd8139608d62a7d4d5beae/transformed/jetified-lifecycle-process-2.7.0/AndroidManifest.xml:31:17-49
+103            <meta-data
+103-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:29:13-31:52
+104                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+104-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:30:17-85
+105                android:value="androidx.startup" />
+105-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:31:17-49
+106        </provider>
+107
+108        <uses-library
+108-->[androidx.window:window:1.0.0] /Users/zqr/.gradle/caches/transforms-4/c54b154296d4f6da04a54d675388bb48/transformed/jetified-window-1.0.0/AndroidManifest.xml:25:9-27:40
+109            android:name="androidx.window.extensions"
+109-->[androidx.window:window:1.0.0] /Users/zqr/.gradle/caches/transforms-4/c54b154296d4f6da04a54d675388bb48/transformed/jetified-window-1.0.0/AndroidManifest.xml:26:13-54
+110            android:required="false" />
+110-->[androidx.window:window:1.0.0] /Users/zqr/.gradle/caches/transforms-4/c54b154296d4f6da04a54d675388bb48/transformed/jetified-window-1.0.0/AndroidManifest.xml:27:13-37
+111        <uses-library
+111-->[androidx.window:window:1.0.0] /Users/zqr/.gradle/caches/transforms-4/c54b154296d4f6da04a54d675388bb48/transformed/jetified-window-1.0.0/AndroidManifest.xml:28:9-30:40
+112            android:name="androidx.window.sidecar"
+112-->[androidx.window:window:1.0.0] /Users/zqr/.gradle/caches/transforms-4/c54b154296d4f6da04a54d675388bb48/transformed/jetified-window-1.0.0/AndroidManifest.xml:29:13-51
+113            android:required="false" />
+113-->[androidx.window:window:1.0.0] /Users/zqr/.gradle/caches/transforms-4/c54b154296d4f6da04a54d675388bb48/transformed/jetified-window-1.0.0/AndroidManifest.xml:30:13-37
+114
+115        <service
+115-->[androidx.room:room-runtime:2.6.1] /Users/zqr/.gradle/caches/transforms-4/4c7abbad3cfe52aa32358ed85cd1bc09/transformed/room-runtime-2.6.1/AndroidManifest.xml:24:9-28:63
+116            android:name="androidx.room.MultiInstanceInvalidationService"
+116-->[androidx.room:room-runtime:2.6.1] /Users/zqr/.gradle/caches/transforms-4/4c7abbad3cfe52aa32358ed85cd1bc09/transformed/room-runtime-2.6.1/AndroidManifest.xml:25:13-74
+117            android:directBootAware="true"
+117-->[androidx.room:room-runtime:2.6.1] /Users/zqr/.gradle/caches/transforms-4/4c7abbad3cfe52aa32358ed85cd1bc09/transformed/room-runtime-2.6.1/AndroidManifest.xml:26:13-43
+118            android:exported="false" />
+118-->[androidx.room:room-runtime:2.6.1] /Users/zqr/.gradle/caches/transforms-4/4c7abbad3cfe52aa32358ed85cd1bc09/transformed/room-runtime-2.6.1/AndroidManifest.xml:27:13-37
+119
+120        <receiver
+120-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:34:9-52:20
+121            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+121-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:35:13-76
+122            android:directBootAware="false"
+122-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:36:13-44
+123            android:enabled="true"
+123-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:37:13-35
+124            android:exported="true"
+124-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:38:13-36
+125            android:permission="android.permission.DUMP" >
+125-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:39:13-57
+126            <intent-filter>
+126-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:40:13-42:29
+127                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+127-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:41:17-91
+127-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:41:25-88
+128            </intent-filter>
+129            <intent-filter>
+129-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:43:13-45:29
+130                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+130-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:44:17-85
+130-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:44:25-82
+131            </intent-filter>
+132            <intent-filter>
+132-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:46:13-48:29
+133                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+133-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:47:17-88
+133-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:47:25-85
+134            </intent-filter>
+135            <intent-filter>
+135-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:49:13-51:29
+136                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+136-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:50:17-95
+136-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/zqr/.gradle/caches/transforms-4/8539647453ec75a4756f11d10317eb37/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:50:25-92
+137            </intent-filter>
+138        </receiver>
+139    </application>
+140
+141</manifest>

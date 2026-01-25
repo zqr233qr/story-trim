@@ -1,0 +1,102 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.devtools.ksp'
+    id 'com.google.dagger.hilt.android'
+}
+
+android {
+    namespace 'com.storytrim.app'
+    compileSdk rootProject.ext.compileSdk
+
+    defaultConfig {
+        applicationId "com.storytrim.app"
+        minSdk rootProject.ext.minSdk
+        targetSdk rootProject.ext.targetSdk
+        versionCode rootProject.ext.versionCode
+        versionName rootProject.ext.versionName
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Room schema export
+        ksp {
+            arg("room.schemaLocation", "$projectDir/schemas")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:$rootProject.ext.coreKtx"
+    implementation "androidx.appcompat:appcompat:$rootProject.ext.appcompat"
+    implementation "com.google.android.material:material:$rootProject.ext.material"
+    implementation "androidx.constraintlayout:constraintlayout:$rootProject.ext.constraintlayout"
+    implementation "androidx.activity:activity-ktx:$rootProject.ext.activity"
+    implementation "androidx.navigation:navigation-fragment-ktx:$rootProject.ext.navigation"
+    implementation "androidx.navigation:navigation-ui-ktx:$rootProject.ext.navigation"
+
+    // Lifecycle
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$rootProject.ext.lifecycle"
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:$rootProject.ext.lifecycle"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:$rootProject.ext.lifecycle"
+
+    // Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$rootProject.ext.coroutines"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$rootProject.ext.coroutines"
+
+    // SwipeRefreshLayout
+    implementation "androidx.swiperefreshlayout:swiperefreshlayout:1.1.0"
+
+    // DataStore
+    implementation "androidx.datastore:datastore-preferences:1.2.0"
+
+    // Network
+    implementation "com.squareup.retrofit2:retrofit:$rootProject.ext.retrofit"
+    implementation "com.squareup.retrofit2:converter-gson:$rootProject.ext.retrofit"
+    implementation "com.squareup.okhttp3:okhttp:$rootProject.ext.okhttp"
+    implementation "com.squareup.okhttp3:logging-interceptor:$rootProject.ext.okhttp"
+    implementation "com.google.code.gson:gson:$rootProject.ext.gson"
+
+    // Room
+    implementation "androidx.room:room-runtime:$rootProject.ext.room"
+    implementation "androidx.room:room-ktx:$rootProject.ext.room"
+    ksp "androidx.room:room-compiler:$rootProject.ext.room"
+
+    // Hilt
+    implementation "com.google.dagger:hilt-android:$rootProject.ext.hilt"
+    ksp "com.google.dagger:hilt-compiler:$rootProject.ext.hilt"
+
+    // WebSocket
+    implementation "com.squareup.okhttp3:okhttp:$rootProject.ext.okhttp"
+
+    // Media Session for notification controls
+    implementation "androidx.media:media:1.7.0"
+    implementation "androidx.legacy:legacy-support-v4:1.0.0"
+
+    // TTS - Sentence segmentation (simple implementation, no external dependency)
+    // implementation "com.hankcs:hanlp:portable-android:1.8.3"
+
+    // Testing
+    testImplementation "junit:junit:$rootProject.ext.junit"
+    androidTestImplementation "androidx.test.ext:junit:$rootProject.ext.androidJunit"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$rootProject.ext.espresso"
+}
