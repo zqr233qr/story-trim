@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/storytrim_surface"
+    android:paddingBottom="@dimen/space_xl">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:paddingTop="@dimen/space_md"
+        android:paddingBottom="@dimen/space_sm">
+
+        <View
+            android:id="@+id/handle"
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:background="@drawable/scrollbar_thumb"
+            android:backgroundTint="@color/storytrim_border" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_md">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="书籍操作"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
+            android:textStyle="bold"
+            android:textColor="@color/storytrim_text_primary" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:text="请选择操作"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+            android:textColor="@color/storytrim_text_muted" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/space_lg">
+
+        <LinearLayout
+            android:id="@+id/btnSync"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="@dimen/space_lg"
+            android:layout_marginBottom="@dimen/space_sm"
+            android:background="@drawable/bg_chip_outline">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_unlock"
+                android:tint="@color/storytrim_text_secondary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/space_md"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="同步至云端"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Body"
+                    android:textStyle="bold"
+                    android:textColor="@color/storytrim_text_primary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="备份书籍进度与精简记录"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+                    android:textColor="@color/storytrim_text_muted" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/btnDownload"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="@dimen/space_lg"
+            android:layout_marginBottom="@dimen/space_sm"
+            android:background="@drawable/bg_chip_outline">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/stat_sys_download"
+                android:tint="@color/storytrim_text_secondary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/space_md"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="下载到本地"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Body"
+                    android:textStyle="bold"
+                    android:textColor="@color/storytrim_text_primary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="支持离线阅读"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+                    android:textColor="@color/storytrim_text_muted" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/btnDelete"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="@dimen/space_lg"
+            android:background="@drawable/bg_chip_outline">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_close"
+                android:tint="@color/storytrim_text_secondary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/space_md"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="删除书籍"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Body"
+                    android:textStyle="bold"
+                    android:textColor="@color/storytrim_text_primary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="删除后不可恢复"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+                    android:textColor="@color/storytrim_text_muted" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/btnCancel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_lg"
+        android:layout_marginHorizontal="@dimen/space_lg"
+        android:padding="@dimen/space_lg"
+        android:gravity="center"
+        android:background="@drawable/bg_chip_outline">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="取消"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Body"
+            android:textStyle="bold"
+            android:textColor="@color/storytrim_text_secondary" />
+    </LinearLayout>
+</LinearLayout>

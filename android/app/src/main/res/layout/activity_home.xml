@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/storytrim_bg">
+
+    <FrameLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/storytrim_surface"
+        android:paddingTop="@dimen/space_sm"
+        android:paddingBottom="@dimen/space_sm">
+
+        <LinearLayout
+            android:id="@+id/tabShelf"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <ImageView
+                android:id="@+id/tabShelfIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_shelf"
+                android:tint="@color/storytrim_text_secondary" />
+
+            <TextView
+                android:id="@+id/tabShelfLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="书架"
+                android:textSize="11sp"
+                android:textColor="@color/storytrim_text_secondary" />
+
+            <View
+                android:id="@+id/tabShelfIndicator"
+                android:layout_width="18dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="4dp"
+                android:background="@color/storytrim_text_primary"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabProfile"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <ImageView
+                android:id="@+id/tabProfileIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_user"
+                android:tint="@color/storytrim_text_secondary" />
+
+            <TextView
+                android:id="@+id/tabProfileLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="我的"
+                android:textSize="11sp"
+                android:textColor="@color/storytrim_text_secondary" />
+
+            <View
+                android:id="@+id/tabProfileIndicator"
+                android:layout_width="18dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="4dp"
+                android:background="@color/storytrim_text_primary"
+                android:visibility="invisible" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

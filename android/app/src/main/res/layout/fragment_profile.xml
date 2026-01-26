@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="@dimen/space_xl"
+    android:background="@color/storytrim_bg">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="我的"
+        android:textAppearance="@style/TextAppearance.StoryTrim.Title"
+        android:textStyle="bold"
+        android:textColor="@color/storytrim_text_primary" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xl"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_circle_stone_200">
+
+            <TextView
+                android:id="@+id/tvAvatar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="G"
+                android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
+                android:textStyle="bold"
+                android:textColor="@color/storytrim_text_secondary"
+                android:layout_gravity="center" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/space_lg"
+            android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvUsername"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="未登录"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
+            android:textStyle="bold"
+            android:textColor="@color/storytrim_text_primary" />
+
+        <TextView
+            android:id="@+id/tvPointsValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:text="积分 0"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+            android:textColor="@color/storytrim_text_secondary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:text="账号信息"
+                android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+                android:textColor="@color/storytrim_text_muted" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/itemPoints"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_lg"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="@dimen/space_lg"
+        android:background="@drawable/bg_chip_outline">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="积分"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Body"
+            android:textStyle="bold"
+            android:textColor="@color/storytrim_text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_sm"
+            android:text="查看积分"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+            android:textColor="@color/storytrim_text_muted" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_expand"
+            android:tint="@color/storytrim_text_muted" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/itemTasks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="@dimen/space_lg"
+        android:background="@drawable/bg_chip_outline">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="任务中心"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Body"
+            android:textStyle="bold"
+            android:textColor="@color/storytrim_text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_sm"
+            android:text="查看任务"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+            android:textColor="@color/storytrim_text_muted" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_expand"
+            android:tint="@color/storytrim_text_muted" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnLogin"
+        style="@style/Widget.StoryTrim.Button.Primary"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="@dimen/space_2xl"
+        android:text="去登录" />
+
+    <Button
+        android:id="@+id/btnLogout"
+        style="@style/Widget.StoryTrim.Button.Outlined"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="@dimen/space_lg"
+        android:text="退出登录" />
+</LinearLayout>
