@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F8F9FA"
+    android:background="@color/storytrim_bg"
     android:fillViewport="true">
 
     <LinearLayout
@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:padding="32dp">
+        android:padding="@dimen/space_2xl">
 
         <Space
             android:layout_width="match_parent"
@@ -24,31 +24,29 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="注册账号"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            android:textColor="#1C1C1E"
-            android:layout_marginBottom="8dp" />
+            android:textAppearance="@style/TextAppearance.StoryTrim.Title"
+            android:layout_marginBottom="@dimen/space_sm" />
             
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="加入 StoryTrim，开启智能阅读之旅"
-            android:textSize="14sp"
-            android:textColor="#8E8E93"
+            android:textAppearance="@style/TextAppearance.StoryTrim.BodySecondary"
             android:layout_marginBottom="48dp" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilUsername"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_lg"
             android:hint="用户名"
-            app:boxBackgroundColor="#FFFFFF"
-            app:boxCornerRadiusTopStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxBackgroundColor="@color/storytrim_surface"
+            app:boxCornerRadiusTopStart="@dimen/radius_md"
+            app:boxCornerRadiusTopEnd="@dimen/radius_md"
+            app:boxCornerRadiusBottomStart="@dimen/radius_md"
+            app:boxCornerRadiusBottomEnd="@dimen/radius_md"
             app:boxStrokeWidth="0dp"
+            app:hintTextColor="@color/storytrim_text_muted"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -56,22 +54,24 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="text"
-                android:singleLine="true" />
+                android:singleLine="true"
+                android:textColor="@color/storytrim_text_primary" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilPassword"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_lg"
             android:hint="密码"
-            app:boxBackgroundColor="#FFFFFF"
-            app:boxCornerRadiusTopStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxBackgroundColor="@color/storytrim_surface"
+            app:boxCornerRadiusTopStart="@dimen/radius_md"
+            app:boxCornerRadiusTopEnd="@dimen/radius_md"
+            app:boxCornerRadiusBottomStart="@dimen/radius_md"
+            app:boxCornerRadiusBottomEnd="@dimen/radius_md"
             app:boxStrokeWidth="0dp"
             app:passwordToggleEnabled="true"
+            app:hintTextColor="@color/storytrim_text_muted"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -79,22 +79,24 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textPassword"
-                android:singleLine="true" />
+                android:singleLine="true"
+                android:textColor="@color/storytrim_text_primary" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilConfirmPassword"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="@dimen/space_xl"
             android:hint="确认密码"
-            app:boxBackgroundColor="#FFFFFF"
-            app:boxCornerRadiusTopStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxBackgroundColor="@color/storytrim_surface"
+            app:boxCornerRadiusTopStart="@dimen/radius_md"
+            app:boxCornerRadiusTopEnd="@dimen/radius_md"
+            app:boxCornerRadiusBottomStart="@dimen/radius_md"
+            app:boxCornerRadiusBottomEnd="@dimen/radius_md"
             app:boxStrokeWidth="0dp"
             app:passwordToggleEnabled="true"
+            app:hintTextColor="@color/storytrim_text_muted"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -102,17 +104,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textPassword"
-                android:singleLine="true" />
+                android:singleLine="true"
+                android:textColor="@color/storytrim_text_primary" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnRegister"
             android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="注 册"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:cornerRadius="16dp"
+            android:layout_height="56dp"
+            android:text="注册"
+            style="@style/Widget.StoryTrim.Button.Primary"
             android:layout_marginBottom="24dp" />
 
         <TextView
@@ -120,9 +121,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="已有账号？去登录"
-            android:textColor="#666666"
+            android:textColor="@color/storytrim_text_muted"
             android:textSize="14sp"
-            android:padding="8dp" />
+            android:padding="@dimen/space_sm" />
 
         <Space
             android:layout_width="match_parent"

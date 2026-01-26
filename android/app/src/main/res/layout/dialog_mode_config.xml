@@ -4,28 +4,28 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/white"
-    android:paddingBottom="24dp">
+    android:background="@color/storytrim_surface"
+    android:paddingBottom="@dimen/space_xl">
 
     <!-- Handle Bar -->
     <View
         android:layout_width="40dp"
         android:layout_height="4dp"
         android:background="@drawable/scrollbar_thumb"
-        android:backgroundTint="#E5E5E5"
+        android:backgroundTint="@color/storytrim_border"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginTop="@dimen/space_md"
+        android:layout_marginBottom="@dimen/space_md" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="偏好阅读模式"
-        android:textSize="18sp"
+        android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
         android:textStyle="bold"
-        android:textColor="@color/stone_900"
-        android:paddingHorizontal="24dp"
-        android:paddingBottom="16dp" />
+        android:textColor="@color/storytrim_text_primary"
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_lg" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerViewModes"

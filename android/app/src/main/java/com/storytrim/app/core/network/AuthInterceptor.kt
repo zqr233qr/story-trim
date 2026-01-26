@@ -21,6 +21,7 @@ import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
 private val TOKEN_KEY = stringPreferencesKey("auth_token")
+private val USERNAME_KEY = stringPreferencesKey("auth_username")
 
 @Singleton
 class AuthInterceptor @Inject constructor(
@@ -56,6 +57,16 @@ class AuthInterceptor @Inject constructor(
         }
     }
 
+    suspend fun saveUsername(username: String) {
+        try {
+            context.dataStore.edit { preferences ->
+                preferences[USERNAME_KEY] = username
+            }
+        } catch (e: Exception) {
+            Log.e("AuthInterceptor", "Failed to save username", e)
+        }
+    }
+
     suspend fun getToken(): String = readToken()
 
     private suspend fun readToken(): String {
@@ -72,10 +83,29 @@ class AuthInterceptor @Inject constructor(
         try {
             context.dataStore.edit { preferences ->
                 preferences.remove(TOKEN_KEY)
+                preferences.remove(USERNAME_KEY)
             }
         } catch (e: Exception) {
             Log.e("AuthInterceptor", "Failed to clear token", e)
         }
+    }
+
+    suspend fun getUsername(): String {
+        return try {
+            val preferences = context.dataStore.data.first()
+            preferences[USERNAME_KEY] ?: ""
+        } catch (e: IOException) {
+            Log.e("AuthInterceptor", "Error reading username", e)
+            ""
+        }
+    }
+
+    fun getUsernameFlow(): Flow<String> {
+        return context.dataStore.data
+            .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+            .map { preferences ->
+                preferences[USERNAME_KEY] ?: ""
+            }
     }
 
     fun getTokenFlow(): Flow<String> {

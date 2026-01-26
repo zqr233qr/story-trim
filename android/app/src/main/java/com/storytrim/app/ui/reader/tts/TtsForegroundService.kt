@@ -110,7 +110,6 @@ class TtsForegroundService : Service() {
         override fun onError(utteranceId: String?) {
             Log.e(TAG, "onError deprecated: $utteranceId")
             try {
-                val index = extractIndex(utteranceId)
                 callback?.onError("播放失败: $utteranceId")
                 playNextSentence()
             } catch (e: Exception) {
@@ -198,6 +197,7 @@ class TtsForegroundService : Service() {
         return audioFocusGranted
     }
 
+    @Suppress("DEPRECATION")
     private fun abandonAudioFocus() {
         if (audioFocusGranted) {
             audioManager?.abandonAudioFocus(null)

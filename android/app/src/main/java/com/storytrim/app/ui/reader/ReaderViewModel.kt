@@ -13,6 +13,7 @@ import com.storytrim.app.data.repository.BookRepository
 import com.storytrim.app.ui.reader.tts.TtsController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -92,6 +93,13 @@ class ReaderViewModel @Inject constructor(
     private val _isTtsPanelVisible = MutableLiveData(false)
     val isTtsPanelVisible: LiveData<Boolean> = _isTtsPanelVisible
 
+    private var progressJob: Job? = null
+    private var recordedChapterId: Long? = null
+    private var historyPromptId: Int = 0
+    private var suppressToast = false
+    private var lastRenderKey: String? = null
+    private var lastRenderModeId: Int? = null
+
     fun loadBook(bookId: Long) {
         _isLoading.value = true
         viewModelScope.launch {
@@ -102,9 +110,15 @@ class ReaderViewModel @Inject constructor(
                 val list = bookRepository.getChapters(bookId)
                 android.util.Log.d("ReaderViewModel", "Chapters loaded: ${list.size}")
                 _chapters.value = list
-                currentChapterIndex = 0
+                val restoreResult = restoreReadingState(b, list)
+                currentChapterIndex = restoreResult.first
+                historyPromptId = restoreResult.second
                 loadPrompts()
-                if (list.isNotEmpty()) loadChapterContent(0, NavigationStrategy.START, forcePreferred = true) else _isLoading.value = false
+                if (list.isNotEmpty()) {
+                    loadChapterContent(currentChapterIndex, NavigationStrategy.START, forcePreferred = true)
+                } else {
+                    _isLoading.value = false
+                }
             }.onFailure {
                 android.util.Log.e("ReaderViewModel", "Failed to load book", it)
                 _isLoading.value = false
@@ -116,6 +130,14 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             _prompts.value = bookRepository.getPrompts()
             initUserPreferredMode()
+            if (historyPromptId > 0) {
+                currentModeId = historyPromptId
+                _isMagicActive.value = true
+                val name = getPromptName(historyPromptId)
+                if (name.isNotBlank()) {
+                    _activeModeName.value = name
+                }
+            }
             applyPreferredModeIfNeeded(NavigationStrategy.KEEP, force = true)
         }
     }
@@ -143,7 +165,6 @@ class ReaderViewModel @Inject constructor(
             currentModeId = 0
             _activeModeName.value = "原文"
             _isMagicActive.value = false
-            _toastMessage.value = "已切换为原文"
             viewModelScope.launch { loadChapterContent(currentChapterIndex, NavigationStrategy.KEEP, forcePreferred = false) }
         } else {
             if (userPreferredModeId > 0) {
@@ -156,7 +177,7 @@ class ReaderViewModel @Inject constructor(
                     } else {
                         val promptName = getPromptName(userPreferredModeId)
                         if (promptName.isNotBlank()) {
-                            _toastMessage.postValue("已切换为「$promptName」")
+                            // toast handled on content change
                         }
                     }
                 }
@@ -180,12 +201,12 @@ class ReaderViewModel @Inject constructor(
             val promptName = getPromptName(modeId)
             if (!applied) {
                 if (promptName.isNotBlank()) {
-                    _toastMessage.postValue("偏好已更新为「$promptName」，当前章节暂无该模式，已显示原文")
+                    pushToast("偏好已更新为「$promptName」，当前章节暂无该模式，已显示原文")
                 } else {
-                    _toastMessage.postValue("当前章节暂无该偏好模式，已显示原文")
+                    pushToast("当前章节暂无该偏好模式，已显示原文")
                 }
             } else if (promptName.isNotBlank()) {
-                _toastMessage.postValue("偏好已更新为「$promptName」")
+                pushToast("偏好已更新为「$promptName」")
             }
         }
     }
@@ -214,7 +235,6 @@ class ReaderViewModel @Inject constructor(
             val cached = bookRepository.fetchChapterTrim(bId, chapter, modeId)
             if (!cached.isNullOrBlank()) {
                 renderContent(chapter.title, cached, NavigationStrategy.KEEP)
-                showModeSwitchTip(chapter, modeId, cached)
             }
             else startGeneration(bId, chapter.id, modeId)
         }
@@ -238,8 +258,10 @@ class ReaderViewModel @Inject constructor(
             builder.append(chunk)
             _generationStream.postValue(builder.toString()) 
         }
-        val onError: (String) -> Unit = { error -> 
-            _isGenerating.postValue(false) 
+        val onError: (String) -> Unit = { _ -> 
+            viewModelScope.launch {
+                fallbackToOriginal(activeChapter, NavigationStrategy.KEEP, "精简失败，已返回原文")
+            }
         }
         val onClosed: () -> Unit = {
             viewModelScope.launch {
@@ -251,8 +273,9 @@ class ReaderViewModel @Inject constructor(
                     _showTerminalEvent.value = false
                     _chapters.value?.getOrNull(currentChapterIndex)?.let {
                         renderContent(it.title, final, NavigationStrategy.KEEP)
-                        showModeSwitchTip(it, promptId, final)
                     }
+                } else {
+                    fallbackToOriginal(activeChapter, NavigationStrategy.KEEP, "精简无结果，已返回原文")
                 }
             }
         }
@@ -279,55 +302,29 @@ class ReaderViewModel @Inject constructor(
                 onClosed = onClosed
             )
         } else {
-            // Cloud/Synced Book: Use connect (by ID)
-            // Note: If syncState != 0, we assume the server has the book data.
-            // For syncState=2, we definitely need to use cloud IDs.
-            // For syncState=1, we should also use cloud IDs if available.
-            // However, our local DB stores local IDs (id) and cloud IDs (cloudId).
-            // BookRepository.startTrimStream expects bookId and chapterId.
-            // But TrimService.connect sends these directly to the server.
-            // So we MUST send the CLOUD IDs to the server.
-            
-            // We need to fetch the Cloud ID for the chapter if it's not readily available or confirm logic.
-            // The Chapter model passed here (from .toDomain()) has 'id' which is local DB ID.
-            // We need to check if 'Chapter' domain model has 'cloudId'. 
-            // Checking Chapter.kt... It doesn't seem to have cloudId exposed in domain model yet based on previous writes.
-            // Let's check Chapter.kt content.
-            
-            // Assuming Chapter model only has 'id'. We might need to fetch cloudId from Repo or update Domain model.
-            // Let's check BookRepository.getChapters() -> it returns List<Chapter>.
-            // And ChapterEntity has cloudId. 
-            // I should verify Chapter domain model.
-            
-            // Temporary workaround: If we don't have cloudId in Chapter domain object, 
-            // we might be sending local ID which server won't recognize for synced books.
-            // But wait, for syncState=2, the chapters we fetched from cloud (in getChapters fix)
-            // were inserted with cloudId. If mapped correctly, maybe id IS cloudId?
-            // No, id is auto-increment primary key.
-            
-            // I need to update Chapter domain model to include cloudId to be safe.
-            
-            // For now, I will use bookRepository.startTrimStream but pass the Cloud IDs.
-            // But I don't have access to Cloud IDs here if Chapter doesn't have it.
-            
-            // Let's assume for now I will fix Chapter model in next step if needed. 
-            // But wait, startTrimStream implementation in Repository calls trimService.connect(bookId, chapterId...).
-            // If I pass local IDs, it will fail on server.
-            
-            // I will assume for this step that I need to handle this. 
-            // But first let's just use the current IDs and see. 
-            // Actually, if syncState=2, the Book's ID might be local, but we stored cloud_id in BookEntity.
-            // The Book domain model has cloudId (from BookRepository.toDomain).
-            // But Chapter domain model?
-            
-            // Let's optimistically assume I'll fix the domain model in a moment.
-            // Passing book.cloudId and chapter.cloudId (need to add to model).
-            
+            // sync_state=1/2: 走 ID 流式
             val cloudBookId = if (activeBook.cloudId > 0) activeBook.cloudId else activeBook.id
             val cloudChapterId = if (activeChapter.cloudId > 0) activeChapter.cloudId else activeChapter.id
             
             bookRepository.startTrimStream(cloudBookId, cloudChapterId, promptId, onData, onError, onClosed)
         }
+    }
+
+    /**
+     * 精简失败兜底：恢复原文并提示
+     */
+    private suspend fun fallbackToOriginal(chapter: Chapter, strategy: NavigationStrategy, message: String) {
+        currentModeId = 0
+        _isMagicActive.postValue(false)
+        _activeModeName.postValue("原文")
+
+        val content = bookRepository.getChapterContent(chapter.id)
+        if (content.isNotBlank()) {
+            renderContent(chapter.title, content, strategy)
+        }
+        pushToast(message)
+        _showTerminalEvent.postValue(false)
+        _isGenerating.postValue(false)
     }
     
     private fun renderContent(title: String, text: String, strategy: NavigationStrategy) {
@@ -336,6 +333,34 @@ class ReaderViewModel @Inject constructor(
         _contentState.value = ContentState(title, formatted.toString(), strategy)
 
         _ttsController.value?.prepare(formatted.toString(), title)
+        handleContentChange(text)
+    }
+
+    private fun handleContentChange(rawText: String) {
+        val chapter = _chapters.value?.getOrNull(currentChapterIndex) ?: return
+        val key = "${chapter.id}_${currentModeId}_${rawText.hashCode()}"
+        if (key == lastRenderKey) return
+
+        val previousMode = lastRenderModeId
+        lastRenderKey = key
+        lastRenderModeId = currentModeId
+
+        if (currentModeId == 0) {
+            if (previousMode != null && previousMode != 0) {
+                pushToast("已切换为原文")
+            }
+            return
+        }
+
+        val promptName = getPromptName(currentModeId)
+        if (promptName.isBlank()) return
+
+        viewModelScope.launch {
+            val original = bookRepository.getChapterContent(chapter.id)
+            if (original.isBlank()) return@launch
+            val ratio = calculateTrimRatio(original, rawText)
+            pushToast("已切换为「$promptName」，精简 ${ratio}%")
+        }
     }
 
     private suspend fun loadChapterContent(index: Int, strategy: NavigationStrategy, forcePreferred: Boolean) {
@@ -347,7 +372,26 @@ class ReaderViewModel @Inject constructor(
         
         android.util.Log.d("ReaderViewModel", "Loading chapter content: ${chapter.title} (idx: $index)")
 
+        if (historyPromptId > 0 && currentModeId == historyPromptId) {
+            val trimmed = bookRepository.fetchChapterTrim(bookId = chapter.bookId, chapter = chapter, promptId = historyPromptId)
+            if (!trimmed.isNullOrBlank()) {
+                _isMagicActive.value = true
+                _activeModeName.value = getPromptName(historyPromptId).ifBlank { _activeModeName.value }
+                renderContent(chapter.title, trimmed, strategy)
+                scheduleProgressUpdate(chapter)
+                preloadAdjacentChapters(list, index)
+                _isLoading.value = false
+                return
+            } else {
+                currentModeId = 0
+                _isMagicActive.value = false
+                _activeModeName.value = "原文"
+            }
+        }
+
         if (applyPreferredModeForChapter(chapter, strategy, force = forcePreferred)) {
+            scheduleProgressUpdate(chapter)
+            preloadAdjacentChapters(list, index)
             _isLoading.value = false
             return
         }
@@ -359,7 +403,69 @@ class ReaderViewModel @Inject constructor(
         } else {
              renderContent(chapter.title, content, strategy)
         }
+        scheduleProgressUpdate(chapter)
+        preloadAdjacentChapters(list, index)
         _isLoading.value = false
+    }
+
+    /**
+     * 恢复阅读进度（本地优先，必要时与云端比较）
+     * @return Pair(startIndex, promptId)
+     */
+    private suspend fun restoreReadingState(book: Book, chapters: List<Chapter>): Pair<Int, Int> {
+        val local = bookRepository.getLocalReadingHistory(book.id)
+        if (book.syncState == 0) {
+            return resolveHistoryResult(chapters, local)
+        }
+
+        val cloud = bookRepository.getCloudReadingHistory(book)
+        val selected = when {
+            cloud == null -> local
+            local == null -> cloud
+            cloud.updatedAt > local.updatedAt -> cloud
+            else -> local
+        }
+        return resolveHistoryResult(chapters, selected)
+    }
+
+    private fun resolveHistoryResult(chapters: List<Chapter>, history: com.storytrim.app.core.database.entity.ReadingHistoryEntity?): Pair<Int, Int> {
+        if (history == null) return 0 to 0
+        val index = chapters.indexOfFirst { it.id == history.lastChapterId }
+        val safeIndex = if (index >= 0) index else 0
+        return safeIndex to history.lastPromptId
+    }
+
+    /**
+     * 预加载相邻章节内容（前后各2章）
+     */
+    private fun preloadAdjacentChapters(chapters: List<Chapter>, currentIndex: Int) {
+        val indices = (currentIndex - 2..currentIndex + 2)
+            .filter { it in chapters.indices && it != currentIndex }
+        val targets = indices.map { chapters[it] }
+        viewModelScope.launch {
+            bookRepository.preloadChapterContents(targets)
+            if (currentModeId > 0) {
+                bookRepository.preloadChapterTrims(targets, currentModeId)
+            }
+        }
+    }
+
+    /**
+     * 进度确认逻辑：延迟5秒后确认仍停留在当前章节
+     */
+    private fun scheduleProgressUpdate(chapter: Chapter) {
+        if (recordedChapterId == chapter.id) return
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            delay(5000)
+            val activeChapter = _chapters.value?.getOrNull(currentChapterIndex)
+            if (activeChapter?.id == chapter.id) {
+                val bookId = _book.value?.id ?: return@launch
+                val promptId = currentModeId
+                bookRepository.updateReadingProgress(bookId, chapter.id, promptId)
+                recordedChapterId = chapter.id
+            }
+        }
     }
 
     private suspend fun applyPreferredModeIfNeeded(strategy: NavigationStrategy, force: Boolean): Boolean {
@@ -410,7 +516,6 @@ class ReaderViewModel @Inject constructor(
             _activeModeName.value = _prompts.value?.find { it.id == preferredModeId }?.name ?: "未知模式"
             _isMagicActive.value = true
             renderContent(chapter.title, trimmed, strategy)
-            showModeSwitchTip(chapter, preferredModeId, trimmed)
             return true
         }
 
@@ -433,16 +538,13 @@ class ReaderViewModel @Inject constructor(
         return maxOf(0, ratio)
     }
 
-    private suspend fun showModeSwitchTip(chapter: Chapter, promptId: Int, trimmedText: String) {
-        val promptName = getPromptName(promptId)
-        if (promptName.isBlank()) return
-        val original = bookRepository.getChapterContent(chapter.id)
-        if (original.isNotBlank() && trimmedText.isNotBlank()) {
-            val ratio = calculateTrimRatio(original, trimmedText)
-            _toastMessage.postValue("已切换为「$promptName」，精简 ${ratio}%")
-        } else {
-            _toastMessage.postValue("已切换为「$promptName」")
-        }
+    fun setToastSuppressed(suppressed: Boolean) {
+        suppressToast = suppressed
+    }
+
+    private fun pushToast(message: String) {
+        if (message.isBlank() || suppressToast) return
+        _toastMessage.postValue(message)
     }
 
     fun toggleMenu() { _isMenuVisible.value = !(_isMenuVisible.value ?: false) }

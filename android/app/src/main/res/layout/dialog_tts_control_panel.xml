@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_tts_panel"
-    android:padding="16dp">
+    android:padding="@dimen/space_lg">
 
     <!-- 章节信息 -->
 
@@ -26,14 +26,14 @@
             android:src="@drawable/ic_skip_previous"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="上一句"
-            app:tint="@color/stone_600" />
+            app:tint="@color/storytrim_text_secondary" />
 
         <!-- 播放/暂停 -->
         <ImageButton
             android:id="@+id/btnPlayPause"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:layout_marginHorizontal="16dp"
+            android:layout_marginHorizontal="@dimen/space_lg"
             android:src="@drawable/ic_play"
             android:background="@drawable/bg_circle_teal"
             android:contentDescription="播放"
@@ -48,7 +48,7 @@
             android:src="@drawable/ic_skip_next"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="下一句"
-            app:tint="@color/stone_600" />
+            app:tint="@color/storytrim_text_secondary" />
 
         <!-- 桌面歌词 -->
         <ImageButton
@@ -59,7 +59,7 @@
             android:src="@drawable/ic_floating_lyrics"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="桌面歌词"
-            app:tint="@color/stone_600" />
+            app:tint="@color/storytrim_text_secondary" />
     </LinearLayout>
 
     <!-- 语速设置 -->
@@ -68,7 +68,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginBottom="4dp">
+        android:layout_marginBottom="@dimen/space_xs">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -81,7 +81,7 @@
                 android:layout_height="wrap_content"
                 android:text="语速"
                 android:textSize="11sp"
-                android:textColor="@color/stone_500" />
+                android:textColor="@color/storytrim_text_secondary" />
 
             <TextView
                 android:id="@+id/tvSpeedValue"
@@ -89,20 +89,20 @@
                 android:layout_height="wrap_content"
                 android:text="1.0x"
                 android:textSize="12sp"
-                android:textColor="@color/teal_600"
+                android:textColor="@color/storytrim_accent"
                 android:textStyle="bold"
-                android:layout_marginStart="8dp" />
+                android:layout_marginStart="@dimen/space_sm" />
         </LinearLayout>
 
         <SeekBar
             android:id="@+id/seekBarSpeed"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:max="25"
             android:progress="5"
-            android:progressTint="@color/teal_600"
-            android:thumbTint="@color/teal_600" />
+            android:progressTint="@color/storytrim_accent"
+            android:thumbTint="@color/storytrim_accent" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -116,14 +116,14 @@
                 android:layout_weight="1"
                 android:text="0.5x"
                 android:textSize="10sp"
-                android:textColor="@color/stone_400" />
+                android:textColor="@color/storytrim_text_muted" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="3.0x"
                 android:textSize="10sp"
-                android:textColor="@color/stone_400" />
+                android:textColor="@color/storytrim_text_muted" />
         </LinearLayout>
     </LinearLayout>
 
@@ -133,7 +133,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="@dimen/space_sm">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -146,7 +146,7 @@
                 android:layout_height="wrap_content"
                 android:text="定时关闭"
                 android:textSize="11sp"
-                android:textColor="@color/stone_500" />
+                android:textColor="@color/storytrim_text_secondary" />
 
             <TextView
                 android:id="@+id/tvTimerValue"
@@ -154,20 +154,20 @@
                 android:layout_height="wrap_content"
                 android:text="关闭"
                 android:textSize="12sp"
-                android:textColor="@color/stone_700"
+                android:textColor="@color/storytrim_text_primary"
                 android:textStyle="bold"
-                android:layout_marginStart="8dp" />
+                android:layout_marginStart="@dimen/space_sm" />
         </LinearLayout>
 
         <SeekBar
             android:id="@+id/seekBarTimer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:max="12"
             android:progress="0"
-            android:progressTint="@color/teal_600"
-            android:thumbTint="@color/teal_600" />
+            android:progressTint="@color/storytrim_accent"
+            android:thumbTint="@color/storytrim_accent" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -181,15 +181,15 @@
                 android:layout_weight="1"
                 android:text="关闭"
                 android:textSize="10sp"
-                android:textColor="@color/stone_400" />
+                android:textColor="@color/storytrim_text_muted" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="60分钟"
                 android:textSize="10sp"
-                android:textColor="@color/stone_400" />
-        </LinearLayout>
+                android:textColor="@color/storytrim_text_muted" />
+</LinearLayout>
     </LinearLayout>
 
 </LinearLayout>

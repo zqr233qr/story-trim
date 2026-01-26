@@ -7,6 +7,11 @@ data class BatchTrimRequest(
     @SerializedName("prompt_id") val promptId: Int
 )
 
+data class BatchTrimByMd5Request(
+    @SerializedName("md5s") val md5s: List<String>,
+    @SerializedName("prompt_id") val promptId: Int
+)
+
 data class TrimmedContentResp(
     @SerializedName("chapter_id") val chapterId: Long? = null,
     @SerializedName("chapter_md5") val chapterMd5: String? = null,

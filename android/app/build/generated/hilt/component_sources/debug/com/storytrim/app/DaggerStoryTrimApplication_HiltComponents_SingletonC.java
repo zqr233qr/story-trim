@@ -13,9 +13,11 @@ import com.storytrim.app.core.database.DatabaseModule_ProvideAppDatabaseFactory;
 import com.storytrim.app.core.database.DatabaseModule_ProvideBookDaoFactory;
 import com.storytrim.app.core.database.DatabaseModule_ProvideChapterDaoFactory;
 import com.storytrim.app.core.database.DatabaseModule_ProvideContentDaoFactory;
+import com.storytrim.app.core.database.DatabaseModule_ProvideReadingHistoryDaoFactory;
 import com.storytrim.app.core.database.dao.BookDao;
 import com.storytrim.app.core.database.dao.ChapterDao;
 import com.storytrim.app.core.database.dao.ContentDao;
+import com.storytrim.app.core.database.dao.ReadingHistoryDao;
 import com.storytrim.app.core.network.ApiClient;
 import com.storytrim.app.core.network.AuthInterceptor;
 import com.storytrim.app.core.network.NetworkModule_ProvideApiClientFactory;
@@ -29,20 +31,34 @@ import com.storytrim.app.core.utils.ZipUtils;
 import com.storytrim.app.data.remote.AuthService;
 import com.storytrim.app.data.repository.AuthRepository;
 import com.storytrim.app.data.repository.BookRepository;
+import com.storytrim.app.data.repository.PointsRepository;
+import com.storytrim.app.data.repository.TaskRepository;
 import com.storytrim.app.feature.book.BookService;
 import com.storytrim.app.ui.debug.DebugSqlActivity;
 import com.storytrim.app.ui.debug.DebugSqlViewModel;
 import com.storytrim.app.ui.debug.DebugSqlViewModel_HiltModules;
+import com.storytrim.app.ui.home.HomeActivity;
+import com.storytrim.app.ui.home.tab.ProfileFragment;
+import com.storytrim.app.ui.home.tab.ProfileViewModel;
+import com.storytrim.app.ui.home.tab.ProfileViewModel_HiltModules;
+import com.storytrim.app.ui.home.tab.ShelfFragment;
 import com.storytrim.app.ui.login.LoginActivity;
 import com.storytrim.app.ui.login.LoginViewModel;
 import com.storytrim.app.ui.login.LoginViewModel_HiltModules;
 import com.storytrim.app.ui.login.RegisterActivity;
+import com.storytrim.app.ui.points.PointsActivity;
+import com.storytrim.app.ui.points.PointsViewModel;
+import com.storytrim.app.ui.points.PointsViewModel_HiltModules;
 import com.storytrim.app.ui.reader.ReaderActivity;
+import com.storytrim.app.ui.reader.ReaderActivity_MembersInjector;
 import com.storytrim.app.ui.reader.ReaderViewModel;
 import com.storytrim.app.ui.reader.ReaderViewModel_HiltModules;
 import com.storytrim.app.ui.shelf.ShelfActivity;
 import com.storytrim.app.ui.shelf.ShelfViewModel;
 import com.storytrim.app.ui.shelf.ShelfViewModel_HiltModules;
+import com.storytrim.app.ui.tasks.TaskCenterActivity;
+import com.storytrim.app.ui.tasks.TaskCenterViewModel;
+import com.storytrim.app.ui.tasks.TaskCenterViewModel_HiltModules;
 import dagger.hilt.android.ActivityRetainedLifecycle;
 import dagger.hilt.android.ViewModelLifecycle;
 import dagger.hilt.android.internal.builders.ActivityComponentBuilder;
@@ -345,6 +361,14 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
     }
 
     @Override
+    public void injectProfileFragment(ProfileFragment profileFragment) {
+    }
+
+    @Override
+    public void injectShelfFragment(ShelfFragment shelfFragment) {
+    }
+
+    @Override
     public DefaultViewModelFactories.InternalFactoryFactory getHiltInternalFactoryFactory() {
       return activityCImpl.getHiltInternalFactoryFactory();
     }
@@ -391,11 +415,14 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
     @Override
     public void injectMainActivity(MainActivity mainActivity) {
-      injectMainActivity2(mainActivity);
     }
 
     @Override
     public void injectDebugSqlActivity(DebugSqlActivity debugSqlActivity) {
+    }
+
+    @Override
+    public void injectHomeActivity(HomeActivity homeActivity) {
     }
 
     @Override
@@ -407,11 +434,20 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
     }
 
     @Override
+    public void injectPointsActivity(PointsActivity pointsActivity) {
+    }
+
+    @Override
     public void injectReaderActivity(ReaderActivity readerActivity) {
+      injectReaderActivity2(readerActivity);
     }
 
     @Override
     public void injectShelfActivity(ShelfActivity shelfActivity) {
+    }
+
+    @Override
+    public void injectTaskCenterActivity(TaskCenterActivity taskCenterActivity) {
     }
 
     @Override
@@ -421,7 +457,7 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
     @Override
     public Map<Class<?>, Boolean> getViewModelKeys() {
-      return LazyClassKeyMap.<Boolean>of(MapBuilder.<String, Boolean>newMapBuilder(4).put(LazyClassKeyProvider.com_storytrim_app_ui_debug_DebugSqlViewModel, DebugSqlViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_login_LoginViewModel, LoginViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_reader_ReaderViewModel, ReaderViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_shelf_ShelfViewModel, ShelfViewModel_HiltModules.KeyModule.provide()).build());
+      return LazyClassKeyMap.<Boolean>of(MapBuilder.<String, Boolean>newMapBuilder(7).put(LazyClassKeyProvider.com_storytrim_app_ui_debug_DebugSqlViewModel, DebugSqlViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_login_LoginViewModel, LoginViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_points_PointsViewModel, PointsViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_home_tab_ProfileViewModel, ProfileViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_reader_ReaderViewModel, ReaderViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_shelf_ShelfViewModel, ShelfViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_storytrim_app_ui_tasks_TaskCenterViewModel, TaskCenterViewModel_HiltModules.KeyModule.provide()).build());
     }
 
     @Override
@@ -440,14 +476,16 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
     }
 
     @CanIgnoreReturnValue
-    private MainActivity injectMainActivity2(MainActivity instance) {
-      MainActivity_MembersInjector.injectAuthInterceptor(instance, singletonCImpl.authInterceptorProvider.get());
+    private ReaderActivity injectReaderActivity2(ReaderActivity instance) {
+      ReaderActivity_MembersInjector.injectAuthRepository(instance, singletonCImpl.authRepositoryProvider.get());
       return instance;
     }
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_storytrim_app_ui_login_LoginViewModel = "com.storytrim.app.ui.login.LoginViewModel";
+      static String com_storytrim_app_ui_tasks_TaskCenterViewModel = "com.storytrim.app.ui.tasks.TaskCenterViewModel";
+
+      static String com_storytrim_app_ui_home_tab_ProfileViewModel = "com.storytrim.app.ui.home.tab.ProfileViewModel";
 
       static String com_storytrim_app_ui_debug_DebugSqlViewModel = "com.storytrim.app.ui.debug.DebugSqlViewModel";
 
@@ -455,8 +493,15 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
       static String com_storytrim_app_ui_shelf_ShelfViewModel = "com.storytrim.app.ui.shelf.ShelfViewModel";
 
+      static String com_storytrim_app_ui_login_LoginViewModel = "com.storytrim.app.ui.login.LoginViewModel";
+
+      static String com_storytrim_app_ui_points_PointsViewModel = "com.storytrim.app.ui.points.PointsViewModel";
+
       @KeepFieldType
-      LoginViewModel com_storytrim_app_ui_login_LoginViewModel2;
+      TaskCenterViewModel com_storytrim_app_ui_tasks_TaskCenterViewModel2;
+
+      @KeepFieldType
+      ProfileViewModel com_storytrim_app_ui_home_tab_ProfileViewModel2;
 
       @KeepFieldType
       DebugSqlViewModel com_storytrim_app_ui_debug_DebugSqlViewModel2;
@@ -466,6 +511,12 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
       @KeepFieldType
       ShelfViewModel com_storytrim_app_ui_shelf_ShelfViewModel2;
+
+      @KeepFieldType
+      LoginViewModel com_storytrim_app_ui_login_LoginViewModel2;
+
+      @KeepFieldType
+      PointsViewModel com_storytrim_app_ui_points_PointsViewModel2;
     }
   }
 
@@ -480,9 +531,15 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
     private Provider<LoginViewModel> loginViewModelProvider;
 
+    private Provider<PointsViewModel> pointsViewModelProvider;
+
+    private Provider<ProfileViewModel> profileViewModelProvider;
+
     private Provider<ReaderViewModel> readerViewModelProvider;
 
     private Provider<ShelfViewModel> shelfViewModelProvider;
+
+    private Provider<TaskCenterViewModel> taskCenterViewModelProvider;
 
     private ViewModelCImpl(SingletonCImpl singletonCImpl,
         ActivityRetainedCImpl activityRetainedCImpl, SavedStateHandle savedStateHandleParam,
@@ -499,13 +556,16 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
         final ViewModelLifecycle viewModelLifecycleParam) {
       this.debugSqlViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 0);
       this.loginViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 1);
-      this.readerViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 2);
-      this.shelfViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 3);
+      this.pointsViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 2);
+      this.profileViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 3);
+      this.readerViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 4);
+      this.shelfViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 5);
+      this.taskCenterViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 6);
     }
 
     @Override
     public Map<Class<?>, javax.inject.Provider<ViewModel>> getHiltViewModelMap() {
-      return LazyClassKeyMap.<javax.inject.Provider<ViewModel>>of(MapBuilder.<String, javax.inject.Provider<ViewModel>>newMapBuilder(4).put(LazyClassKeyProvider.com_storytrim_app_ui_debug_DebugSqlViewModel, ((Provider) debugSqlViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_login_LoginViewModel, ((Provider) loginViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_reader_ReaderViewModel, ((Provider) readerViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_shelf_ShelfViewModel, ((Provider) shelfViewModelProvider)).build());
+      return LazyClassKeyMap.<javax.inject.Provider<ViewModel>>of(MapBuilder.<String, javax.inject.Provider<ViewModel>>newMapBuilder(7).put(LazyClassKeyProvider.com_storytrim_app_ui_debug_DebugSqlViewModel, ((Provider) debugSqlViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_login_LoginViewModel, ((Provider) loginViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_points_PointsViewModel, ((Provider) pointsViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_home_tab_ProfileViewModel, ((Provider) profileViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_reader_ReaderViewModel, ((Provider) readerViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_shelf_ShelfViewModel, ((Provider) shelfViewModelProvider)).put(LazyClassKeyProvider.com_storytrim_app_ui_tasks_TaskCenterViewModel, ((Provider) taskCenterViewModelProvider)).build());
     }
 
     @Override
@@ -515,22 +575,37 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
+      static String com_storytrim_app_ui_shelf_ShelfViewModel = "com.storytrim.app.ui.shelf.ShelfViewModel";
+
       static String com_storytrim_app_ui_reader_ReaderViewModel = "com.storytrim.app.ui.reader.ReaderViewModel";
+
+      static String com_storytrim_app_ui_tasks_TaskCenterViewModel = "com.storytrim.app.ui.tasks.TaskCenterViewModel";
 
       static String com_storytrim_app_ui_login_LoginViewModel = "com.storytrim.app.ui.login.LoginViewModel";
 
-      static String com_storytrim_app_ui_shelf_ShelfViewModel = "com.storytrim.app.ui.shelf.ShelfViewModel";
+      static String com_storytrim_app_ui_home_tab_ProfileViewModel = "com.storytrim.app.ui.home.tab.ProfileViewModel";
+
+      static String com_storytrim_app_ui_points_PointsViewModel = "com.storytrim.app.ui.points.PointsViewModel";
 
       static String com_storytrim_app_ui_debug_DebugSqlViewModel = "com.storytrim.app.ui.debug.DebugSqlViewModel";
+
+      @KeepFieldType
+      ShelfViewModel com_storytrim_app_ui_shelf_ShelfViewModel2;
 
       @KeepFieldType
       ReaderViewModel com_storytrim_app_ui_reader_ReaderViewModel2;
 
       @KeepFieldType
+      TaskCenterViewModel com_storytrim_app_ui_tasks_TaskCenterViewModel2;
+
+      @KeepFieldType
       LoginViewModel com_storytrim_app_ui_login_LoginViewModel2;
 
       @KeepFieldType
-      ShelfViewModel com_storytrim_app_ui_shelf_ShelfViewModel2;
+      ProfileViewModel com_storytrim_app_ui_home_tab_ProfileViewModel2;
+
+      @KeepFieldType
+      PointsViewModel com_storytrim_app_ui_points_PointsViewModel2;
 
       @KeepFieldType
       DebugSqlViewModel com_storytrim_app_ui_debug_DebugSqlViewModel2;
@@ -563,11 +638,20 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
           case 1: // com.storytrim.app.ui.login.LoginViewModel 
           return (T) new LoginViewModel(singletonCImpl.authRepositoryProvider.get());
 
-          case 2: // com.storytrim.app.ui.reader.ReaderViewModel 
+          case 2: // com.storytrim.app.ui.points.PointsViewModel 
+          return (T) new PointsViewModel(singletonCImpl.pointsRepositoryProvider.get());
+
+          case 3: // com.storytrim.app.ui.home.tab.ProfileViewModel 
+          return (T) new ProfileViewModel(singletonCImpl.authRepositoryProvider.get(), singletonCImpl.pointsRepositoryProvider.get());
+
+          case 4: // com.storytrim.app.ui.reader.ReaderViewModel 
           return (T) new ReaderViewModel(singletonCImpl.bookRepositoryProvider.get(), ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
 
-          case 3: // com.storytrim.app.ui.shelf.ShelfViewModel 
+          case 5: // com.storytrim.app.ui.shelf.ShelfViewModel 
           return (T) new ShelfViewModel(singletonCImpl.bookRepositoryProvider.get(), singletonCImpl.authRepositoryProvider.get(), ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+
+          case 6: // com.storytrim.app.ui.tasks.TaskCenterViewModel 
+          return (T) new TaskCenterViewModel(singletonCImpl.taskRepositoryProvider.get());
 
           default: throw new AssertionError(id);
         }
@@ -651,8 +735,6 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
     private Provider<AuthInterceptor> authInterceptorProvider;
 
-    private Provider<AppDatabase> provideAppDatabaseProvider;
-
     private Provider<OkHttpClient> provideOkHttpClientProvider;
 
     private Provider<Retrofit> provideRetrofitProvider;
@@ -663,7 +745,11 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
 
     private Provider<AuthRepository> authRepositoryProvider;
 
+    private Provider<AppDatabase> provideAppDatabaseProvider;
+
     private Provider<BookService> provideBookServiceProvider;
+
+    private Provider<PointsRepository> pointsRepositoryProvider;
 
     private Provider<TrimService> trimServiceProvider;
 
@@ -672,6 +758,8 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
     private Provider<ZipUtils> zipUtilsProvider;
 
     private Provider<BookRepository> bookRepositoryProvider;
+
+    private Provider<TaskRepository> taskRepositoryProvider;
 
     private SingletonCImpl(ApplicationContextModule applicationContextModuleParam) {
       this.applicationContextModule = applicationContextModuleParam;
@@ -691,20 +779,26 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
       return DatabaseModule_ProvideContentDaoFactory.provideContentDao(provideAppDatabaseProvider.get());
     }
 
+    private ReadingHistoryDao readingHistoryDao() {
+      return DatabaseModule_ProvideReadingHistoryDaoFactory.provideReadingHistoryDao(provideAppDatabaseProvider.get());
+    }
+
     @SuppressWarnings("unchecked")
     private void initialize(final ApplicationContextModule applicationContextModuleParam) {
-      this.authInterceptorProvider = DoubleCheck.provider(new SwitchingProvider<AuthInterceptor>(singletonCImpl, 0));
-      this.provideAppDatabaseProvider = DoubleCheck.provider(new SwitchingProvider<AppDatabase>(singletonCImpl, 1));
-      this.provideOkHttpClientProvider = DoubleCheck.provider(new SwitchingProvider<OkHttpClient>(singletonCImpl, 5));
-      this.provideRetrofitProvider = DoubleCheck.provider(new SwitchingProvider<Retrofit>(singletonCImpl, 4));
-      this.provideAuthServiceProvider = DoubleCheck.provider(new SwitchingProvider<AuthService>(singletonCImpl, 3));
-      this.provideApiClientProvider = DoubleCheck.provider(new SwitchingProvider<ApiClient>(singletonCImpl, 6));
-      this.authRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<AuthRepository>(singletonCImpl, 2));
+      this.authInterceptorProvider = DoubleCheck.provider(new SwitchingProvider<AuthInterceptor>(singletonCImpl, 4));
+      this.provideOkHttpClientProvider = DoubleCheck.provider(new SwitchingProvider<OkHttpClient>(singletonCImpl, 3));
+      this.provideRetrofitProvider = DoubleCheck.provider(new SwitchingProvider<Retrofit>(singletonCImpl, 2));
+      this.provideAuthServiceProvider = DoubleCheck.provider(new SwitchingProvider<AuthService>(singletonCImpl, 1));
+      this.provideApiClientProvider = DoubleCheck.provider(new SwitchingProvider<ApiClient>(singletonCImpl, 5));
+      this.authRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<AuthRepository>(singletonCImpl, 0));
+      this.provideAppDatabaseProvider = DoubleCheck.provider(new SwitchingProvider<AppDatabase>(singletonCImpl, 6));
       this.provideBookServiceProvider = DoubleCheck.provider(new SwitchingProvider<BookService>(singletonCImpl, 8));
-      this.trimServiceProvider = DoubleCheck.provider(new SwitchingProvider<TrimService>(singletonCImpl, 9));
-      this.fileParserProvider = DoubleCheck.provider(new SwitchingProvider<FileParser>(singletonCImpl, 10));
-      this.zipUtilsProvider = DoubleCheck.provider(new SwitchingProvider<ZipUtils>(singletonCImpl, 11));
-      this.bookRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<BookRepository>(singletonCImpl, 7));
+      this.pointsRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<PointsRepository>(singletonCImpl, 7));
+      this.trimServiceProvider = DoubleCheck.provider(new SwitchingProvider<TrimService>(singletonCImpl, 10));
+      this.fileParserProvider = DoubleCheck.provider(new SwitchingProvider<FileParser>(singletonCImpl, 11));
+      this.zipUtilsProvider = DoubleCheck.provider(new SwitchingProvider<ZipUtils>(singletonCImpl, 12));
+      this.bookRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<BookRepository>(singletonCImpl, 9));
+      this.taskRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<TaskRepository>(singletonCImpl, 13));
     }
 
     @Override
@@ -740,41 +834,47 @@ public final class DaggerStoryTrimApplication_HiltComponents_SingletonC {
       @Override
       public T get() {
         switch (id) {
-          case 0: // com.storytrim.app.core.network.AuthInterceptor 
-          return (T) new AuthInterceptor(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
-
-          case 1: // com.storytrim.app.core.database.AppDatabase 
-          return (T) DatabaseModule_ProvideAppDatabaseFactory.provideAppDatabase(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
-
-          case 2: // com.storytrim.app.data.repository.AuthRepository 
+          case 0: // com.storytrim.app.data.repository.AuthRepository 
           return (T) new AuthRepository(singletonCImpl.provideAuthServiceProvider.get(), singletonCImpl.authInterceptorProvider.get(), singletonCImpl.provideApiClientProvider.get());
 
-          case 3: // com.storytrim.app.data.remote.AuthService 
+          case 1: // com.storytrim.app.data.remote.AuthService 
           return (T) NetworkModule_ProvideAuthServiceFactory.provideAuthService(singletonCImpl.provideRetrofitProvider.get());
 
-          case 4: // retrofit2.Retrofit 
+          case 2: // retrofit2.Retrofit 
           return (T) NetworkModule_ProvideRetrofitFactory.provideRetrofit(singletonCImpl.provideOkHttpClientProvider.get());
 
-          case 5: // okhttp3.OkHttpClient 
+          case 3: // okhttp3.OkHttpClient 
           return (T) NetworkModule_ProvideOkHttpClientFactory.provideOkHttpClient(singletonCImpl.authInterceptorProvider.get());
 
-          case 6: // com.storytrim.app.core.network.ApiClient 
+          case 4: // com.storytrim.app.core.network.AuthInterceptor 
+          return (T) new AuthInterceptor(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+
+          case 5: // com.storytrim.app.core.network.ApiClient 
           return (T) NetworkModule_ProvideApiClientFactory.provideApiClient();
 
-          case 7: // com.storytrim.app.data.repository.BookRepository 
-          return (T) new BookRepository(singletonCImpl.provideApiClientProvider.get(), singletonCImpl.provideBookServiceProvider.get(), singletonCImpl.trimServiceProvider.get(), singletonCImpl.bookDao(), singletonCImpl.chapterDao(), singletonCImpl.contentDao(), singletonCImpl.fileParserProvider.get(), singletonCImpl.provideAppDatabaseProvider.get(), singletonCImpl.zipUtilsProvider.get(), ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+          case 6: // com.storytrim.app.core.database.AppDatabase 
+          return (T) DatabaseModule_ProvideAppDatabaseFactory.provideAppDatabase(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+
+          case 7: // com.storytrim.app.data.repository.PointsRepository 
+          return (T) new PointsRepository(singletonCImpl.provideBookServiceProvider.get(), singletonCImpl.provideApiClientProvider.get());
 
           case 8: // com.storytrim.app.feature.book.BookService 
           return (T) NetworkModule_ProvideBookServiceFactory.provideBookService(singletonCImpl.provideRetrofitProvider.get());
 
-          case 9: // com.storytrim.app.core.network.TrimService 
+          case 9: // com.storytrim.app.data.repository.BookRepository 
+          return (T) new BookRepository(singletonCImpl.provideApiClientProvider.get(), singletonCImpl.provideBookServiceProvider.get(), singletonCImpl.trimServiceProvider.get(), singletonCImpl.bookDao(), singletonCImpl.chapterDao(), singletonCImpl.contentDao(), singletonCImpl.readingHistoryDao(), singletonCImpl.fileParserProvider.get(), singletonCImpl.provideAppDatabaseProvider.get(), singletonCImpl.zipUtilsProvider.get(), ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+
+          case 10: // com.storytrim.app.core.network.TrimService 
           return (T) new TrimService(singletonCImpl.provideOkHttpClientProvider.get(), singletonCImpl.authInterceptorProvider.get());
 
-          case 10: // com.storytrim.app.core.parser.FileParser 
-          return (T) new FileParser();
+          case 11: // com.storytrim.app.core.parser.FileParser 
+          return (T) new FileParser(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
 
-          case 11: // com.storytrim.app.core.utils.ZipUtils 
+          case 12: // com.storytrim.app.core.utils.ZipUtils 
           return (T) new ZipUtils();
+
+          case 13: // com.storytrim.app.data.repository.TaskRepository 
+          return (T) new TaskRepository(singletonCImpl.provideBookServiceProvider.get(), singletonCImpl.provideApiClientProvider.get());
 
           default: throw new AssertionError(id);
         }

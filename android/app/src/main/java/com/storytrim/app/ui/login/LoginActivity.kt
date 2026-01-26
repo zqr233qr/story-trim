@@ -2,14 +2,14 @@ package com.storytrim.app.ui.login
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.storytrim.app.databinding.ActivityLoginBinding
-import com.storytrim.app.ui.shelf.ShelfActivity
+import com.storytrim.app.ui.home.HomeActivity
+import com.storytrim.app.ui.common.ToastHelper
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -55,11 +55,11 @@ class LoginActivity : AppCompatActivity() {
             val password = binding.etPassword.text.toString().trim()
 
             if (username.isEmpty()) {
-                Toast.makeText(this, "请输入用户名", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "请输入用户名")
                 return@setOnClickListener
             }
             if (password.isEmpty()) {
-                Toast.makeText(this, "请输入密码", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "请输入密码")
                 return@setOnClickListener
             }
 
@@ -68,6 +68,11 @@ class LoginActivity : AppCompatActivity() {
 
         binding.tvGoToRegister.setOnClickListener {
             startActivity(Intent(this, RegisterActivity::class.java))
+        }
+
+        binding.tvSkipLogin.setOnClickListener {
+            startActivity(Intent(this, HomeActivity::class.java))
+            finish()
         }
     }
 
@@ -80,10 +85,10 @@ class LoginActivity : AppCompatActivity() {
         viewModel.loginResult.observe(this) { result ->
             result.onSuccess {
                 // Toast.makeText(this, "登录成功", Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, ShelfActivity::class.java))
+                startActivity(Intent(this, HomeActivity::class.java))
                 finish()
             }.onFailure { e ->
-                Toast.makeText(this, "登录失败：${e.message}", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "登录失败：${e.message}")
             }
         }
     }

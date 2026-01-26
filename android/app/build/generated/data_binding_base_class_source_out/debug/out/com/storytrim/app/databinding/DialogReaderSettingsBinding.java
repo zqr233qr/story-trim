@@ -9,6 +9,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 import androidx.viewbinding.ViewBindings;
@@ -51,6 +52,9 @@ public final class DialogReaderSettingsBinding implements ViewBinding {
   public final SeekBar seekFontSize;
 
   @NonNull
+  public final NestedScrollView settingsScrollView;
+
+  @NonNull
   public final MaterialButtonToggleGroup togglePageMode;
 
   @NonNull
@@ -64,6 +68,7 @@ public final class DialogReaderSettingsBinding implements ViewBinding {
       @NonNull MaterialButton btnReadingDark, @NonNull MaterialButton btnReadingLight,
       @NonNull MaterialButton btnReadingSepia, @NonNull TextView btnSelectBg,
       @NonNull RecyclerView recyclerPreferredModes, @NonNull SeekBar seekFontSize,
+      @NonNull NestedScrollView settingsScrollView,
       @NonNull MaterialButtonToggleGroup togglePageMode,
       @NonNull MaterialButtonToggleGroup toggleReadingMode, @NonNull TextView tvBgStatus) {
     this.rootView = rootView;
@@ -76,6 +81,7 @@ public final class DialogReaderSettingsBinding implements ViewBinding {
     this.btnSelectBg = btnSelectBg;
     this.recyclerPreferredModes = recyclerPreferredModes;
     this.seekFontSize = seekFontSize;
+    this.settingsScrollView = settingsScrollView;
     this.togglePageMode = togglePageMode;
     this.toggleReadingMode = toggleReadingMode;
     this.tvBgStatus = tvBgStatus;
@@ -162,6 +168,12 @@ public final class DialogReaderSettingsBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.settingsScrollView;
+      NestedScrollView settingsScrollView = ViewBindings.findChildViewById(rootView, id);
+      if (settingsScrollView == null) {
+        break missingId;
+      }
+
       id = R.id.togglePageMode;
       MaterialButtonToggleGroup togglePageMode = ViewBindings.findChildViewById(rootView, id);
       if (togglePageMode == null) {
@@ -182,7 +194,8 @@ public final class DialogReaderSettingsBinding implements ViewBinding {
 
       return new DialogReaderSettingsBinding((LinearLayout) rootView, btnClearBg, btnPageClick,
           btnPageScroll, btnReadingDark, btnReadingLight, btnReadingSepia, btnSelectBg,
-          recyclerPreferredModes, seekFontSize, togglePageMode, toggleReadingMode, tvBgStatus);
+          recyclerPreferredModes, seekFontSize, settingsScrollView, togglePageMode,
+          toggleReadingMode, tvBgStatus);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

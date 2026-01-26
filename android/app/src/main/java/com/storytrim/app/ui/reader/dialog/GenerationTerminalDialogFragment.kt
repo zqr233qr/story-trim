@@ -4,7 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
+import com.storytrim.app.ui.common.ToastHelper
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -62,7 +62,6 @@ class GenerationTerminalDialogFragment : BottomSheetDialogFragment() {
                     delay(800)
                     if (isAdded) {
                         dismiss()
-                        Toast.makeText(requireContext(), "精简完成", Toast.LENGTH_SHORT).show()
                     }
                 }
             }

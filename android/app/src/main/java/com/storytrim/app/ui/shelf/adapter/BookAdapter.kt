@@ -10,7 +10,8 @@ import com.storytrim.app.data.model.Book
 import com.storytrim.app.databinding.ItemBookCardBinding
 
 class BookAdapter(
-    private val onBookClick: (Book) -> Unit
+    private val onBookClick: (Book) -> Unit,
+    private val onBookLongClick: (Book) -> Unit
 ) : ListAdapter<Book, BookAdapter.BookViewHolder>(BookDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BookViewHolder {
@@ -19,7 +20,7 @@ class BookAdapter(
             parent,
             false
         )
-        return BookViewHolder(binding, onBookClick)
+        return BookViewHolder(binding, onBookClick, onBookLongClick)
     }
 
     override fun onBindViewHolder(holder: BookViewHolder, position: Int) {
@@ -28,7 +29,8 @@ class BookAdapter(
 
     class BookViewHolder(
         private val binding: ItemBookCardBinding,
-        private val onBookClick: (Book) -> Unit
+        private val onBookClick: (Book) -> Unit,
+        private val onBookLongClick: (Book) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(book: Book) {
@@ -37,6 +39,11 @@ class BookAdapter(
 
             binding.root.setOnClickListener {
                 onBookClick(book)
+            }
+
+            binding.root.setOnLongClickListener {
+                onBookLongClick(book)
+                true
             }
 
             // Sync State Logic:

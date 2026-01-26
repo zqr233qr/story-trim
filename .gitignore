@@ -27,7 +27,8 @@ tmp/
 *.tmp
 *_trimmed.txt
 test_novel.txt
-android/app/build
+
+android/app/build/
 
 # db
 

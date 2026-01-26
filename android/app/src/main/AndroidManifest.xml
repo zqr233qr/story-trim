@@ -15,9 +15,9 @@
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
-        android:icon="@android:drawable/ic_dialog_info"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@android:drawable/ic_dialog_info"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.StoryTrim.NoActionBar"
         android:usesCleartextTraffic="true"
@@ -41,6 +41,21 @@
             android:name=".ui.login.RegisterActivity"
             android:exported="false"
             android:label="注册" />
+
+        <activity
+            android:name=".ui.home.HomeActivity"
+            android:exported="false"
+            android:label="首页" />
+
+        <activity
+            android:name=".ui.points.PointsActivity"
+            android:exported="false"
+            android:label="积分" />
+
+        <activity
+            android:name=".ui.tasks.TaskCenterActivity"
+            android:exported="false"
+            android:label="任务中心" />
 
         <activity
             android:name=".ui.shelf.ShelfActivity"

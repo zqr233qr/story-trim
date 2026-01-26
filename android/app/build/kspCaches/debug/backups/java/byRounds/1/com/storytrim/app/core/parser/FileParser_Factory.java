@@ -1,13 +1,15 @@
 package com.storytrim.app.core.parser;
 
+import android.content.Context;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.QualifierMetadata;
 import dagger.internal.ScopeMetadata;
 import javax.annotation.processing.Generated;
+import javax.inject.Provider;
 
 @ScopeMetadata("javax.inject.Singleton")
-@QualifierMetadata
+@QualifierMetadata("dagger.hilt.android.qualifiers.ApplicationContext")
 @DaggerGenerated
 @Generated(
     value = "dagger.internal.codegen.ComponentProcessor",
@@ -21,20 +23,22 @@ import javax.annotation.processing.Generated;
     "cast"
 })
 public final class FileParser_Factory implements Factory<FileParser> {
+  private final Provider<Context> contextProvider;
+
+  public FileParser_Factory(Provider<Context> contextProvider) {
+    this.contextProvider = contextProvider;
+  }
+
   @Override
   public FileParser get() {
-    return newInstance();
+    return newInstance(contextProvider.get());
   }
 
-  public static FileParser_Factory create() {
-    return InstanceHolder.INSTANCE;
+  public static FileParser_Factory create(Provider<Context> contextProvider) {
+    return new FileParser_Factory(contextProvider);
   }
 
-  public static FileParser newInstance() {
-    return new FileParser();
-  }
-
-  private static final class InstanceHolder {
-    private static final FileParser_Factory INSTANCE = new FileParser_Factory();
+  public static FileParser newInstance(Context context) {
+    return new FileParser(context);
   }
 }

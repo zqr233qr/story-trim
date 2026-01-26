@@ -3,17 +3,41 @@
     <!-- Base application theme. -->
     <style name="Theme.StoryTrim" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/stone_900</item>
+        <item name="colorPrimary">@color/storytrim_text_primary</item>
         <item name="colorPrimaryVariant">@color/stone_700</item>
         <item name="colorOnPrimary">@color/white</item>
         <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/teal_500</item>
-        <item name="colorSecondaryVariant">@color/teal_600</item>
+        <item name="colorSecondary">@color/storytrim_accent</item>
+        <item name="colorSecondaryVariant">@color/storytrim_accent_dark</item>
         <item name="colorOnSecondary">@color/white</item>
+
+        <!-- Surface colors -->
+        <item name="android:colorBackground">@color/storytrim_bg</item>
+        <item name="colorOnBackground">@color/storytrim_text_primary</item>
+        <item name="colorSurface">@color/storytrim_surface</item>
+        <item name="colorOnSurface">@color/storytrim_text_primary</item>
+
+        <!-- Typography -->
+        <item name="textAppearanceHeadline6">@style/TextAppearance.StoryTrim.Title</item>
+        <item name="textAppearanceSubtitle1">@style/TextAppearance.StoryTrim.Subtitle</item>
+        <item name="textAppearanceBody1">@style/TextAppearance.StoryTrim.Body</item>
+        <item name="textAppearanceBody2">@style/TextAppearance.StoryTrim.BodySecondary</item>
+        <item name="textAppearanceCaption">@style/TextAppearance.StoryTrim.Caption</item>
+
+        <!-- Components -->
+        <item name="materialButtonStyle">@style/Widget.StoryTrim.Button.Primary</item>
+        <item name="materialCardViewStyle">@style/Widget.StoryTrim.Card</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.StoryTrim.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.StoryTrim.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.StoryTrim.Large</item>
         
         <!-- Status Bar Configuration -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/storytrim_bg</item>
+        <item name="android:navigationBarColor">@color/storytrim_bg</item>
+        <item name="android:textColorPrimary">@color/storytrim_text_primary</item>
+        <item name="android:textColorSecondary">@color/storytrim_text_muted</item>
     </style>
     
     <!-- Specific theme for activities requiring NoActionBar (redundant with parent, but kept for clarity) -->

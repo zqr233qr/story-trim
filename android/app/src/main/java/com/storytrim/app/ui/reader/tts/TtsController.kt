@@ -273,7 +273,7 @@ class TtsController(
     }
 
     fun togglePlayPause() {
-        val service = ttsService ?: run {
+        if (ttsService == null) {
             start(bookTitle = bookTitle)
             return
         }

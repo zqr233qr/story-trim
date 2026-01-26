@@ -9,6 +9,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.Log
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import java.text.SimpleDateFormat
@@ -25,13 +26,45 @@ class ReaderView @JvmOverloads constructor(
     private var currentPage: Int = 0
     private var totalPages: Int = 0
     private var batteryLevel: Int = 100
-    
+
     private var paginator: TextPaginator? = null
-    
+
     // TTS高亮相关
     private var highlightStart: Int = -1
     private var highlightEnd: Int = -1
-    private var highlightColor: Int = Color.parseColor("#14B8A6") // Teal-500
+    private var highlightColor: Int = Color.parseColor("#14B8A6")
+    private var pageMode: String = "click"
+    private var swipeConsumed = false
+    private var dragDetected = false
+    private var downX = 0f
+    private var downY = 0f
+    private val swipeThreshold = dpToPx(80)
+    private val menuCancelThreshold = dpToPx(12)
+    private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(e: MotionEvent): Boolean = true
+
+        override fun onFling(
+            e1: MotionEvent?,
+            e2: MotionEvent,
+            velocityX: Float,
+            velocityY: Float
+        ): Boolean {
+            if (pageMode != "click") return false
+            if (e1 == null) return false
+            val dx = e2.x - e1.x
+            val dy = e2.y - e1.y
+            if (kotlin.math.abs(dx) < swipeThreshold || kotlin.math.abs(dx) < kotlin.math.abs(dy)) {
+                return false
+            }
+            swipeConsumed = true
+            if (dx > 0) {
+                onNextClick?.invoke()
+            } else {
+                onPrevClick?.invoke()
+            }
+            return true
+        }
+    })
     
     // Paints
     private val statusPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -61,6 +94,10 @@ class ReaderView @JvmOverloads constructor(
     fun setModeName(name: String) {
         modeName = name
         invalidate()
+    }
+
+    fun setPageMode(mode: String) {
+        pageMode = mode
     }
 
     /**
@@ -114,10 +151,10 @@ class ReaderView @JvmOverloads constructor(
 
         // 1. Draw Content
         drawContent(canvas)
-        
+
         // 2. Draw Header (Chapter Title)
         drawHeader(canvas)
-        
+
         // 3. Draw Footer (Page num, Time, Battery)
         drawFooter(canvas)
     }
@@ -153,7 +190,6 @@ class ReaderView @JvmOverloads constructor(
             if (lineStart < lineEnd) {
                 val left = layout.getLineLeft(line)
                 val top = layout.getLineTop(line)
-                val right = layout.getLineRight(line)
                 val bottom = layout.getLineBottom(line)
                 
                 // 调整矩形以匹配文本实际位置
@@ -210,7 +246,15 @@ class ReaderView @JvmOverloads constructor(
     }
     
     private fun drawFooter(canvas: Canvas) {
-        val y = height - (paginator!!.paddingBottom.toFloat() / 2)
+        val fontMetrics = statusPaint.fontMetrics
+        val textHeight = fontMetrics.descent - fontMetrics.ascent
+        @Suppress("DEPRECATION")
+        val bottomInset = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            rootWindowInsets?.systemWindowInsetBottom ?: 0
+        } else {
+            0
+        }
+        val y = height - bottomInset - textHeight / 2
         
         // Battery (Left)
         val batX = paginator!!.paddingHorizontal.toFloat()
@@ -229,10 +273,25 @@ class ReaderView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_UP) {
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            swipeConsumed = false
+            dragDetected = false
+            downX = event.x
+            downY = event.y
+        }
+        if (event.action == MotionEvent.ACTION_MOVE) {
+            val dx = kotlin.math.abs(event.x - downX)
+            val dy = kotlin.math.abs(event.y - downY)
+            if (dx > menuCancelThreshold || dy > menuCancelThreshold) {
+                dragDetected = true
+            }
+        }
+        gestureDetector.onTouchEvent(event)
+        if (event.action == MotionEvent.ACTION_UP && !swipeConsumed) {
+            if (dragDetected) return true
             val x = event.x
             val w = width
-            
+
             when {
                 x < w * 0.33 -> onPrevClick?.invoke()
                 x > w * 0.66 -> onNextClick?.invoke()
@@ -245,7 +304,7 @@ class ReaderView @JvmOverloads constructor(
     
     // Add text accessibility for TextPaginator access
     fun getPaginator() = paginator
-    
+
     /**
      * 获取当前内容的Layout对象
      */

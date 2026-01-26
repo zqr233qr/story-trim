@@ -5,24 +5,24 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FAF9F6">
+    android:background="@color/storytrim_bg">
 
     <!-- Handle Bar -->
     <View
         android:layout_width="36dp"
         android:layout_height="4dp"
         android:background="@drawable/scrollbar_thumb"
-        android:backgroundTint="#D6D3D1"
+        android:backgroundTint="@color/storytrim_border"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginTop="@dimen/space_md"
+        android:layout_marginBottom="@dimen/space_md" />
 
     <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="24dp"
-        android:paddingBottom="16dp"
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_lg"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
@@ -32,9 +32,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="指定章节精简"
-            android:textSize="18sp"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
             android:textStyle="bold"
-            android:textColor="@color/stone_900" />
+            android:textColor="@color/storytrim_text_primary" />
 
         <TextView
             android:id="@+id/tvPointsBalance"
@@ -42,9 +42,9 @@
             android:layout_height="wrap_content"
             android:text="积分 0"
             android:textSize="10sp"
-            android:textColor="@color/stone_600"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
+            android:textColor="@color/storytrim_text_secondary"
+            android:paddingHorizontal="@dimen/space_sm"
+            android:paddingVertical="@dimen/space_xs"
             android:background="@drawable/bg_chip_outline" />
     </LinearLayout>
 
@@ -53,8 +53,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="24dp"
-        android:paddingBottom="12dp">
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_md">
 
         <TextView
             android:layout_width="wrap_content"
@@ -62,13 +62,13 @@
             android:text="选择精简模式"
             android:textSize="11sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_500" />
+            android:textColor="@color/storytrim_text_muted" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerViewModes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="@dimen/space_md"
             android:maxHeight="120dp"
             android:clipToPadding="false"
             android:paddingBottom="4dp"
@@ -80,7 +80,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#E5E5E5" />
+        android:background="@color/storytrim_divider" />
 
     <!-- Chapter Selection -->
     <LinearLayout
@@ -88,8 +88,8 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="12dp">
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingVertical="@dimen/space_md">
 
         <TextView
             android:layout_width="wrap_content"
@@ -97,14 +97,14 @@
             android:text="选择章节"
             android:textSize="11sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_500" />
+            android:textColor="@color/storytrim_text_muted" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerViewChapters"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="@dimen/space_md"
             android:clipToPadding="false"
             app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
             app:spanCount="2"
@@ -116,8 +116,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="24dp"
-        android:paddingBottom="12dp"
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_md"
         android:gravity="start">
 
         <TextView
@@ -127,11 +127,11 @@
             android:text="后 3 章"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_600"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
+            android:textColor="@color/storytrim_text_secondary"
+            android:paddingHorizontal="@dimen/space_sm"
+            android:paddingVertical="@dimen/space_xs"
             android:background="@drawable/bg_chip_outline"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="@dimen/space_sm" />
 
         <TextView
             android:id="@+id/btnQuickSelect5"
@@ -140,11 +140,11 @@
             android:text="后 5 章"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_600"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
+            android:textColor="@color/storytrim_text_secondary"
+            android:paddingHorizontal="@dimen/space_sm"
+            android:paddingVertical="@dimen/space_xs"
             android:background="@drawable/bg_chip_outline"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="@dimen/space_sm" />
 
         <TextView
             android:id="@+id/btnQuickSelect10"
@@ -153,11 +153,11 @@
             android:text="后 10 章"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_600"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
+            android:textColor="@color/storytrim_text_secondary"
+            android:paddingHorizontal="@dimen/space_sm"
+            android:paddingVertical="@dimen/space_xs"
             android:background="@drawable/bg_chip_outline"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="@dimen/space_sm" />
 
         <TextView
             android:id="@+id/btnQuickSelect20"
@@ -166,9 +166,9 @@
             android:text="后 20 章"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_600"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
+            android:textColor="@color/storytrim_text_secondary"
+            android:paddingHorizontal="@dimen/space_sm"
+            android:paddingVertical="@dimen/space_xs"
             android:background="@drawable/bg_chip_outline" />
     </LinearLayout>
 
@@ -176,14 +176,14 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#E5E5E5" />
+        android:background="@color/storytrim_divider" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="16dp"
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingVertical="@dimen/space_lg"
         android:gravity="center_vertical">
 
         <TextView
@@ -192,8 +192,8 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="已选 0 章 · 预计消耗 0 积分"
-            android:textSize="12sp"
-            android:textColor="@color/stone_500" />
+            android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+            android:textColor="@color/storytrim_text_muted" />
 
         <TextView
             android:id="@+id/btnConfirm"
@@ -202,9 +202,9 @@
             android:text="开始精简"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_500"
-            android:paddingHorizontal="24dp"
-            android:paddingVertical="10dp"
+            android:textColor="@color/storytrim_text_muted"
+            android:paddingHorizontal="@dimen/space_xl"
+            android:paddingVertical="@dimen/space_sm"
             android:background="@drawable/bg_primary_button"
             android:enabled="false" />
     </LinearLayout>

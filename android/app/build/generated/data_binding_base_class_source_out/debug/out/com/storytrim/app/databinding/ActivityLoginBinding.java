@@ -44,10 +44,14 @@ public final class ActivityLoginBinding implements ViewBinding {
   @NonNull
   public final TextView tvGoToRegister;
 
+  @NonNull
+  public final TextView tvSkipLogin;
+
   private ActivityLoginBinding(@NonNull ScrollView rootView, @NonNull MaterialButton btnLogin,
       @NonNull LinearLayout contentContainer, @NonNull TextInputEditText etPassword,
       @NonNull TextInputEditText etUsername, @NonNull TextInputLayout tilPassword,
-      @NonNull TextInputLayout tilUsername, @NonNull TextView tvGoToRegister) {
+      @NonNull TextInputLayout tilUsername, @NonNull TextView tvGoToRegister,
+      @NonNull TextView tvSkipLogin) {
     this.rootView = rootView;
     this.btnLogin = btnLogin;
     this.contentContainer = contentContainer;
@@ -56,6 +60,7 @@ public final class ActivityLoginBinding implements ViewBinding {
     this.tilPassword = tilPassword;
     this.tilUsername = tilUsername;
     this.tvGoToRegister = tvGoToRegister;
+    this.tvSkipLogin = tvSkipLogin;
   }
 
   @Override
@@ -127,8 +132,14 @@ public final class ActivityLoginBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.tvSkipLogin;
+      TextView tvSkipLogin = ViewBindings.findChildViewById(rootView, id);
+      if (tvSkipLogin == null) {
+        break missingId;
+      }
+
       return new ActivityLoginBinding((ScrollView) rootView, btnLogin, contentContainer, etPassword,
-          etUsername, tilPassword, tilUsername, tvGoToRegister);
+          etUsername, tilPassword, tilUsername, tvGoToRegister, tvSkipLogin);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

@@ -45,6 +45,10 @@ android {
     }
 }
 
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << "-Xlint:-options"
+}
+
 dependencies {
     implementation "androidx.core:core-ktx:$rootProject.ext.coreKtx"
     implementation "androidx.appcompat:appcompat:$rootProject.ext.appcompat"

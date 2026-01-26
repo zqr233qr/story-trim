@@ -110,6 +110,7 @@ class AudioFocusManager(
     /**
      * 释放音频焦点
      */
+    @Suppress("DEPRECATION")
     fun abandonFocus() {
         focusChangeListener?.let { listener ->
             try {

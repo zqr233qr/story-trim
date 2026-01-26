@@ -3,16 +3,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:padding="24dp">
+    android:background="@color/stone_900"
+    android:padding="@dimen/space_xl">
 
     <TextView
         android:id="@+id/tvTerminalTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="AI Processing..."
-        android:textColor="#00FF00" 
-        android:textSize="14sp"
+        android:textColor="@color/storytrim_accent" 
+        android:textSize="13sp"
         android:fontFamily="monospace"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
@@ -21,10 +21,10 @@
         android:id="@+id/scrollViewTerminal"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginTop="@dimen/space_lg"
+        android:layout_marginBottom="@dimen/space_lg"
         android:background="@drawable/bg_terminal_window"
-        android:padding="16dp"
+        android:padding="@dimen/space_lg"
         app:layout_constraintTop_toBottomOf="@id/tvTerminalTitle"
         app:layout_constraintBottom_toTopOf="@id/btnCancel">
 
@@ -33,7 +33,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text=""
-            android:textColor="#E5E5E5"
+            android:textColor="@color/storytrim_surface_muted"
             android:textSize="14sp"
             android:lineSpacingExtra="4dp"
             android:fontFamily="monospace" />
@@ -44,8 +44,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="取消"
-        android:textColor="#FFFFFF"
-        android:backgroundTint="#333333"
+        android:textColor="@color/storytrim_surface"
+        android:backgroundTint="@color/stone_700"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 

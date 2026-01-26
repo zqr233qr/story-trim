@@ -3,90 +3,101 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#FAF9F6"
-    android:paddingBottom="24dp">
+    android:background="@color/storytrim_bg"
+    android:paddingBottom="@dimen/space_lg">
 
     <View
         android:layout_width="36dp"
         android:layout_height="4dp"
         android:background="@drawable/scrollbar_thumb"
-        android:backgroundTint="#D6D3D1"
+        android:backgroundTint="@color/storytrim_border"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="20dp" />
+        android:layout_marginTop="@dimen/space_md"
+        android:layout_marginBottom="@dimen/space_lg" />
 
-    <TextView
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/settingsScrollView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="阅读设置"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:textColor="@color/stone_900"
-        android:paddingHorizontal="24dp"
-        android:paddingBottom="16dp" />
+        android:fillViewport="true">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="字号"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:textColor="@color/stone_600"
-        android:paddingHorizontal="24dp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="20dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:layout_width="24dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="A"
-            android:textSize="13sp"
-            android:textColor="@color/stone_600" />
+            android:orientation="vertical">
 
-        <SeekBar
-            android:id="@+id/seekFontSize"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginHorizontal="12dp"
-            android:max="12"
-            android:progress="4"
-            android:progressTint="@color/teal_600"
-            android:thumbTint="@color/teal_600" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="阅读设置"
+                android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
+                android:textStyle="bold"
+                android:textColor="@color/storytrim_text_primary"
+                android:paddingHorizontal="@dimen/space_xl"
+                android:paddingBottom="@dimen/space_md" />
 
-        <TextView
-            android:layout_width="24dp"
-            android:layout_height="wrap_content"
-            android:text="A"
-            android:textSize="18sp"
-            android:textColor="@color/stone_800" />
-    </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="字号"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/storytrim_text_secondary"
+                android:paddingHorizontal="@dimen/space_xl" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="翻页模式"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:textColor="@color/stone_600"
-        android:paddingHorizontal="24dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xl"
+                android:layout_marginTop="@dimen/space_sm"
+                android:layout_marginBottom="@dimen/space_md"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-    <com.google.android.material.button.MaterialButtonToggleGroup
-        android:id="@+id/togglePageMode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="20dp"
-        app:singleSelection="true"
-        app:selectionRequired="true">
+                <TextView
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:text="A"
+                    android:textSize="13sp"
+                    android:textColor="@color/storytrim_text_secondary" />
+
+                <SeekBar
+                    android:id="@+id/seekFontSize"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="@dimen/space_md"
+                    android:max="12"
+                    android:progress="4"
+                    android:progressTint="@color/storytrim_accent"
+                    android:thumbTint="@color/storytrim_accent" />
+
+                <TextView
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:text="A"
+                    android:textSize="18sp"
+                    android:textColor="@color/storytrim_text_primary" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="翻页模式"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/storytrim_text_secondary"
+                android:paddingHorizontal="@dimen/space_xl" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/togglePageMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xl"
+                android:layout_marginTop="@dimen/space_sm"
+                android:layout_marginBottom="@dimen/space_md"
+                app:singleSelection="true"
+                app:selectionRequired="true">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPageScroll"
@@ -99,10 +110,10 @@
             app:backgroundTint="@color/segmented_button_bg"
             app:strokeColor="@color/segmented_button_stroke"
             app:strokeWidth="1dp"
-            app:cornerRadius="16dp"
+            app:cornerRadius="@dimen/radius_md"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingVertical="6dp" />
+            android:paddingVertical="@dimen/space_xs" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPageClick"
@@ -115,30 +126,30 @@
             app:backgroundTint="@color/segmented_button_bg"
             app:strokeColor="@color/segmented_button_stroke"
             app:strokeWidth="1dp"
-            app:cornerRadius="16dp"
+            app:cornerRadius="@dimen/radius_md"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingVertical="6dp" />
-    </com.google.android.material.button.MaterialButtonToggleGroup>
+            android:paddingVertical="@dimen/space_xs" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="阅读模式"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:textColor="@color/stone_600"
-        android:paddingHorizontal="24dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="阅读模式"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/storytrim_text_secondary"
+                android:paddingHorizontal="@dimen/space_xl" />
 
-    <com.google.android.material.button.MaterialButtonToggleGroup
-        android:id="@+id/toggleReadingMode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="20dp"
-        app:singleSelection="true"
-        app:selectionRequired="true">
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/toggleReadingMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xl"
+                android:layout_marginTop="@dimen/space_sm"
+                android:layout_marginBottom="@dimen/space_md"
+                app:singleSelection="true"
+                app:selectionRequired="true">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnReadingLight"
@@ -151,10 +162,10 @@
             app:backgroundTint="@color/segmented_button_bg"
             app:strokeColor="@color/segmented_button_stroke"
             app:strokeWidth="1dp"
-            app:cornerRadius="16dp"
+            app:cornerRadius="@dimen/radius_md"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingVertical="6dp" />
+            android:paddingVertical="@dimen/space_xs" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnReadingDark"
@@ -167,10 +178,10 @@
             app:backgroundTint="@color/segmented_button_bg"
             app:strokeColor="@color/segmented_button_stroke"
             app:strokeWidth="1dp"
-            app:cornerRadius="16dp"
+            app:cornerRadius="@dimen/radius_md"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingVertical="6dp" />
+            android:paddingVertical="@dimen/space_xs" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnReadingSepia"
@@ -183,18 +194,18 @@
             app:backgroundTint="@color/segmented_button_bg"
             app:strokeColor="@color/segmented_button_stroke"
             app:strokeWidth="1dp"
-            app:cornerRadius="16dp"
+            app:cornerRadius="@dimen/radius_md"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingVertical="6dp" />
-    </com.google.android.material.button.MaterialButtonToggleGroup>
+            android:paddingVertical="@dimen/space_xs" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xl"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="@dimen/space_sm">
 
         <TextView
             android:layout_width="0dp"
@@ -203,38 +214,38 @@
             android:text="AI 精简模式偏好"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_700" />
+            android:textColor="@color/storytrim_text_secondary" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="全局设置"
             android:textSize="11sp"
-            android:textColor="@color/stone_400" />
-    </LinearLayout>
+            android:textColor="@color/storytrim_text_muted" />
+            </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerPreferredModes"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="20dp"
-        android:layout_marginBottom="8dp" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerPreferredModes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_lg"
+                android:layout_marginBottom="@dimen/space_sm" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="说明：选择偏好的阅读模式，全局生效。点击魔法棒可切换回原文。"
-        android:textSize="10sp"
-        android:textColor="@color/stone_400"
-        android:paddingHorizontal="24dp"
-        android:layout_marginBottom="20dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="说明：选择偏好的阅读模式，全局生效。点击魔法棒可切换回原文。"
+                android:textSize="10sp"
+                android:textColor="@color/storytrim_text_muted"
+                android:paddingHorizontal="@dimen/space_xl"
+                android:layout_marginBottom="@dimen/space_md" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xl"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="@dimen/space_sm">
 
         <TextView
             android:layout_width="0dp"
@@ -243,23 +254,23 @@
             android:text="阅读背景图"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:textColor="@color/stone_700" />
+            android:textColor="@color/storytrim_text_secondary" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="本地相册"
             android:textSize="11sp"
-            android:textColor="@color/stone_400" />
-    </LinearLayout>
+            android:textColor="@color/storytrim_text_muted" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xl"
+                android:layout_marginBottom="@dimen/space_sm"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
         <TextView
             android:id="@+id/tvBgStatus"
@@ -268,37 +279,39 @@
             android:layout_weight="1"
             android:text="未设置"
             android:textSize="12sp"
-            android:textColor="@color/stone_500" />
+            android:textColor="@color/storytrim_text_secondary" />
 
         <TextView
             android:id="@+id/btnSelectBg"
             android:layout_width="wrap_content"
             android:layout_height="32dp"
             android:text="选择"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="@dimen/space_md"
             android:gravity="center"
             android:background="@drawable/bg_chip_outline"
-            android:textColor="@color/stone_600" />
+            android:textColor="@color/storytrim_text_secondary" />
 
         <TextView
             android:id="@+id/btnClearBg"
             android:layout_width="wrap_content"
             android:layout_height="32dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/space_sm"
             android:text="清除"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="@dimen/space_md"
             android:gravity="center"
             android:visibility="gone"
             android:background="@drawable/bg_chip_outline"
-            android:textColor="@color/stone_600" />
-    </LinearLayout>
+            android:textColor="@color/storytrim_text_secondary" />
+            </LinearLayout>
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="说明：支持本地相册图片，自动铺满显示。"
-        android:textSize="10sp"
-        android:textColor="@color/stone_400"
-        android:paddingHorizontal="24dp"
-        android:layout_marginBottom="20dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="说明：支持本地相册图片，自动铺满显示。"
+                android:textSize="10sp"
+                android:textColor="@color/storytrim_text_muted"
+                android:paddingHorizontal="@dimen/space_xl"
+                android:layout_marginBottom="@dimen/space_md" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

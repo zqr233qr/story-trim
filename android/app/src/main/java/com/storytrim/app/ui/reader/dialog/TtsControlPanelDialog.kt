@@ -9,7 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
-import android.widget.Toast
+import com.storytrim.app.ui.common.ToastHelper
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.storytrim.app.R
@@ -29,6 +29,10 @@ class TtsControlPanelDialog : BottomSheetDialogFragment() {
     private var floatingLyricsManager: FloatingLyricsManager? = null
     private var timer: CountDownTimer? = null
 
+    private val prefs by lazy {
+        requireContext().getSharedPreferences("tts_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -45,9 +49,27 @@ class TtsControlPanelDialog : BottomSheetDialogFragment() {
         viewModel.ttsController.value?.let { controller ->
             floatingLyricsManager = controller.floatingLyricsManager
         }
-        
+
+        restorePreferences()
         setupClickListeners()
         observeTtsState()
+    }
+
+    private fun restorePreferences() {
+        val savedRate = prefs.getFloat("tts_speech_rate", 1.0f).coerceIn(0.5f, 3.0f)
+        currentSpeechRate = savedRate
+        val progress = ((savedRate - 0.5f) / 2.5f * 25f).toInt().coerceIn(0, 25)
+        binding.seekBarSpeed.progress = progress
+        binding.tvSpeedValue.text = String.format("%.1fx", savedRate)
+        viewModel.ttsController.value?.setSpeechRate(savedRate)
+
+        val minutes = prefs.getInt("tts_timer_minutes", 0).coerceAtLeast(0)
+        binding.seekBarTimer.progress = (minutes / 5).coerceIn(0, 25)
+        if (minutes > 0) {
+            startTimer(minutes)
+        } else {
+            binding.tvTimerValue.text = "关闭"
+        }
     }
 
     private fun setupClickListeners() {
@@ -75,6 +97,7 @@ class TtsControlPanelDialog : BottomSheetDialogFragment() {
                     currentSpeechRate = rate
                     binding.tvSpeedValue.text = String.format("%.1fx", rate)
                     viewModel.ttsController.value?.setSpeechRate(rate)
+                    prefs.edit().putFloat("tts_speech_rate", rate).apply()
                 }
             }
 
@@ -92,6 +115,7 @@ class TtsControlPanelDialog : BottomSheetDialogFragment() {
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 val minutes = (seekBar?.progress ?: 0) * 5
+                prefs.edit().putInt("tts_timer_minutes", minutes).apply()
                 startTimer(minutes)
             }
         })
@@ -106,17 +130,17 @@ class TtsControlPanelDialog : BottomSheetDialogFragment() {
         if (manager.canDrawOverlays()) {
             // 有权限，直接显示悬浮窗
             manager.show()
-            Toast.makeText(requireContext(), "桌面歌词已开启", Toast.LENGTH_SHORT).show()
+            ToastHelper.show(requireContext(), "桌面歌词已开启")
         } else {
             // 没有权限，请求权限
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
                 startActivity(intent)
-                Toast.makeText(
+                ToastHelper.show(
                     requireContext(),
                     "请开启悬浮窗权限后重试",
-                    Toast.LENGTH_LONG
-                ).show()
+                    long = true
+                )
             }
         }
     }
@@ -143,6 +167,7 @@ class TtsControlPanelDialog : BottomSheetDialogFragment() {
         timer?.cancel()
         if (minutes <= 0) {
             binding.tvTimerValue.text = "关闭"
+            prefs.edit().remove("tts_timer_minutes").apply()
             return
         }
         val totalMs = minutes * 60_000L

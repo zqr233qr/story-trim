@@ -1,29 +1,34 @@
 package com.storytrim.app.ui.reader
 
 import android.os.Bundle
-import android.util.DisplayMetrics
 import android.view.View
-import android.widget.Toast
+import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import com.storytrim.app.databinding.ActivityReaderBinding
+import com.storytrim.app.data.repository.AuthRepository
+import com.storytrim.app.ui.common.LoginRequiredDialogFragment
+import com.storytrim.app.ui.common.ToastHelper
 import com.storytrim.app.ui.reader.core.ReaderView
 import com.storytrim.app.ui.reader.core.TextPaginator
 import com.storytrim.app.ui.reader.dialog.TtsControlPanelDialog
-import com.storytrim.app.ui.reader.tts.TtsController
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class ReaderActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityReaderBinding
     private val viewModel: ReaderViewModel by viewModels()
-    
-    // Pagination state
+
     private var currentPageIndex = 0
     private var currentPages: List<String> = emptyList()
     private var currentTitle: String = ""
@@ -34,35 +39,39 @@ class ReaderActivity : AppCompatActivity() {
     private var hideStatusBar = false
     private var currentPageMode = "click"
     private var currentBackgroundPath: String? = null
+    private var isMenuVisible = false
+    private var isLoggedIn = false
+    private var bookSyncState = 0
+    private var topToolbarBasePaddingTop: Int = 0
 
     private val readerPrefs by lazy {
         getSharedPreferences("reader_prefs", MODE_PRIVATE)
     }
-    
-    // TTS
-    private var ttsForegroundService: com.storytrim.app.ui.reader.tts.TtsForegroundService? = null
-    private var ttsServiceBound = false
+
+    @Inject
+    lateinit var authRepository: AuthRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        
-        // 适配刘海屏，允许内容延伸到刘海区域
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode = 
+            window.attributes.layoutInDisplayCutoutMode =
                 android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        
+
         binding = ActivityReaderBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        topToolbarBasePaddingTop = binding.topToolbar.paddingTop
+
         val bookId = intent.getLongExtra("book_id", -1)
         if (bookId == -1L) {
-            Toast.makeText(this, "书籍参数错误", Toast.LENGTH_SHORT).show()
+            ToastHelper.show(this, "书籍参数错误")
             finish()
             return
         }
-        
+
         window.statusBarColor = android.graphics.Color.TRANSPARENT
 
         viewModel.initTtsController(this)
@@ -70,24 +79,20 @@ class ReaderActivity : AppCompatActivity() {
         setupReaderView()
         setupObservers()
         setupListeners()
+        observeLoginState()
 
         viewModel.loadBook(bookId)
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         viewModel.releaseTts()
     }
-    
+
     private fun setupSystemBars() {
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-        // 允许通过滑动唤出系统栏
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        
-        // 重要：设置状态栏图标为深色（因为阅读背景是浅色）
         windowInsetsController.isAppearanceLightStatusBars = true
-        
-        // 初始状态：隐藏系统栏 (全屏沉浸)
         hideSystemUI()
     }
 
@@ -103,15 +108,16 @@ class ReaderActivity : AppCompatActivity() {
         loadReaderPrefs()
         val metrics = resources.displayMetrics
         val density = metrics.density
-        
+        val readerHeight = metrics.heightPixels
+
         val fontSizeSp = currentFontSizeSp
         val paddingHorizontal = (20 * density).toInt()
         val paddingTop = (48 * density).toInt()
-        val paddingBottom = (16 * density).toInt()
-        
+        val paddingBottom = 0
+
         paginator = TextPaginator(
             width = metrics.widthPixels,
-            height = metrics.heightPixels,
+            height = readerHeight,
             fontSizePx = fontSizeSp * density,
             paddingHorizontal = paddingHorizontal,
             paddingTop = paddingTop,
@@ -120,22 +126,38 @@ class ReaderActivity : AppCompatActivity() {
 
         applyReadingMode(currentReadingMode)
         applyBackground()
+        binding.readerView.setPageMode(currentPageMode)
 
         binding.readerView.onPrevClick = {
-            if (currentPageIndex > 0) {
-                currentPageIndex--
-                displayPage()
+            if (isMenuVisible) {
+                viewModel.toggleMenu()
             } else {
-                viewModel.loadPrevChapter()
+                handlePrevAction()
             }
         }
 
         binding.readerView.onNextClick = {
-            turnToNextPage()
+            if (isMenuVisible) {
+                viewModel.toggleMenu()
+            } else {
+                handleNextAction()
+            }
         }
 
         binding.readerView.onMenuClick = {
             viewModel.toggleMenu()
+        }
+
+        binding.readerView.post {
+            rebuildPaginator()
+        }
+    }
+
+    private fun observeLoginState() {
+        lifecycleScope.launch {
+            authRepository.isLoggedInFlow().collect { token ->
+                isLoggedIn = token.isNotBlank()
+            }
         }
     }
 
@@ -164,7 +186,6 @@ class ReaderActivity : AppCompatActivity() {
         paginator?.setTextColor(textColor)
         binding.readerView.updateStatusTextColor(statusColor)
         binding.tvBookTitle.setTextColor(textColor)
-        binding.tvCurrentMode.setTextColor(statusColor)
 
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = mode != "dark"
     }
@@ -197,6 +218,31 @@ class ReaderActivity : AppCompatActivity() {
     fun updatePageMode(mode: String) {
         currentPageMode = mode
         readerPrefs.edit().putString("reader_page_mode", mode).apply()
+        binding.readerView.setPageMode(mode)
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && currentPageMode == "click") {
+            when (event.keyCode) {
+                android.view.KeyEvent.KEYCODE_VOLUME_UP -> {
+                    if (isMenuVisible) {
+                        viewModel.toggleMenu()
+                    } else {
+                        handlePrevAction()
+                    }
+                    return true
+                }
+                android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    if (isMenuVisible) {
+                        viewModel.toggleMenu()
+                    } else {
+                        handleNextAction()
+                    }
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     fun getCurrentBackgroundPath(): String? = currentBackgroundPath
@@ -219,13 +265,14 @@ class ReaderActivity : AppCompatActivity() {
     private fun rebuildPaginator() {
         val metrics = resources.displayMetrics
         val density = metrics.density
+        val readerHeight = metrics.heightPixels
         paginator = TextPaginator(
             width = metrics.widthPixels,
-            height = metrics.heightPixels,
+            height = readerHeight,
             fontSizePx = currentFontSizeSp * density,
             paddingHorizontal = (20 * density).toInt(),
             paddingTop = (48 * density).toInt(),
-            paddingBottom = (16 * density).toInt()
+            paddingBottom = 0
         )
         applyReadingMode(currentReadingMode)
         if (currentContent.isNotBlank()) {
@@ -265,7 +312,7 @@ class ReaderActivity : AppCompatActivity() {
         binding.ivReaderBackground.visibility = View.VISIBLE
         binding.viewBackgroundOverlay.visibility = View.VISIBLE
     }
-    
+
     private fun turnToNextPage() {
         if (currentPageIndex < currentPages.size - 1) {
             currentPageIndex++
@@ -280,34 +327,32 @@ class ReaderActivity : AppCompatActivity() {
             paginator?.let {
                 val pageContent = currentPages[currentPageIndex]
                 binding.readerView.setPageData(
-                    pageContent, 
-                    currentTitle, 
-                    currentPageIndex, 
-                    currentPages.size, 
+                    pageContent,
+                    currentTitle,
+                    currentPageIndex,
+                    currentPages.size,
                     it
                 )
             }
         }
     }
-    
+
     private fun setupObservers() {
         viewModel.contentState.observe(this) { state ->
             currentTitle = state.title
             currentContent = state.text
-            
-            // Calculate pages
+
             paginator?.let {
                 currentPages = it.paginate(state.text)
-                
+
                 when (state.scrollTo) {
                     ReaderViewModel.NavigationStrategy.START -> currentPageIndex = 0
                     ReaderViewModel.NavigationStrategy.END -> currentPageIndex = (currentPages.size - 1).coerceAtLeast(0)
                     ReaderViewModel.NavigationStrategy.KEEP -> {}
                 }
-                
+
                 displayPage()
-                
-                // 准备TTS内容
+
                 viewModel.prepareTts(state.text, state.title)
             }
         }
@@ -315,52 +360,61 @@ class ReaderActivity : AppCompatActivity() {
         viewModel.isLoading.observe(this) { isLoading ->
             binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
         }
-        
+
         viewModel.book.observe(this) { book ->
             binding.tvBookTitle.text = book.title
+            bookSyncState = book.syncState
         }
 
         viewModel.activeModeName.observe(this) { modeName ->
-            binding.tvCurrentMode.text = modeName
             binding.readerView.setModeName(modeName)
         }
 
         viewModel.toastMessage.observe(this) { message ->
             if (!message.isNullOrBlank()) {
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, message)
             }
         }
 
         viewModel.isMenuVisible.observe(this) { isVisible ->
+            isMenuVisible = isVisible
             if (isVisible) {
-                if (!hideStatusBar) {
-                    showSystemUI()
-                } else {
-                    hideSystemUI()
-                }
+                showSystemUI()
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                rebuildPaginator()
+                applyTopToolbarInsets()
                 binding.topToolbar.visibility = View.VISIBLE
                 binding.bottomMenu.visibility = View.VISIBLE
                 binding.btnMagic.visibility = View.VISIBLE
             } else {
                 hideSystemUI()
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                rebuildPaginator()
+                resetTopToolbarPadding()
                 binding.topToolbar.visibility = View.GONE
                 binding.bottomMenu.visibility = View.GONE
                 binding.btnMagic.visibility = View.GONE
             }
         }
 
-        // Observe magic button state
         viewModel.isMagicActive.observe(this) { isActive ->
             if (isActive) {
-                binding.btnMagic.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#0D9488")) // Teal
-                binding.btnMagic.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+                binding.btnMagic.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(this, com.storytrim.app.R.color.storytrim_accent)
+                )
+                binding.btnMagic.imageTintList = android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(this, com.storytrim.app.R.color.white)
+                )
             } else {
-                binding.btnMagic.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#E5E5E4")) // Stone-200
-                binding.btnMagic.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1C1917"))
+                binding.btnMagic.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(this, com.storytrim.app.R.color.storytrim_surface_muted)
+                )
+                binding.btnMagic.imageTintList = android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(this, com.storytrim.app.R.color.storytrim_text_primary)
+                )
             }
         }
 
-        // Observe terminal event
         viewModel.showTerminalEvent.observe(this) { show ->
             if (show) {
                 val dialog = com.storytrim.app.ui.reader.dialog.GenerationTerminalDialogFragment()
@@ -373,16 +427,12 @@ class ReaderActivity : AppCompatActivity() {
             dialog.show(supportFragmentManager, com.storytrim.app.ui.reader.dialog.AiTrimConfigDialogFragment.TAG)
         }
 
-        // Observe TTS panel visibility
         viewModel.isTtsPanelVisible.observe(this) { isVisible ->
             if (isVisible) {
                 showTtsControlPanel()
-            } else {
-                // Panel will be dismissed by user action
             }
         }
 
-        // Observe TTS sentence changes for highlight sync
         viewModel.ttsController.observe(this) { controller ->
             controller?.currentSentenceWithIndex?.observe(this) { ttsSentence ->
                 if (ttsSentence != null && ttsSentence.index >= 0) {
@@ -393,13 +443,21 @@ class ReaderActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun setupListeners() {
         binding.btnMagic.setOnClickListener {
+            if (!isLoggedIn) {
+                showLoginDialog("精简功能需要登录账号，登录后即可使用智能精简。")
+                return@setOnClickListener
+            }
             viewModel.toggleMagic()
         }
 
         binding.btnMagic.setOnLongClickListener {
+            if (!isLoggedIn) {
+                showLoginDialog("精简功能需要登录账号，登录后即可使用智能精简。")
+                return@setOnLongClickListener true
+            }
             val dialog = com.storytrim.app.ui.reader.dialog.AiTrimConfigDialogFragment()
             dialog.show(supportFragmentManager, com.storytrim.app.ui.reader.dialog.AiTrimConfigDialogFragment.TAG)
             true
@@ -408,18 +466,26 @@ class ReaderActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener {
             finish()
         }
-        
+
         binding.btnCatalog.setOnClickListener {
             val dialog = com.storytrim.app.ui.reader.dialog.ChapterListDialogFragment()
             dialog.show(supportFragmentManager, "ChapterListDialog")
         }
-        
+
         binding.btnSettings.setOnClickListener {
             val dialog = com.storytrim.app.ui.reader.dialog.ReaderSettingsDialogFragment.newInstance()
             dialog.show(supportFragmentManager, com.storytrim.app.ui.reader.dialog.ReaderSettingsDialogFragment.TAG)
         }
 
         binding.btnBatchTrim.setOnClickListener {
+            if (!isLoggedIn) {
+                showLoginDialog("精简功能需要登录账号，登录后即可使用智能精简。")
+                return@setOnClickListener
+            }
+            if (bookSyncState == 0) {
+                ToastHelper.show(this, "本地书籍暂不支持指定精简")
+                return@setOnClickListener
+            }
             val dialog = com.storytrim.app.ui.reader.dialog.ChapterTrimDialogFragment()
             dialog.show(supportFragmentManager, "ChapterTrimDialog")
         }
@@ -442,58 +508,93 @@ class ReaderActivity : AppCompatActivity() {
         dialog.show(supportFragmentManager, TtsControlPanelDialog.TAG)
     }
 
-    /**
-     * 同步TTS高亮到阅读页
-     * 使用索引匹配方式设置高亮
-     * 翻页模式下不需要滚动
-     */
-    private fun syncHighlightWithTts(sentenceIndex: Int, sentence: String) {
-        if (sentence.isEmpty()) return
-
-        // 使用索引匹配方式设置高亮
-        binding.readerView.setHighlightByIndex(sentenceIndex, sentence)
-
-        // 检查当前页是否包含该句子
-        if (currentPages.isNotEmpty() && currentPageIndex < currentPages.size) {
-            val pageContent = currentPages[currentPageIndex]
-            if (!pageContent.contains(sentence)) {
-                // 句子不在当前页，需要翻页
-                findAndGotoSentencePage(sentence, sentenceIndex)
+    private fun handlePrevAction() {
+        if (currentPageMode != "click") {
+            if (currentPageIndex > 0) {
+                currentPageIndex--
+                displayPage()
+            } else {
+                viewModel.loadPrevChapter()
             }
-            // 句子在当前页，只设置高亮（翻页模式下不需要滚动）
+            return
+        }
+
+        if (currentPageIndex > 0) {
+            currentPageIndex--
+            displayPage()
+        } else {
+            viewModel.loadPrevChapter()
         }
     }
 
-    /**
-     * 滚动到高亮位置（居中显示）
-     */
-    private fun scrollToHighlight(start: Int, end: Int) {
+    private fun handleNextAction() {
+        if (currentPageMode != "click") {
+            turnToNextPage()
+            return
+        }
+
+        turnToNextPage()
+    }
+
+    private fun showLoginDialog(message: String) {
+        LoginRequiredDialogFragment.newInstance(message)
+            .show(supportFragmentManager, "LoginRequiredDialog")
+    }
+
+    private fun applyTopToolbarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.topToolbar) { view, windowInsets ->
+            val topInset = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            view.setPadding(
+                view.paddingLeft,
+                topToolbarBasePaddingTop + topInset,
+                view.paddingRight,
+                view.paddingBottom
+            )
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(binding.topToolbar)
+    }
+
+    private fun resetTopToolbarPadding() {
+        binding.topToolbar.setPadding(
+            binding.topToolbar.paddingLeft,
+            topToolbarBasePaddingTop,
+            binding.topToolbar.paddingRight,
+            binding.topToolbar.paddingBottom
+        )
+    }
+
+    private fun syncHighlightWithTts(sentenceIndex: Int, sentence: String) {
+        if (sentence.isEmpty()) return
+
+        binding.readerView.setHighlightByIndex(sentenceIndex, sentence)
+
+        if (currentPages.isNotEmpty() && currentPageIndex < currentPages.size) {
+            val pageContent = currentPages[currentPageIndex]
+            if (!pageContent.contains(sentence)) {
+                findAndGotoSentencePage(sentence, sentenceIndex)
+            }
+        }
+    }
+
+    private fun scrollToHighlight(start: Int) {
         val paginator = paginator ?: return
         val paint = paginator.getPaint()
         val lineHeight = paint.textSize * 1.5f
-        
-        // 计算高亮在第几行
+
         val layout = binding.readerView.getLayout() ?: return
         val startLine = layout.getLineForOffset(start)
-        
-        // 计算目标Y位置（让高亮行居中）
+
         val contentTop = paginator.paddingTop.toFloat()
         val viewHeight = binding.readerView.height
         val targetY = contentTop + (startLine * lineHeight) - (viewHeight / 2) + (lineHeight / 2)
-        
-        // 使用post实现平滑滚动
+
         binding.readerView.post {
             binding.readerView.scrollTo(0, targetY.toInt().coerceAtLeast(0))
         }
     }
 
-    /**
-     * 查找句子所在的页面并跳转
-     */
     private fun findAndGotoSentencePage(sentence: String, sentenceIndex: Int) {
-        val paginator = paginator ?: return
-
-        // 在所有页面中查找
         for ((pageIdx, pageContent) in currentPages.withIndex()) {
             if (pageContent.contains(sentence)) {
                 if (pageIdx != currentPageIndex) {
@@ -501,22 +602,18 @@ class ReaderActivity : AppCompatActivity() {
                     displayPage()
                 }
 
-                // 延迟设置高亮和滚动，确保页面已渲染
                 binding.readerView.post {
                     val sentenceStart = pageContent.indexOf(sentence)
                     val sentenceEnd = sentenceStart + sentence.length
                     binding.readerView.setHighlightRangeInternal(sentenceStart, sentenceEnd)
-                    scrollToHighlight(sentenceStart, sentenceEnd)
+                    scrollToHighlight(sentenceStart)
                 }
                 return
             }
         }
 
-        // 如果没找到，使用索引匹配尝试
         binding.readerView.post {
             binding.readerView.setHighlightByIndex(sentenceIndex, sentence)
         }
     }
-
-    // Auto-flip for TTS
 }

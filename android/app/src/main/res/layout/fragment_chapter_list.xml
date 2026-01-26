@@ -5,24 +5,24 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/white">
+    android:background="@color/storytrim_surface">
 
     <!-- Handle Bar -->
     <View
         android:layout_width="40dp"
         android:layout_height="4dp"
         android:background="@drawable/scrollbar_thumb"
-        android:backgroundTint="#E5E5E5"
+        android:backgroundTint="@color/storytrim_border"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginTop="@dimen/space_md"
+        android:layout_marginBottom="@dimen/space_md" />
 
     <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="24dp"
-        android:paddingBottom="16dp"
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_lg"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
@@ -32,23 +32,23 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="目录"
-            android:textSize="20sp"
+            android:textAppearance="@style/TextAppearance.StoryTrim.Title"
             android:textStyle="bold"
-            android:textColor="@color/stone_900" />
+            android:textColor="@color/storytrim_text_primary" />
 
         <TextView
             android:id="@+id/tvChapterCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="0 章"
-            android:textSize="12sp"
-            android:textColor="@color/stone_500" />
+            android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+            android:textColor="@color/storytrim_text_muted" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#E5E5E5" />
+        android:background="@color/storytrim_divider" />
 
     <!-- List -->
     <androidx.recyclerview.widget.RecyclerView

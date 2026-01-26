@@ -22,4 +22,17 @@
 
     <color name="teal_500">#14b8a6</color>
     <color name="teal_600">#0d9488</color>
+
+    <!-- StoryTrim Semantic Colors -->
+    <color name="storytrim_bg">#FAFAF9</color>
+    <color name="storytrim_surface">#FFFFFF</color>
+    <color name="storytrim_surface_muted">#F5F5F4</color>
+    <color name="storytrim_border">#E7E5E4</color>
+    <color name="storytrim_divider">#E7E5E4</color>
+    <color name="storytrim_text_primary">#1C1917</color>
+    <color name="storytrim_text_secondary">#57534E</color>
+    <color name="storytrim_text_muted">#A8A29E</color>
+    <color name="storytrim_accent">#14B8A6</color>
+    <color name="storytrim_accent_dark">#0D9488</color>
+    <color name="storytrim_ripple">#1F14B8A6</color>
 </resources>

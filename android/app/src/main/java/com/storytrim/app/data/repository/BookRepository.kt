@@ -5,15 +5,21 @@ import com.storytrim.app.core.database.AppDatabase
 import com.storytrim.app.core.database.dao.BookDao
 import com.storytrim.app.core.database.dao.ChapterDao
 import com.storytrim.app.core.database.dao.ContentDao
+import com.storytrim.app.core.database.dao.ReadingHistoryDao
 import com.storytrim.app.core.database.entity.BookEntity
 import com.storytrim.app.core.database.entity.ChapterEntity
 import com.storytrim.app.core.database.entity.ContentEntity
+import com.storytrim.app.core.database.entity.ReadingHistoryEntity
 import com.storytrim.app.core.network.ApiClient
 import com.storytrim.app.core.network.TrimService
 import com.storytrim.app.core.parser.FileParser
 import com.storytrim.app.core.utils.ZipUtils
 import com.storytrim.app.data.dto.BatchChapterContentReq
+import com.storytrim.app.data.dto.BatchTrimByMd5Request
 import com.storytrim.app.data.dto.BatchTrimRequest
+import com.storytrim.app.data.dto.BookUploadChapter
+import com.storytrim.app.data.dto.BookUploadManifest
+import com.storytrim.app.data.dto.BookUploadResp
 import com.storytrim.app.data.dto.ChapterStatusReq
 import com.storytrim.app.data.dto.ContentStatusReq
 import com.storytrim.app.data.dto.ChapterTrimOption
@@ -21,7 +27,12 @@ import com.storytrim.app.data.dto.ChapterTrimStatusResp
 import com.storytrim.app.data.dto.ChapterTrimTaskReq
 import com.storytrim.app.data.dto.ChapterTrimTaskResp
 import com.storytrim.app.data.dto.PointsBalanceResp
+import com.storytrim.app.data.dto.ReadingProgressReq
+import com.storytrim.app.data.dto.ReadingProgressResp
 import com.storytrim.app.data.dto.TrimStatus
+import com.storytrim.app.data.dto.TrimStatusSyncReqById
+import com.storytrim.app.data.dto.TrimStatusSyncReqByMd5
+import com.storytrim.app.data.dto.TrimStatusSyncResp
 import com.storytrim.app.data.model.Book
 import com.storytrim.app.data.model.Chapter
 import com.storytrim.app.data.model.Prompt
@@ -31,11 +42,19 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import okhttp3.ResponseBody
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import com.google.gson.Gson
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.util.Locale
+import kotlin.collections.LinkedHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
 
 @Singleton
 class BookRepository @Inject constructor(
@@ -45,6 +64,7 @@ class BookRepository @Inject constructor(
     private val bookDao: BookDao,
     private val chapterDao: ChapterDao,
     private val contentDao: ContentDao,
+    private val readingHistoryDao: ReadingHistoryDao,
     private val fileParser: FileParser,
     private val appDatabase: AppDatabase,
     private val zipUtils: ZipUtils,
@@ -52,8 +72,23 @@ class BookRepository @Inject constructor(
 ) {
     private var cachedPrompts: List<Prompt> = emptyList()
     private val trimCache = mutableMapOf<String, String>()
+    private val trimStatusCache = object : LinkedHashMap<String, List<Int>>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Int>>?): Boolean {
+            return size > 256
+        }
+    }
+    private val trimStatusLock = Any()
+    private val contentMemoryCache = object : LinkedHashMap<String, String>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
+            return size > 64
+        }
+    }
+    private val contentCacheLock = Any()
+    private val chapterCacheDir: File by lazy { File(context.cacheDir, "chapter_cache") }
+    private val gson = Gson()
 
-    fun getBooksStream(userId: Long): Flow<List<Book>> {
+    @Suppress("UNUSED_PARAMETER")
+    fun getBooksStream(_userId: Long): Flow<List<Book>> {
         return bookDao.getAllBooks().map { entities ->
             entities.map { entity -> mapBookToDomain(entity) }
         }
@@ -129,6 +164,13 @@ class BookRepository @Inject constructor(
         val cached = getCachedChapterTrim(bookId, chapter.id, promptId)
         if (!cached.isNullOrBlank()) return cached
 
+        val book = bookDao.getBookById(bookId) ?: return null
+        if (book.syncState == 0) {
+            val md5 = chapter.md5
+            if (md5.isBlank()) return null
+            return fetchChapterTrimByMd5(bookId, chapter, promptId, md5)
+        }
+
         val cloudChapterId = if (chapter.cloudId > 0) chapter.cloudId else chapter.id
         return try {
             val res = apiClient.safeCall { bookService.getBatchTrimmedById(BatchTrimRequest(listOf(cloudChapterId), promptId)) }
@@ -145,7 +187,168 @@ class BookRepository @Inject constructor(
         }
     }
 
+    private suspend fun fetchChapterTrimByMd5(bookId: Long, chapter: Chapter, promptId: Int, md5: String): String? {
+        return try {
+            val res = apiClient.safeCall { bookService.getBatchTrimmedByMd5(BatchTrimByMd5Request(listOf(md5), promptId)) }
+            if (res.code == 0 && !res.data.isNullOrEmpty()) {
+                val trimmed = res.data.firstOrNull()?.trimmedContent?.trim()
+                if (!trimmed.isNullOrBlank()) {
+                    cacheChapterTrim(bookId, chapter.id, promptId, trimmed)
+                    trimmed
+                } else null
+            } else null
+        } catch (e: Exception) {
+            android.util.Log.e("BookRepository", "fetchChapterTrimByMd5 failed", e)
+            null
+        }
+    }
+
+    /**
+     * 批量预加载精简内容（遵循批量接口上限：10）
+     */
+    suspend fun preloadChapterTrims(chapters: List<Chapter>, promptId: Int) {
+        if (chapters.isEmpty() || promptId <= 0) return
+        val book = bookDao.getBookById(chapters.first().bookId) ?: return
+        if (book.syncState == 0 && book.cloudId <= 0) return
+
+        val candidates = chapters.filter { chapter ->
+            val cached = getCachedChapterTrim(chapter.bookId, chapter.id, promptId)
+            cached.isNullOrBlank()
+        }
+        if (candidates.isEmpty()) return
+
+        val eligible = mutableListOf<Chapter>()
+        val unknown = mutableListOf<Chapter>()
+        for (chapter in candidates) {
+            val cachedStatus = getCachedTrimStatus(chapter)
+            if (cachedStatus != null) {
+                if (cachedStatus.contains(promptId)) {
+                    eligible.add(chapter)
+                }
+            } else {
+                unknown.add(chapter)
+            }
+        }
+
+        if (unknown.isNotEmpty()) {
+            if (book.syncState == 0) {
+                val md5s = unknown.mapNotNull { it.md5.takeIf { md5 -> md5.isNotBlank() } }
+                val map = syncTrimStatusByMd5(md5s)
+                unknown.forEach { chapter ->
+                    val promptIds = map[chapter.md5] ?: emptyList()
+                    cacheTrimStatus(chapter, promptIds)
+                    if (promptIds.contains(promptId)) {
+                        eligible.add(chapter)
+                    }
+                }
+            } else if (book.cloudId > 0) {
+                val map = syncTrimStatusByBookId(book.cloudId)
+                unknown.forEach { chapter ->
+                    val promptIds = resolvePromptIdsFromMap(chapter, map) ?: emptyList()
+                    cacheTrimStatus(chapter, promptIds)
+                    if (promptIds.contains(promptId)) {
+                        eligible.add(chapter)
+                    }
+                }
+            }
+        }
+
+        if (eligible.isEmpty()) return
+
+        if (book.syncState == 0) {
+            val md5Map = eligible.associateBy { it.md5 }
+            val md5s = md5Map.keys.filter { it.isNotBlank() }
+            val batches = md5s.chunked(10)
+            for (batch in batches) {
+                try {
+                    val res = apiClient.safeCall { bookService.getBatchTrimmedByMd5(BatchTrimByMd5Request(batch, promptId)) }
+                    if (res.code == 0 && !res.data.isNullOrEmpty()) {
+                        res.data.forEach { dto ->
+                            val md5 = dto.chapterMd5 ?: return@forEach
+                            val chapter = md5Map[md5] ?: return@forEach
+                            val trimmed = dto.trimmedContent.trim()
+                            if (trimmed.isNotBlank()) {
+                                cacheChapterTrim(chapter.bookId, chapter.id, promptId, trimmed)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("BookRepository", "preloadChapterTrimsByMd5 failed", e)
+                }
+            }
+        } else {
+            val idMap = eligible.associateBy { if (it.cloudId > 0) it.cloudId else it.id }
+            val cloudIds = idMap.keys.toList()
+            val batches = cloudIds.chunked(10)
+            for (batch in batches) {
+                try {
+                    val res = apiClient.safeCall { bookService.getBatchTrimmedById(BatchTrimRequest(batch, promptId)) }
+                    if (res.code == 0 && !res.data.isNullOrEmpty()) {
+                        res.data.forEach { dto ->
+                            val chapter = idMap[dto.chapterId] ?: return@forEach
+                            val trimmed = dto.trimmedContent.trim()
+                            if (trimmed.isNotBlank()) {
+                                cacheChapterTrim(chapter.bookId, chapter.id, promptId, trimmed)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("BookRepository", "preloadChapterTrimsById failed", e)
+                }
+            }
+        }
+    }
+
+    private fun trimStatusCacheKey(chapter: Chapter): String {
+        return if (chapter.md5.isNotBlank()) "md5:${chapter.md5}" else "id:${chapter.id}"
+    }
+
+    private fun getCachedTrimStatus(chapter: Chapter): List<Int>? {
+        val key = trimStatusCacheKey(chapter)
+        synchronized(trimStatusLock) {
+            return trimStatusCache[key]
+        }
+    }
+
+    private fun cacheTrimStatus(chapter: Chapter, promptIds: List<Int>) {
+        val key = trimStatusCacheKey(chapter)
+        synchronized(trimStatusLock) {
+            trimStatusCache[key] = promptIds
+        }
+    }
+
+    private fun cacheTrimStatusByKey(key: String, promptIds: List<Int>) {
+        synchronized(trimStatusLock) {
+            trimStatusCache[key] = promptIds
+        }
+    }
+
+    private fun resolvePromptIdsFromMap(chapter: Chapter, map: Map<String, List<Int>>): List<Int>? {
+        if (chapter.md5.isNotBlank()) {
+            map[chapter.md5]?.let { return it }
+        }
+        val idKey = if (chapter.cloudId > 0) chapter.cloudId.toString() else chapter.id.toString()
+        return map[idKey]
+    }
+
     suspend fun getChapterTrimStatusById(chapter: Chapter, bookMd5: String?): List<Int> {
+        getCachedTrimStatus(chapter)?.let { return it }
+
+        val book = bookDao.getBookById(chapter.bookId)
+        if (book != null && book.syncState == 0 && chapter.md5.isNotBlank()) {
+            val result = syncTrimStatusByMd5(listOf(chapter.md5))
+            val promptIds = result[chapter.md5] ?: emptyList()
+            cacheTrimStatus(chapter, promptIds)
+            return promptIds
+        }
+
+        if (book != null && book.cloudId > 0) {
+            val result = syncTrimStatusByBookId(book.cloudId)
+            val promptIds = resolvePromptIdsFromMap(chapter, result) ?: emptyList()
+            cacheTrimStatus(chapter, promptIds)
+            if (promptIds.isNotEmpty()) return promptIds
+        }
+
         return try {
             val res = apiClient.safeCall {
                 bookService.getChapterStatusById(
@@ -156,7 +359,9 @@ class BookRepository @Inject constructor(
                     )
                 )
             }
-            res.data?.promptIds ?: emptyList()
+            val promptIds = res.data?.promptIds ?: emptyList()
+            cacheTrimStatus(chapter, promptIds)
+            promptIds
         } catch (e: Exception) {
             android.util.Log.e("BookRepository", "getChapterTrimStatusById failed", e)
             emptyList()
@@ -164,12 +369,58 @@ class BookRepository @Inject constructor(
     }
 
     suspend fun getChapterTrimStatusByMd5(chapterMd5: String): List<Int> {
+        if (chapterMd5.isBlank()) return emptyList()
+        val cacheKey = "md5:$chapterMd5"
+        synchronized(trimStatusLock) {
+            trimStatusCache[cacheKey]?.let { return it }
+        }
+
+        val result = syncTrimStatusByMd5(listOf(chapterMd5))
+        val promptIds = result[chapterMd5] ?: emptyList()
+        cacheTrimStatusByKey(cacheKey, promptIds)
+        if (promptIds.isNotEmpty()) return promptIds
+
         return try {
             val res = apiClient.safeCall { bookService.getContentStatusByMd5(ContentStatusReq(chapterMd5)) }
-            res.data?.promptIds ?: emptyList()
+            val ids = res.data?.promptIds ?: emptyList()
+            cacheTrimStatusByKey(cacheKey, ids)
+            ids
         } catch (e: Exception) {
             android.util.Log.e("BookRepository", "getChapterTrimStatusByMd5 failed", e)
             emptyList()
+        }
+    }
+
+    private suspend fun syncTrimStatusByMd5(md5s: List<String>): Map<String, List<Int>> {
+        if (md5s.isEmpty()) return emptyMap()
+        val batches = md5s.chunked(20)
+        val result = mutableMapOf<String, List<Int>>()
+        for (batch in batches) {
+            try {
+                val res = apiClient.safeCall { bookService.syncTrimmedStatusByMd5(TrimStatusSyncReqByMd5(batch)) }
+                if (res.code == 0 && res.data != null) {
+                    result.putAll(res.data.trimmedMap)
+                    res.data.trimmedMap.forEach { (key, value) ->
+                        cacheTrimStatusByKey("md5:$key", value)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("BookRepository", "syncTrimStatusByMd5 failed", e)
+            }
+        }
+        return result
+    }
+
+    private suspend fun syncTrimStatusByBookId(bookId: Long): Map<String, List<Int>> {
+        if (bookId <= 0) return emptyMap()
+        return try {
+            val res = apiClient.safeCall { bookService.syncTrimmedStatusById(TrimStatusSyncReqById(bookId)) }
+            if (res.code == 0 && res.data != null) {
+                res.data.trimmedMap
+            } else emptyMap()
+        } catch (e: Exception) {
+            android.util.Log.w("BookRepository", "syncTrimStatusByBookId failed", e)
+            emptyMap()
         }
     }
 
@@ -207,7 +458,8 @@ class BookRepository @Inject constructor(
         }
     }
 
-    suspend fun refreshBooks(userId: Long): Result<Unit> {
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun refreshBooks(_userId: Long): Result<Unit> {
         return try {
             val response = apiClient.safeCall { bookService.getBooks() }
             if (response.code == 0 && response.data != null) {
@@ -267,7 +519,8 @@ class BookRepository @Inject constructor(
                 
                 if (res.code == 0 && res.data != null) {
                     val entities = res.data.chapters.map { dto ->
-                        val uniqueMd5 = if (dto.md5.isNullOrEmpty()) "fake_md5_${bookId}_${dto.id}" else dto.md5!!
+                        val uniqueMd5 = dto.md5?.takeIf { it.isNotBlank() }
+                            ?: "fake_md5_${bookId}_${dto.id}"
                         ChapterEntity(
                             bookId = bookId,
                             cloudId = dto.id,
@@ -294,8 +547,21 @@ class BookRepository @Inject constructor(
 
     suspend fun getChapterContent(chapterId: Long): String {
         val chapter = chapterDao.getChapterById(chapterId) ?: return ""
+        val md5 = chapter.md5
+        val memoryCached = getMemoryCachedContent(md5)
+        if (!memoryCached.isNullOrEmpty()) {
+            return memoryCached
+        }
+
+        val diskCached = readDiskCachedContent(md5)
+        if (!diskCached.isNullOrEmpty()) {
+            putMemoryCachedContent(md5, diskCached)
+            return diskCached
+        }
+
         val localContent = contentDao.getContentByMd5(chapter.md5)?.rawContent
         if (!localContent.isNullOrEmpty()) {
+            cacheChapterContent(md5, localContent)
             return localContent
         }
 
@@ -311,6 +577,7 @@ class BookRepository @Inject constructor(
                 if (res.code == 0 && res.data != null && res.data.isNotEmpty()) {
                     val content = res.data[0].content
                     contentDao.insertContents(listOf(ContentEntity(chapterMd5 = chapter.md5, rawContent = content)))
+                    cacheChapterContent(md5, content)
                     return content
                 } else {
                     android.util.Log.w("BookRepository", "Failed to fetch content: ${res.msg}")
@@ -323,7 +590,115 @@ class BookRepository @Inject constructor(
         return ""
     }
 
-    suspend fun downloadBookContent(bookId: Long, cloudBookId: Long, userId: Long, onProgress: ((Int) -> Unit)?): Result<Unit> {
+    /**
+     * 批量预加载章节内容（遵循批量接口上限：10）
+     */
+    suspend fun preloadChapterContents(chapters: List<Chapter>) {
+        if (chapters.isEmpty()) return
+        val book = bookDao.getBookById(chapters.first().bookId) ?: return
+
+        val missing = mutableListOf<Chapter>()
+        for (chapter in chapters) {
+            val md5 = chapter.md5
+            val memoryCached = getMemoryCachedContent(md5)
+            if (!memoryCached.isNullOrEmpty()) continue
+
+            val diskCached = readDiskCachedContent(md5)
+            if (!diskCached.isNullOrEmpty()) {
+                putMemoryCachedContent(md5, diskCached)
+                continue
+            }
+
+            val localContent = contentDao.getContentByMd5(md5)?.rawContent
+            if (!localContent.isNullOrEmpty()) {
+                cacheChapterContent(md5, localContent)
+                continue
+            }
+
+            if (book.syncState != 0 && book.cloudId > 0) {
+                missing.add(chapter)
+            }
+        }
+
+        if (missing.isEmpty()) return
+
+        val idMap = missing.associateBy { if (it.cloudId > 0) it.cloudId else it.id }
+        val cloudIds = idMap.keys.toList()
+        val batches = cloudIds.chunked(10)
+        for (batch in batches) {
+            try {
+                val res = apiClient.safeCall { bookService.getBatchChapterContents(BatchChapterContentReq(batch)) }
+                if (res.code == 0 && !res.data.isNullOrEmpty()) {
+                    val contents = res.data.mapNotNull { dto ->
+                        val chapter = idMap[dto.chapterId]
+                        val md5 = dto.chapterMd5.ifBlank { chapter?.md5 ?: "" }
+                        if (md5.isBlank()) return@mapNotNull null
+                        cacheChapterContent(md5, dto.content)
+                        ContentEntity(chapterMd5 = md5, rawContent = dto.content)
+                    }
+                    if (contents.isNotEmpty()) {
+                        contentDao.insertContents(contents)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("BookRepository", "preloadChapterContents failed", e)
+            }
+        }
+    }
+
+    private fun cacheChapterContent(md5: String, content: String) {
+        if (content.isBlank()) return
+        putMemoryCachedContent(md5, content)
+        writeDiskCachedContent(md5, content)
+    }
+
+    private fun getMemoryCachedContent(md5: String): String? {
+        synchronized(contentCacheLock) {
+            return contentMemoryCache[md5]
+        }
+    }
+
+    private fun putMemoryCachedContent(md5: String, content: String) {
+        synchronized(contentCacheLock) {
+            contentMemoryCache[md5] = content
+        }
+    }
+
+    private fun readDiskCachedContent(md5: String): String? {
+        return try {
+            val file = File(chapterCacheDir, "$md5.txt")
+            if (!file.exists()) return null
+            file.setLastModified(System.currentTimeMillis())
+            file.readText(Charsets.UTF_8)
+        } catch (e: Exception) {
+            android.util.Log.w("BookRepository", "readDiskCachedContent failed", e)
+            null
+        }
+    }
+
+    private fun writeDiskCachedContent(md5: String, content: String) {
+        try {
+            if (!chapterCacheDir.exists()) {
+                chapterCacheDir.mkdirs()
+            }
+            val file = File(chapterCacheDir, "$md5.txt")
+            file.writeText(content, Charsets.UTF_8)
+            pruneDiskCache()
+        } catch (e: Exception) {
+            android.util.Log.w("BookRepository", "writeDiskCachedContent failed", e)
+        }
+    }
+
+    private fun pruneDiskCache() {
+        val files = chapterCacheDir.listFiles() ?: return
+        if (files.size <= 50) return
+        val sorted = files.sortedBy { it.lastModified() }
+        val toDelete = sorted.take(files.size - 50)
+        toDelete.forEach { it.delete() }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun downloadBookContent(bookId: Long, cloudBookId: Long, _userId: Long, onProgress: ((Int) -> Unit)?): Result<Unit> {
         return try {
             onProgress?.invoke(10)
             val body = apiClient.safeCallRaw { bookService.downloadBookContent(cloudBookId) } ?: return Result.failure(Exception("Download failed"))
@@ -339,6 +714,157 @@ class BookRepository @Inject constructor(
             onProgress?.invoke(100)
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * 同步本地书籍到云端（上传 zip 并写入映射）
+     */
+    suspend fun uploadBookZip(bookId: Long, onProgress: (Int) -> Unit): Result<BookUploadResp> {
+        return try {
+            val book = bookDao.getBookById(bookId) ?: return Result.failure(Exception("书籍不存在"))
+            if (book.totalChapters <= 0) {
+                return Result.failure(Exception("章节为空"))
+            }
+
+            val tempDir = File(context.cacheDir, "upload_books/${bookId}_${System.currentTimeMillis()}")
+            if (!tempDir.exists()) tempDir.mkdirs()
+
+            val manifest = buildUploadManifest(book, onProgress)
+            val bookFile = File(tempDir, "book.txt")
+            val manifestFile = File(tempDir, "manifest.json")
+            bookFile.writeText(manifest.first, Charsets.UTF_8)
+            manifestFile.writeText(gson.toJson(manifest.second), Charsets.UTF_8)
+
+            val zipFile = File(context.cacheDir, "upload_books/${bookId}_${System.currentTimeMillis()}.zip")
+            zipFile.parentFile?.let { parent ->
+                if (!parent.exists()) parent.mkdirs()
+            }
+            zipDirectory(tempDir, zipFile)
+
+            onProgress(85)
+
+            val requestBody = zipFile.asRequestBody("application/zip".toMediaType())
+            val part = MultipartBody.Part.createFormData("file", zipFile.name, requestBody)
+            val response = apiClient.safeCall {
+                bookService.uploadBookZip(
+                    bookName = book.title,
+                    bookMd5 = book.bookMd5,
+                    totalChapters = book.totalChapters,
+                    file = part
+                )
+            }
+
+            if (response.code != 0 || response.data == null) {
+                return Result.failure(Exception(response.msg))
+            }
+
+            applyUploadMappings(bookId, response.data)
+            onProgress(100)
+            Result.success(response.data)
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            runCatching {
+                val cacheBase = File(context.cacheDir, "upload_books")
+                if (cacheBase.exists()) {
+                    cacheBase.listFiles()?.forEach { child ->
+                        if (child.isDirectory) child.deleteRecursively() else child.delete()
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun buildUploadManifest(
+        book: BookEntity,
+        onProgress: (Int) -> Unit
+    ): Pair<String, BookUploadManifest> {
+        val chapters = mutableListOf<BookUploadChapter>()
+        val contentBuilder = StringBuilder()
+        var offsetBytes = 0
+
+        val total = book.totalChapters
+        val batchSize = 200
+        var offset = 0
+        while (offset < total) {
+            val batch = chapterDao.getChaptersByBookIdPaged(book.id, batchSize, offset)
+            if (batch.isEmpty()) break
+
+            val md5s = batch.map { it.md5 }
+            val contents = contentDao.getContentsByMd5s(md5s).associateBy { it.chapterMd5 }
+
+            batch.forEach { chapter ->
+                val content = contents[chapter.md5]?.rawContent ?: ""
+                val bytes = content.toByteArray(Charsets.UTF_8)
+                val length = bytes.size
+                chapters.add(
+                    BookUploadChapter(
+                        localId = chapter.id,
+                        index = chapter.chapterIndex,
+                        title = chapter.title,
+                        chapterMd5 = chapter.md5,
+                        size = length,
+                        wordsCount = chapter.wordsCount,
+                        offset = offsetBytes,
+                        length = length
+                    )
+                )
+                contentBuilder.append(content)
+                offsetBytes += length
+            }
+
+            offset += batch.size
+            val progress = ((offset.toDouble() / total) * 60).toInt().coerceIn(1, 60)
+            onProgress(progress)
+        }
+
+        val manifest = BookUploadManifest(
+            bookId = book.cloudId,
+            bookName = book.title,
+            totalChapters = total,
+            chapters = chapters
+        )
+        return contentBuilder.toString() to manifest
+    }
+
+    private fun zipDirectory(sourceDir: File, targetZip: File) {
+        ZipOutputStream(FileOutputStream(targetZip)).use { zipOut ->
+            sourceDir.listFiles()?.forEach { file ->
+                val entry = ZipEntry(file.name)
+                zipOut.putNextEntry(entry)
+                file.inputStream().use { it.copyTo(zipOut) }
+                zipOut.closeEntry()
+            }
+        }
+    }
+
+    private fun applyUploadMappings(bookId: Long, resp: BookUploadResp) {
+        if (resp.chapterMappings.isEmpty()) return
+        val db = appDatabase.openHelper.writableDatabase
+        db.beginTransaction()
+        try {
+            val batchSize = 200
+            val mappings = resp.chapterMappings
+            for (i in mappings.indices step batchSize) {
+                val batch = mappings.subList(i, kotlin.math.min(i + batchSize, mappings.size))
+                val whenParts = mutableListOf<String>()
+                val params = mutableListOf<Long>()
+                val ids = mutableListOf<Long>()
+                batch.forEach { mapping ->
+                    whenParts.add("WHEN ? THEN ?")
+                    params.add(mapping.localId)
+                    params.add(mapping.cloudId)
+                    ids.add(mapping.localId)
+                }
+                val idPlaceholders = ids.joinToString(",") { "?" }
+                val sql = "UPDATE chapters SET cloud_id = CASE id ${whenParts.joinToString(" ")} END WHERE id IN ($idPlaceholders)"
+                db.execSQL(sql, (params + ids).toTypedArray())
+            }
+            db.execSQL("UPDATE books SET cloud_id = ?, sync_state = 1 WHERE id = ?", arrayOf(resp.bookId, bookId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun mergeDatabase(bookId: Long, cloudBookId: Long, dbPath: String) {
@@ -358,6 +884,72 @@ class BookRepository @Inject constructor(
     }
 
     private suspend fun <T> ApiClient.safeCallRaw(call: suspend () -> T): T? = try { call() } catch (e: Exception) { null }
+
+    /**
+     * 更新阅读进度：本地入库并尝试同步到云端
+     * @param bookId 本地书籍ID
+     * @param chapterId 本地章节ID
+     * @param promptId 精简模式ID（0表示原文）
+     */
+    suspend fun updateReadingProgress(bookId: Long, chapterId: Long, promptId: Int) {
+        val timestamp = System.currentTimeMillis()
+        readingHistoryDao.insertReadingHistory(
+            ReadingHistoryEntity(
+                bookId = bookId,
+                lastChapterId = chapterId,
+                lastPromptId = promptId,
+                updatedAt = timestamp
+            )
+        )
+
+        val book = bookDao.getBookById(bookId) ?: return
+        if (book.cloudId <= 0) return
+
+        val chapter = chapterDao.getChapterById(chapterId)
+        val cloudChapterId = if (chapter != null && chapter.cloudId > 0) chapter.cloudId else chapterId
+
+        try {
+            apiClient.safeCall {
+                bookService.updateReadingProgress(
+                    book.cloudId,
+                    ReadingProgressReq(chapterId = cloudChapterId, promptId = promptId)
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("BookRepository", "updateReadingProgress failed", e)
+        }
+    }
+
+    /**
+     * 获取本地阅读进度
+     */
+    suspend fun getLocalReadingHistory(bookId: Long): ReadingHistoryEntity? {
+        return readingHistoryDao.getReadingHistory(bookId)
+    }
+
+    /**
+     * 获取云端阅读进度并映射为本地章节ID
+     */
+    suspend fun getCloudReadingHistory(book: Book): ReadingHistoryEntity? {
+        if (book.cloudId <= 0) return null
+        return try {
+            val res = apiClient.safeCall { bookService.getReadingProgress(book.cloudId) }
+            if (res.code != 0 || res.data == null) return null
+            val data: ReadingProgressResp = res.data
+            val localChapter = chapterDao.getChapterByCloudId(data.lastChapterId)
+                ?: chapterDao.getChapterById(data.lastChapterId)
+                ?: return null
+            ReadingHistoryEntity(
+                bookId = book.id,
+                lastChapterId = localChapter.id,
+                lastPromptId = data.lastPromptId,
+                updatedAt = data.updatedAt
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("BookRepository", "getCloudReadingHistory failed", e)
+            null
+        }
+    }
     
     private fun mapBookToDomain(entity: BookEntity) = Book(
         id = entity.id,

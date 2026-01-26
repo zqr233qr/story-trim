@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-86:12
-INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-86:12
-INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-86:12
-INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-86:12
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-101:12
+INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-101:12
+INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-101:12
+INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:2:1-101:12
 MERGED from [androidx.databinding:viewbinding:8.6.0] /Users/zqr/.gradle/caches/transforms-4/0be7c6310c270cb71fe34d4b1e8b46a0/transformed/jetified-viewbinding-8.6.0/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.navigation:navigation-common:2.7.7] /Users/zqr/.gradle/caches/transforms-4/5b5a01fd0f4bcbbe81110ecbd3d8b383/transformed/navigation-common-2.7.7/AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.navigation:navigation-common-ktx:2.7.7] /Users/zqr/.gradle/caches/transforms-4/489cef57377b521334716cbd564cc0e5/transformed/navigation-common-ktx-2.7.7/AndroidManifest.xml:2:1-7:12
@@ -117,8 +117,8 @@ ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidMani
 	android:name
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:11:22-65
 application
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:13:5-78:19
-INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:13:5-78:19
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:13:5-93:19
+INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:13:5-93:19
 MERGED from [com.google.android.material:material:1.11.0] /Users/zqr/.gradle/caches/transforms-4/9af84f30c36ffcfe18d91ffe55ff2ef1/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] /Users/zqr/.gradle/caches/transforms-4/9af84f30c36ffcfe18d91ffe55ff2ef1/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /Users/zqr/.gradle/caches/transforms-4/cafadf22eab263a652e14229d3b75b86/transformed/constraintlayout-2.1.4/AndroidManifest.xml:9:5-20
@@ -150,11 +150,11 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/zqr/.gradle/caches/t
 	android:fullBackupContent
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:17:9-54
 	android:roundIcon
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:20:9-61
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:20:9-54
 	tools:targetApi
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:24:9-29
 	android:icon
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:18:9-56
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:18:9-43
 	android:allowBackup
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:15:9-35
 	android:theme
@@ -197,15 +197,15 @@ ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidMani
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:42:13-37
 	android:name
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:41:13-54
-activity#com.storytrim.app.ui.shelf.ShelfActivity
+activity#com.storytrim.app.ui.home.HomeActivity
 ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:45:9-48:34
 	android:label
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:48:13-31
 	android:exported
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:47:13-37
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:46:13-51
-activity#com.storytrim.app.ui.reader.ReaderActivity
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:46:13-49
+activity#com.storytrim.app.ui.points.PointsActivity
 ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:50:9-53:34
 	android:label
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:53:13-31
@@ -213,50 +213,74 @@ ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidMani
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:52:13-37
 	android:name
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:51:13-53
-activity#com.storytrim.app.ui.debug.DebugSqlActivity
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:55:9-58:38
+activity#com.storytrim.app.ui.tasks.TaskCenterActivity
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:55:9-58:36
 	android:label
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:58:13-35
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:58:13-33
 	android:exported
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:57:13-37
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:56:13-54
-service#com.storytrim.app.ui.reader.tts.TtsForegroundService
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:60:9-63:61
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:56:13-56
+activity#com.storytrim.app.ui.shelf.ShelfActivity
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:60:9-63:34
+	android:label
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:63:13-31
 	android:exported
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:62:13-37
-	android:foregroundServiceType
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:63:13-58
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:61:13-63
-service#com.storytrim.app.ui.reader.tts.FloatingLyricsService
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:65:9-68:61
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:61:13-51
+activity#com.storytrim.app.ui.reader.ReaderActivity
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:65:9-68:34
+	android:label
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:68:13-31
 	android:exported
 		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:67:13-37
-	android:foregroundServiceType
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:68:13-58
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:66:13-64
-receiver#androidx.media.session.MediaButtonReceiver
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:70:9-76:20
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:66:13-53
+activity#com.storytrim.app.ui.debug.DebugSqlActivity
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:70:9-73:38
+	android:label
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:73:13-35
 	android:exported
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:72:13-36
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:72:13-37
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:71:13-70
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:71:13-54
+service#com.storytrim.app.ui.reader.tts.TtsForegroundService
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:75:9-78:61
+	android:exported
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:77:13-37
+	android:foregroundServiceType
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:78:13-58
+	android:name
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:76:13-63
+service#com.storytrim.app.ui.reader.tts.FloatingLyricsService
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:80:9-83:61
+	android:exported
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:82:13-37
+	android:foregroundServiceType
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:83:13-58
+	android:name
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:81:13-64
+receiver#androidx.media.session.MediaButtonReceiver
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:85:9-91:20
+	android:exported
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:87:13-36
+	android:name
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:86:13-70
 intent-filter#action:name:android.intent.action.MEDIA_BUTTON
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:73:13-75:29
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:88:13-90:29
 action#android.intent.action.MEDIA_BUTTON
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:74:17-77
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:89:17-77
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:74:25-74
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:89:25-74
 queries
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:80:5-84:15
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:95:5-99:15
 intent#action:name:android.intent.action.TTS_SERVICE
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:81:9-83:18
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:96:9-98:18
 action#android.intent.action.TTS_SERVICE
-ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:82:13-72
+ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:97:13-72
 	android:name
-		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:82:21-69
+		ADDED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml:97:21-69
 uses-sdk
 INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/zqr/GolandProjects/story-trim/android/app/src/main/AndroidManifest.xml

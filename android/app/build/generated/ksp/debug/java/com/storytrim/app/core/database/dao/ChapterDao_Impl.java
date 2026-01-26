@@ -288,6 +288,60 @@ public final class ChapterDao_Impl implements ChapterDao {
   }
 
   @Override
+  public Object getChaptersByBookIdPaged(final long bookId, final int limit, final int offset,
+      final Continuation<? super List<ChapterEntity>> $completion) {
+    final String _sql = "SELECT * FROM chapters WHERE book_id = ? ORDER BY chapter_index ASC LIMIT ? OFFSET ?";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 3);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, bookId);
+    _argIndex = 2;
+    _statement.bindLong(_argIndex, limit);
+    _argIndex = 3;
+    _statement.bindLong(_argIndex, offset);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<List<ChapterEntity>>() {
+      @Override
+      @NonNull
+      public List<ChapterEntity> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = CursorUtil.getColumnIndexOrThrow(_cursor, "id");
+          final int _cursorIndexOfBookId = CursorUtil.getColumnIndexOrThrow(_cursor, "book_id");
+          final int _cursorIndexOfCloudId = CursorUtil.getColumnIndexOrThrow(_cursor, "cloud_id");
+          final int _cursorIndexOfChapterIndex = CursorUtil.getColumnIndexOrThrow(_cursor, "chapter_index");
+          final int _cursorIndexOfTitle = CursorUtil.getColumnIndexOrThrow(_cursor, "title");
+          final int _cursorIndexOfMd5 = CursorUtil.getColumnIndexOrThrow(_cursor, "md5");
+          final int _cursorIndexOfWordsCount = CursorUtil.getColumnIndexOrThrow(_cursor, "words_count");
+          final List<ChapterEntity> _result = new ArrayList<ChapterEntity>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final ChapterEntity _item;
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final long _tmpBookId;
+            _tmpBookId = _cursor.getLong(_cursorIndexOfBookId);
+            final long _tmpCloudId;
+            _tmpCloudId = _cursor.getLong(_cursorIndexOfCloudId);
+            final int _tmpChapterIndex;
+            _tmpChapterIndex = _cursor.getInt(_cursorIndexOfChapterIndex);
+            final String _tmpTitle;
+            _tmpTitle = _cursor.getString(_cursorIndexOfTitle);
+            final String _tmpMd5;
+            _tmpMd5 = _cursor.getString(_cursorIndexOfMd5);
+            final int _tmpWordsCount;
+            _tmpWordsCount = _cursor.getInt(_cursorIndexOfWordsCount);
+            _item = new ChapterEntity(_tmpId,_tmpBookId,_tmpCloudId,_tmpChapterIndex,_tmpTitle,_tmpMd5,_tmpWordsCount);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
   public Object getChapterByCloudId(final long cloudId,
       final Continuation<? super ChapterEntity> $completion) {
     final String _sql = "SELECT * FROM chapters WHERE cloud_id = ? LIMIT 1";

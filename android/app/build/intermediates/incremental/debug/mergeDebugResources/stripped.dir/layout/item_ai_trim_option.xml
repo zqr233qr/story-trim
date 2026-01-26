@@ -3,18 +3,18 @@
     android:id="@+id/card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="12dp"
-    app:cardCornerRadius="12dp"
+    android:layout_marginBottom="@dimen/space_md"
+    app:cardCornerRadius="@dimen/radius_md"
     app:cardElevation="0dp"
     app:strokeWidth="1dp"
-    app:strokeColor="#E7E5E4"
-    app:cardBackgroundColor="#FFFFFF">
+    app:strokeColor="@color/storytrim_border"
+    app:cardBackgroundColor="@color/storytrim_surface">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_lg">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -30,7 +30,7 @@
                 android:text="轻量去水"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/stone_900" />
+                android:textColor="@color/storytrim_text_primary" />
 
             <TextView
                 android:id="@+id/tvTag"
@@ -38,8 +38,8 @@
                 android:layout_height="wrap_content"
                 android:text="已精简"
                 android:textSize="10sp"
-                android:textColor="#0F766E"
-                android:paddingHorizontal="8dp"
+                android:textColor="@color/storytrim_accent_dark"
+                android:paddingHorizontal="@dimen/space_sm"
                 android:paddingVertical="2dp"
                 android:background="@drawable/bg_chip_trimmed"
                 android:visibility="gone" />
@@ -51,8 +51,8 @@
             android:layout_height="wrap_content"
             android:text="描述"
             android:textSize="12sp"
-            android:textColor="@color/stone_500"
-            android:layout_marginTop="6dp" />
+            android:textColor="@color/storytrim_text_muted"
+            android:layout_marginTop="@dimen/space_xs" />
     </LinearLayout>
 
 </com.google.android.material.card.MaterialCardView>

@@ -1,7 +1,7 @@
 package com.storytrim.app.ui.login
 
 import android.os.Bundle
-import android.widget.Toast
+import com.storytrim.app.ui.common.ToastHelper
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.storytrim.app.databinding.ActivityRegisterBinding
@@ -29,19 +29,19 @@ class RegisterActivity : AppCompatActivity() {
             val confirmPassword = binding.etConfirmPassword.text.toString().trim()
 
             if (username.isEmpty()) {
-                Toast.makeText(this, "请输入用户名", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "请输入用户名")
                 return@setOnClickListener
             }
             if (password.isEmpty()) {
-                Toast.makeText(this, "请输入密码", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "请输入密码")
                 return@setOnClickListener
             }
             if (confirmPassword.isEmpty()) {
-                Toast.makeText(this, "请确认密码", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "请确认密码")
                 return@setOnClickListener
             }
             if (password != confirmPassword) {
-                Toast.makeText(this, "两次密码不一致", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "两次密码不一致")
                 return@setOnClickListener
             }
 
@@ -61,10 +61,10 @@ class RegisterActivity : AppCompatActivity() {
 
         viewModel.registerResult.observe(this) { result ->
             result.onSuccess {
-                Toast.makeText(this, "注册成功，请登录", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "注册成功，请登录")
                 finish()
             }.onFailure { e ->
-                Toast.makeText(this, "注册失败：${e.message}", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(this, "注册失败：${e.message}")
             }
         }
     }

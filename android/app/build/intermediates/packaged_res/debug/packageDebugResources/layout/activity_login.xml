@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/stone_50"
+    android:background="@color/storytrim_bg"
     android:fillViewport="true">
 
     <LinearLayout
@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:padding="32dp">
+        android:padding="@dimen/space_2xl">
 
         <Space
             android:layout_width="match_parent"
@@ -25,7 +25,7 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             android:src="@drawable/ic_menu_book"
-            app:tint="@color/stone_800"
+            app:tint="@color/storytrim_text_primary"
             android:layout_marginBottom="48dp" />
 
         <!-- Form -->
@@ -33,14 +33,15 @@
             android:id="@+id/tilUsername"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_lg"
             android:hint="用户名"
-            app:boxBackgroundColor="@color/white"
-            app:boxCornerRadiusTopStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxBackgroundColor="@color/storytrim_surface"
+            app:boxCornerRadiusTopStart="@dimen/radius_md"
+            app:boxCornerRadiusTopEnd="@dimen/radius_md"
+            app:boxCornerRadiusBottomStart="@dimen/radius_md"
+            app:boxCornerRadiusBottomEnd="@dimen/radius_md"
             app:boxStrokeWidth="0dp"
+            app:hintTextColor="@color/storytrim_text_muted"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -48,22 +49,24 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="text"
-                android:singleLine="true" />
+                android:singleLine="true"
+                android:textColor="@color/storytrim_text_primary" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilPassword"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="@dimen/space_xl"
             android:hint="密码"
-            app:boxBackgroundColor="@color/white"
-            app:boxCornerRadiusTopStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxBackgroundColor="@color/storytrim_surface"
+            app:boxCornerRadiusTopStart="@dimen/radius_md"
+            app:boxCornerRadiusTopEnd="@dimen/radius_md"
+            app:boxCornerRadiusBottomStart="@dimen/radius_md"
+            app:boxCornerRadiusBottomEnd="@dimen/radius_md"
             app:boxStrokeWidth="0dp"
             app:passwordToggleEnabled="true"
+            app:hintTextColor="@color/storytrim_text_muted"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -71,7 +74,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textPassword"
-                android:singleLine="true" />
+                android:singleLine="true"
+                android:textColor="@color/storytrim_text_primary" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.button.MaterialButton
@@ -79,10 +83,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:text="登录"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:backgroundTint="@color/stone_800"
-            app:cornerRadius="16dp"
+            style="@style/Widget.StoryTrim.Button.Primary"
             android:layout_marginBottom="24dp" />
 
         <TextView
@@ -90,9 +91,18 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="注册新账号"
-            android:textColor="@color/stone_500"
+            android:textColor="@color/storytrim_text_muted"
             android:textSize="14sp"
-            android:padding="8dp" />
+            android:padding="@dimen/space_sm" />
+
+        <TextView
+            android:id="@+id/tvSkipLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="直接使用"
+            android:textColor="@color/storytrim_text_secondary"
+            android:textSize="14sp"
+            android:padding="@dimen/space_sm" />
 
         <Space
             android:layout_width="match_parent"

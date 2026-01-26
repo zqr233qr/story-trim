@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/stone_50"
-    android:padding="20dp">
+    android:background="@color/storytrim_bg"
+    android:padding="@dimen/space_xl">
 
     <TextView
         android:layout_width="wrap_content"
@@ -13,24 +13,24 @@
         android:text="SQL 调试面板"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:textColor="@color/stone_800"
-        android:layout_marginBottom="16dp" />
+        android:textColor="@color/storytrim_text_primary"
+        android:layout_marginBottom="@dimen/space_lg" />
 
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:cardCornerRadius="16dp"
+        app:cardCornerRadius="@dimen/radius_md"
         app:cardElevation="0dp"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="@dimen/space_lg">
 
         <EditText
             android:id="@+id/etSql"
             android:layout_width="match_parent"
             android:layout_height="150dp"
-            android:background="@color/white"
+            android:background="@color/storytrim_surface"
             android:gravity="top"
             android:hint="输入 SQL 语句\n例如: SELECT * FROM books"
-            android:padding="16dp"
+            android:padding="@dimen/space_lg"
             android:textSize="14sp"
             android:fontFamily="monospace"
             android:text="SELECT * FROM books LIMIT 20" />
@@ -42,9 +42,8 @@
         android:layout_height="56dp"
         android:text="执行 SQL"
         android:textStyle="bold"
-        app:cornerRadius="16dp"
-        android:backgroundTint="@color/teal_600"
-        android:layout_marginBottom="20dp" />
+        style="@style/Widget.StoryTrim.Button.Primary"
+        android:layout_marginBottom="@dimen/space_xl" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -52,30 +51,30 @@
         android:text="查询结果"
         android:textSize="12sp"
         android:textStyle="bold"
-        android:textColor="@color/stone_400"
+        android:textColor="@color/storytrim_text_muted"
         android:textAllCaps="true"
         android:letterSpacing="0.1"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="@dimen/space_sm" />
 
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        app:cardCornerRadius="16dp"
+        app:cardCornerRadius="@dimen/radius_md"
         app:cardElevation="0dp">
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#1C1917"
-            android:padding="16dp">
+            android:background="@color/stone_900"
+            android:padding="@dimen/space_lg">
 
             <TextView
                 android:id="@+id/tvResult"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="等待执行..."
-                android:textColor="#A8A29E"
+                android:textColor="@color/storytrim_text_muted"
                 android:textSize="12sp"
                 android:fontFamily="monospace" />
         </androidx.core.widget.NestedScrollView>

@@ -7,7 +7,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
+import com.storytrim.app.ui.common.ToastHelper
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
@@ -89,11 +89,11 @@ class ChapterTrimDialogFragment : DialogFragment() {
 
         binding.btnConfirm.setOnClickListener {
             if (selectedChapterIds.isEmpty()) {
-                Toast.makeText(requireContext(), "请选择章节", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(requireContext(), "请选择章节")
                 return@setOnClickListener
             }
             if (selectedChapterIds.size > pointsBalance) {
-                Toast.makeText(requireContext(), "积分不足", Toast.LENGTH_SHORT).show()
+                ToastHelper.show(requireContext(), "积分不足")
                 return@setOnClickListener
             }
             submitChapterTrimTask()
@@ -153,7 +153,7 @@ class ChapterTrimDialogFragment : DialogFragment() {
                 }
                 .onFailure { e ->
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(requireContext(), "获取积分失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        ToastHelper.show(requireContext(), "获取积分失败: ${e.message}")
                     }
                 }
         }
@@ -177,7 +177,7 @@ class ChapterTrimDialogFragment : DialogFragment() {
                 }
                 .onFailure { e ->
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(requireContext(), "获取精简状态失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        ToastHelper.show(requireContext(), "获取精简状态失败: ${e.message}")
                     }
                 }
         }
@@ -201,7 +201,7 @@ class ChapterTrimDialogFragment : DialogFragment() {
         val startIndex = currentChapterIndex + 1
 
         if (startIndex >= chapterOptions.size) {
-            Toast.makeText(requireContext(), "没有后续章节", Toast.LENGTH_SHORT).show()
+            ToastHelper.show(requireContext(), "没有后续章节")
             return
         }
 
@@ -247,7 +247,7 @@ class ChapterTrimDialogFragment : DialogFragment() {
             viewModel.bookRepository.startChapterTrimTask(book.cloudId, selectedPromptId, selectedChapterIds.toList())
                 .onSuccess {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(requireContext(), "任务已创建，可在书架查看进度", Toast.LENGTH_SHORT).show()
+                        ToastHelper.show(requireContext(), "任务已创建，可在书架查看进度")
                         dismiss()
                     }
                 }
@@ -258,7 +258,7 @@ class ChapterTrimDialogFragment : DialogFragment() {
                             "章节已精简或处理中" -> "章节已精简或处理中"
                             else -> "任务创建失败: ${e.message}"
                         }
-                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        ToastHelper.show(requireContext(), errorMsg)
                     }
                 }
         }

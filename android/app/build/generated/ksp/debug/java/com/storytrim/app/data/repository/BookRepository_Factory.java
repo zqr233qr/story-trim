@@ -5,6 +5,7 @@ import com.storytrim.app.core.database.AppDatabase;
 import com.storytrim.app.core.database.dao.BookDao;
 import com.storytrim.app.core.database.dao.ChapterDao;
 import com.storytrim.app.core.database.dao.ContentDao;
+import com.storytrim.app.core.database.dao.ReadingHistoryDao;
 import com.storytrim.app.core.network.ApiClient;
 import com.storytrim.app.core.network.TrimService;
 import com.storytrim.app.core.parser.FileParser;
@@ -44,6 +45,8 @@ public final class BookRepository_Factory implements Factory<BookRepository> {
 
   private final Provider<ContentDao> contentDaoProvider;
 
+  private final Provider<ReadingHistoryDao> readingHistoryDaoProvider;
+
   private final Provider<FileParser> fileParserProvider;
 
   private final Provider<AppDatabase> appDatabaseProvider;
@@ -55,15 +58,17 @@ public final class BookRepository_Factory implements Factory<BookRepository> {
   public BookRepository_Factory(Provider<ApiClient> apiClientProvider,
       Provider<BookService> bookServiceProvider, Provider<TrimService> trimServiceProvider,
       Provider<BookDao> bookDaoProvider, Provider<ChapterDao> chapterDaoProvider,
-      Provider<ContentDao> contentDaoProvider, Provider<FileParser> fileParserProvider,
-      Provider<AppDatabase> appDatabaseProvider, Provider<ZipUtils> zipUtilsProvider,
-      Provider<Context> contextProvider) {
+      Provider<ContentDao> contentDaoProvider,
+      Provider<ReadingHistoryDao> readingHistoryDaoProvider,
+      Provider<FileParser> fileParserProvider, Provider<AppDatabase> appDatabaseProvider,
+      Provider<ZipUtils> zipUtilsProvider, Provider<Context> contextProvider) {
     this.apiClientProvider = apiClientProvider;
     this.bookServiceProvider = bookServiceProvider;
     this.trimServiceProvider = trimServiceProvider;
     this.bookDaoProvider = bookDaoProvider;
     this.chapterDaoProvider = chapterDaoProvider;
     this.contentDaoProvider = contentDaoProvider;
+    this.readingHistoryDaoProvider = readingHistoryDaoProvider;
     this.fileParserProvider = fileParserProvider;
     this.appDatabaseProvider = appDatabaseProvider;
     this.zipUtilsProvider = zipUtilsProvider;
@@ -72,21 +77,23 @@ public final class BookRepository_Factory implements Factory<BookRepository> {
 
   @Override
   public BookRepository get() {
-    return newInstance(apiClientProvider.get(), bookServiceProvider.get(), trimServiceProvider.get(), bookDaoProvider.get(), chapterDaoProvider.get(), contentDaoProvider.get(), fileParserProvider.get(), appDatabaseProvider.get(), zipUtilsProvider.get(), contextProvider.get());
+    return newInstance(apiClientProvider.get(), bookServiceProvider.get(), trimServiceProvider.get(), bookDaoProvider.get(), chapterDaoProvider.get(), contentDaoProvider.get(), readingHistoryDaoProvider.get(), fileParserProvider.get(), appDatabaseProvider.get(), zipUtilsProvider.get(), contextProvider.get());
   }
 
   public static BookRepository_Factory create(Provider<ApiClient> apiClientProvider,
       Provider<BookService> bookServiceProvider, Provider<TrimService> trimServiceProvider,
       Provider<BookDao> bookDaoProvider, Provider<ChapterDao> chapterDaoProvider,
-      Provider<ContentDao> contentDaoProvider, Provider<FileParser> fileParserProvider,
-      Provider<AppDatabase> appDatabaseProvider, Provider<ZipUtils> zipUtilsProvider,
-      Provider<Context> contextProvider) {
-    return new BookRepository_Factory(apiClientProvider, bookServiceProvider, trimServiceProvider, bookDaoProvider, chapterDaoProvider, contentDaoProvider, fileParserProvider, appDatabaseProvider, zipUtilsProvider, contextProvider);
+      Provider<ContentDao> contentDaoProvider,
+      Provider<ReadingHistoryDao> readingHistoryDaoProvider,
+      Provider<FileParser> fileParserProvider, Provider<AppDatabase> appDatabaseProvider,
+      Provider<ZipUtils> zipUtilsProvider, Provider<Context> contextProvider) {
+    return new BookRepository_Factory(apiClientProvider, bookServiceProvider, trimServiceProvider, bookDaoProvider, chapterDaoProvider, contentDaoProvider, readingHistoryDaoProvider, fileParserProvider, appDatabaseProvider, zipUtilsProvider, contextProvider);
   }
 
   public static BookRepository newInstance(ApiClient apiClient, BookService bookService,
       TrimService trimService, BookDao bookDao, ChapterDao chapterDao, ContentDao contentDao,
-      FileParser fileParser, AppDatabase appDatabase, ZipUtils zipUtils, Context context) {
-    return new BookRepository(apiClient, bookService, trimService, bookDao, chapterDao, contentDao, fileParser, appDatabase, zipUtils, context);
+      ReadingHistoryDao readingHistoryDao, FileParser fileParser, AppDatabase appDatabase,
+      ZipUtils zipUtils, Context context) {
+    return new BookRepository(apiClient, bookService, trimService, bookDao, chapterDao, contentDao, readingHistoryDao, fileParser, appDatabase, zipUtils, context);
   }
 }

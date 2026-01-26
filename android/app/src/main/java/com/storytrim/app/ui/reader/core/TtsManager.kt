@@ -22,6 +22,7 @@ class TtsManager(context: Context) {
                     override fun onDone(utteranceId: String?) {
                         onPageFinish?.invoke()
                     }
+                    @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) {}
                 })
                 isInitialized = true

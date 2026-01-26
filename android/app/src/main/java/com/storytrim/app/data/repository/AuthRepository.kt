@@ -27,6 +27,7 @@ class AuthRepository @Inject constructor(
                 val token = response.data.token
                 if (token.isNotEmpty()) {
                     authInterceptor.saveToken(token)
+                    authInterceptor.saveUsername(username)
                     Result.success(User(0, username, ""))
                 } else {
                     Result.failure(Exception("登录失败：未返回token"))
@@ -64,4 +65,6 @@ class AuthRepository @Inject constructor(
     }
 
     fun isLoggedInFlow() = authInterceptor.getTokenFlow()
+
+    fun usernameFlow() = authInterceptor.getUsernameFlow()
 }

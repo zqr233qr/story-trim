@@ -71,9 +71,6 @@ public final class ActivityReaderBinding implements ViewBinding {
   public final TextView tvBookTitle;
 
   @NonNull
-  public final TextView tvCurrentMode;
-
-  @NonNull
   public final View viewBackgroundOverlay;
 
   private ActivityReaderBinding(@NonNull ConstraintLayout rootView,
@@ -84,8 +81,7 @@ public final class ActivityReaderBinding implements ViewBinding {
       @NonNull ImageView btnTtsTop, @NonNull ImageView ivReaderBackground,
       @NonNull ProgressBar progressBar, @NonNull ReaderView readerView,
       @NonNull ConstraintLayout rootLayout, @NonNull FrameLayout topToolbar,
-      @NonNull TextView tvBookTitle, @NonNull TextView tvCurrentMode,
-      @NonNull View viewBackgroundOverlay) {
+      @NonNull TextView tvBookTitle, @NonNull View viewBackgroundOverlay) {
     this.rootView = rootView;
     this.bottomMenu = bottomMenu;
     this.btnBack = btnBack;
@@ -102,7 +98,6 @@ public final class ActivityReaderBinding implements ViewBinding {
     this.rootLayout = rootLayout;
     this.topToolbar = topToolbar;
     this.tvBookTitle = tvBookTitle;
-    this.tvCurrentMode = tvCurrentMode;
     this.viewBackgroundOverlay = viewBackgroundOverlay;
   }
 
@@ -219,12 +214,6 @@ public final class ActivityReaderBinding implements ViewBinding {
         break missingId;
       }
 
-      id = R.id.tvCurrentMode;
-      TextView tvCurrentMode = ViewBindings.findChildViewById(rootView, id);
-      if (tvCurrentMode == null) {
-        break missingId;
-      }
-
       id = R.id.viewBackgroundOverlay;
       View viewBackgroundOverlay = ViewBindings.findChildViewById(rootView, id);
       if (viewBackgroundOverlay == null) {
@@ -234,7 +223,7 @@ public final class ActivityReaderBinding implements ViewBinding {
       return new ActivityReaderBinding((ConstraintLayout) rootView, bottomMenu, btnBack,
           btnBatchTrim, btnCatalog, btnMagic, btnNextChapter, btnPrevChapter, btnSettings,
           btnTtsTop, ivReaderBackground, progressBar, readerView, rootLayout, topToolbar,
-          tvBookTitle, tvCurrentMode, viewBackgroundOverlay);
+          tvBookTitle, viewBackgroundOverlay);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

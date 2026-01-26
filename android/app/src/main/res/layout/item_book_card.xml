@@ -3,33 +3,33 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="16dp"
-    app:cardCornerRadius="24dp"
-    app:cardElevation="0dp"
+    android:layout_marginBottom="@dimen/space_lg"
+    app:cardCornerRadius="@dimen/radius_lg"
+    app:cardElevation="@dimen/elevation_sm"
     app:strokeWidth="1dp"
-    app:strokeColor="#F2F2F7"
-    app:cardBackgroundColor="#FFFFFF">
+    app:strokeColor="@color/storytrim_border"
+    app:cardBackgroundColor="@color/storytrim_surface">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="20dp">
+        android:padding="@dimen/space_xl">
 
         <!-- Cover Placeholder -->
         <androidx.cardview.widget.CardView
             android:layout_width="80dp"
             android:layout_height="110dp"
-            app:cardCornerRadius="12dp"
+            app:cardCornerRadius="@dimen/radius_sm"
             app:cardElevation="0dp"
-            app:cardBackgroundColor="#F8F9FA"
-            android:layout_marginEnd="20dp">
+            app:cardBackgroundColor="@color/storytrim_surface_muted"
+            android:layout_marginEnd="@dimen/space_lg">
             
             <ImageView
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:src="@drawable/ic_menu_book"
-                app:tint="#E0E0E0"
+                app:tint="@color/storytrim_border"
                 android:layout_gravity="center" />
                 
         </androidx.cardview.widget.CardView>
@@ -51,9 +51,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="书籍标题"
-                    android:textSize="18sp"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
                     android:textStyle="bold"
-                    android:textColor="#1C1C1E"
+                    android:textColor="@color/storytrim_text_primary"
                     android:maxLines="2"
                     android:ellipsize="end"
                     android:letterSpacing="0.02" />
@@ -63,9 +63,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0 章节"
-                    android:textSize="13sp"
-                    android:textColor="#8E8E93"
-                    android:layout_marginTop="6dp" />
+                    android:textAppearance="@style/TextAppearance.StoryTrim.BodySecondary"
+                    android:textColor="@color/storytrim_text_muted"
+                    android:layout_marginTop="@dimen/space_xs" />
             </LinearLayout>
 
             <LinearLayout
@@ -73,7 +73,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginTop="12dp">
+                android:layout_marginTop="@dimen/space_md">
 
                 <!-- Tags Container -->
                 <LinearLayout
@@ -89,11 +89,11 @@
                         android:text="本地"
                         android:textSize="10sp"
                         android:textStyle="bold"
-                        android:textColor="#059669" 
+                        android:textColor="@color/storytrim_accent_dark"
                         android:background="@drawable/bg_badge_green"
-                        android:paddingHorizontal="8dp"
+                        android:paddingHorizontal="@dimen/space_sm"
                         android:paddingVertical="3dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_marginEnd="@dimen/space_xs"
                         android:visibility="gone" />
 
                     <TextView
@@ -103,9 +103,9 @@
                         android:text="云端"
                         android:textSize="10sp"
                         android:textStyle="bold"
-                        android:textColor="#2563EB"
+                        android:textColor="@color/storytrim_text_secondary"
                         android:background="@drawable/bg_badge_blue"
-                        android:paddingHorizontal="8dp"
+                        android:paddingHorizontal="@dimen/space_sm"
                         android:paddingVertical="3dp"
                         android:visibility="gone" />
                 </LinearLayout>
@@ -114,7 +114,7 @@
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:src="@drawable/ic_menu_more"
-                    app:tint="#C7C7CC" />
+                    app:tint="@color/storytrim_text_muted" />
             </LinearLayout>
 
         </LinearLayout>

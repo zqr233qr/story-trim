@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/stone_50"
+    android:background="@color/storytrim_bg"
     android:fillViewport="true">
 
     <LinearLayout
@@ -12,9 +12,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="24dp"
-        android:paddingTop="60dp"
-        android:paddingBottom="32dp">
+        android:paddingHorizontal="@dimen/space_xl"
+        android:paddingTop="@dimen/space_3xl"
+        android:paddingBottom="@dimen/space_2xl">
 
         <!-- Header -->
         <LinearLayout
@@ -22,7 +22,29 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="32dp">
+            android:layout_marginBottom="@dimen/space_2xl">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@mipmap/ic_launcher"
+                    android:contentDescription="StoryTrim" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_sm"
+                    android:text="StoryTrim"
+                    android:textAppearance="@style/TextAppearance.StoryTrim.Subtitle"
+                    android:textStyle="bold"
+                    android:textColor="@color/storytrim_text_primary" />
+            </LinearLayout>
 
             <Space
                 android:layout_width="0dp"
@@ -41,7 +63,7 @@
                     android:layout_height="wrap_content"
                     android:text="G"
                     android:textStyle="bold"
-                    android:textColor="@color/stone_600"
+                    android:textColor="@color/storytrim_text_secondary"
                     android:layout_gravity="center" />
             </FrameLayout>
         </LinearLayout>
@@ -54,25 +76,25 @@
             android:orientation="vertical"
             android:gravity="center"
             android:background="@drawable/bg_card_upload"
-            android:padding="40dp"
-            android:layout_marginBottom="40dp">
+            android:padding="@dimen/space_2xl"
+            android:layout_marginBottom="@dimen/space_2xl">
 
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:src="@android:drawable/ic_menu_upload"
-                app:tint="@color/stone_400"
+                app:tint="@color/storytrim_text_muted"
                 android:background="@drawable/bg_circle_stone_50"
-                android:padding="12dp"
-                android:layout_marginBottom="16dp" />
+                android:padding="@dimen/space_md"
+                android:layout_marginBottom="@dimen/space_lg" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="导入本地书籍"
-                android:textSize="16sp"
+                android:textAppearance="@style/TextAppearance.StoryTrim.Body"
                 android:textStyle="bold"
-                android:textColor="@color/stone_800"
+                android:textColor="@color/storytrim_text_primary"
                 android:letterSpacing="-0.01" />
 
             <TextView
@@ -80,10 +102,10 @@
                 android:layout_height="wrap_content"
                 android:text="支持 TXT 格式"
                 android:textSize="11sp"
-                android:textColor="@color/stone_400"
+                android:textColor="@color/storytrim_text_muted"
                 android:textAllCaps="true"
                 android:letterSpacing="0.1"
-                android:layout_marginTop="6dp" />
+                android:layout_marginTop="@dimen/space_xs" />
         </LinearLayout>
 
         <!-- Book List Header -->
@@ -92,7 +114,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="bottom"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="@dimen/space_lg">
 
             <Space
                 android:layout_width="0dp"
@@ -104,8 +126,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0 本"
-                android:textSize="11sp"
-                android:textColor="@color/stone_400"
+                android:textAppearance="@style/TextAppearance.StoryTrim.Caption"
+                android:textColor="@color/storytrim_text_muted"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -126,7 +148,7 @@
             android:gravity="center"
             android:text="书架空空如也"
             android:textSize="13sp"
-            android:textColor="@color/stone_300"
+            android:textColor="@color/storytrim_text_muted"
             android:textStyle="italic"
             android:visibility="gone" />
 

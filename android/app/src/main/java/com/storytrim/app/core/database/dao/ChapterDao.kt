@@ -18,6 +18,9 @@ interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE book_id = :bookId AND chapter_index = :index LIMIT 1")
     suspend fun getChapterByIndex(bookId: Long, index: Int): ChapterEntity?
 
+    @Query("SELECT * FROM chapters WHERE book_id = :bookId ORDER BY chapter_index ASC LIMIT :limit OFFSET :offset")
+    suspend fun getChaptersByBookIdPaged(bookId: Long, limit: Int, offset: Int): List<ChapterEntity>
+
     @Query("SELECT * FROM chapters WHERE cloud_id = :cloudId LIMIT 1")
     suspend fun getChapterByCloudId(cloudId: Long): ChapterEntity?
 

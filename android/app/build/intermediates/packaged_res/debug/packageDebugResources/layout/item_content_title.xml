@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:textSize="24sp"
     android:textStyle="bold"
-    android:textColor="#1C1C1E"
-    android:layout_marginTop="32dp"
-    android:layout_marginBottom="24dp"
+    android:textColor="@color/storytrim_text_primary"
+    android:layout_marginTop="@dimen/space_2xl"
+    android:layout_marginBottom="@dimen/space_xl"
     android:lineSpacingExtra="4dp" />

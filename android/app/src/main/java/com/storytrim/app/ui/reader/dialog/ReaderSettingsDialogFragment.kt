@@ -15,6 +15,7 @@ import com.storytrim.app.databinding.DialogReaderSettingsBinding
 import com.storytrim.app.ui.reader.ReaderActivity
 import com.storytrim.app.ui.reader.ReaderViewModel
 import com.storytrim.app.ui.reader.adapter.ModeGridAdapter
+import com.storytrim.app.ui.common.ToastHelper
 
 class ReaderSettingsDialogFragment : DialogFragment() {
 
@@ -38,7 +39,7 @@ class ReaderSettingsDialogFragment : DialogFragment() {
             activity.updateBackgroundImage(target.absolutePath)
             updateBackgroundStatus(target.absolutePath)
         } catch (e: Exception) {
-            android.widget.Toast.makeText(requireContext(), "背景图设置失败", android.widget.Toast.LENGTH_SHORT).show()
+            ToastHelper.show(requireContext(), "背景图设置失败")
         }
     }
 
@@ -69,11 +70,18 @@ class ReaderSettingsDialogFragment : DialogFragment() {
         super.onStart()
         dialog?.window?.let { window ->
             val displayMetrics = resources.displayMetrics
-            val height = (displayMetrics.heightPixels * 0.85).toInt()
-            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, height)
+            val maxHeight = (displayMetrics.heightPixels * 0.7).toInt()
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             window.setGravity(Gravity.BOTTOM)
             window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+            binding.settingsScrollView.post {
+                val layoutParams = binding.settingsScrollView.layoutParams
+                layoutParams.height = binding.settingsScrollView.height.coerceAtMost(maxHeight)
+                binding.settingsScrollView.layoutParams = layoutParams
+            }
         }
+        viewModel.setToastSuppressed(true)
     }
 
     private fun setupFontSize(activity: ReaderActivity) {
@@ -161,6 +169,7 @@ class ReaderSettingsDialogFragment : DialogFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        viewModel.setToastSuppressed(false)
         _binding = null
     }
 

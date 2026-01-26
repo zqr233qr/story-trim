@@ -4,13 +4,21 @@ import com.storytrim.app.core.database.DatabaseModule;
 import com.storytrim.app.core.network.NetworkModule;
 import com.storytrim.app.ui.debug.DebugSqlActivity_GeneratedInjector;
 import com.storytrim.app.ui.debug.DebugSqlViewModel_HiltModules;
+import com.storytrim.app.ui.home.HomeActivity_GeneratedInjector;
+import com.storytrim.app.ui.home.tab.ProfileFragment_GeneratedInjector;
+import com.storytrim.app.ui.home.tab.ProfileViewModel_HiltModules;
+import com.storytrim.app.ui.home.tab.ShelfFragment_GeneratedInjector;
 import com.storytrim.app.ui.login.LoginActivity_GeneratedInjector;
 import com.storytrim.app.ui.login.LoginViewModel_HiltModules;
 import com.storytrim.app.ui.login.RegisterActivity_GeneratedInjector;
+import com.storytrim.app.ui.points.PointsActivity_GeneratedInjector;
+import com.storytrim.app.ui.points.PointsViewModel_HiltModules;
 import com.storytrim.app.ui.reader.ReaderActivity_GeneratedInjector;
 import com.storytrim.app.ui.reader.ReaderViewModel_HiltModules;
 import com.storytrim.app.ui.shelf.ShelfActivity_GeneratedInjector;
 import com.storytrim.app.ui.shelf.ShelfViewModel_HiltModules;
+import com.storytrim.app.ui.tasks.TaskCenterActivity_GeneratedInjector;
+import com.storytrim.app.ui.tasks.TaskCenterViewModel_HiltModules;
 import dagger.Binds;
 import dagger.Component;
 import dagger.Module;
@@ -158,10 +166,13 @@ public final class StoryTrimApplication_HiltComponents {
           HiltWrapper_ActivityRetainedComponentManager_LifecycleModule.class,
           HiltWrapper_SavedStateHandleModule.class,
           LoginViewModel_HiltModules.KeyModule.class,
+          PointsViewModel_HiltModules.KeyModule.class,
+          ProfileViewModel_HiltModules.KeyModule.class,
           ReaderViewModel_HiltModules.KeyModule.class,
           ShelfViewModel_HiltModules.KeyModule.class,
           ActivityCBuilderModule.class,
-          ViewModelCBuilderModule.class
+          ViewModelCBuilderModule.class,
+          TaskCenterViewModel_HiltModules.KeyModule.class
       }
   )
   @ActivityRetainedScoped
@@ -185,10 +196,13 @@ public final class StoryTrimApplication_HiltComponents {
   @ActivityScoped
   public abstract static class ActivityC implements MainActivity_GeneratedInjector,
       DebugSqlActivity_GeneratedInjector,
+      HomeActivity_GeneratedInjector,
       LoginActivity_GeneratedInjector,
       RegisterActivity_GeneratedInjector,
+      PointsActivity_GeneratedInjector,
       ReaderActivity_GeneratedInjector,
       ShelfActivity_GeneratedInjector,
+      TaskCenterActivity_GeneratedInjector,
       ActivityComponent,
       DefaultViewModelFactories.ActivityEntryPoint,
       HiltWrapper_HiltViewModelFactory_ActivityCreatorEntryPoint,
@@ -205,8 +219,11 @@ public final class StoryTrimApplication_HiltComponents {
           DebugSqlViewModel_HiltModules.BindsModule.class,
           HiltWrapper_HiltViewModelFactory_ViewModelModule.class,
           LoginViewModel_HiltModules.BindsModule.class,
+          PointsViewModel_HiltModules.BindsModule.class,
+          ProfileViewModel_HiltModules.BindsModule.class,
           ReaderViewModel_HiltModules.BindsModule.class,
-          ShelfViewModel_HiltModules.BindsModule.class
+          ShelfViewModel_HiltModules.BindsModule.class,
+          TaskCenterViewModel_HiltModules.BindsModule.class
       }
   )
   @ViewModelScoped
@@ -231,7 +248,9 @@ public final class StoryTrimApplication_HiltComponents {
       modules = ViewWithFragmentCBuilderModule.class
   )
   @FragmentScoped
-  public abstract static class FragmentC implements FragmentComponent,
+  public abstract static class FragmentC implements ProfileFragment_GeneratedInjector,
+      ShelfFragment_GeneratedInjector,
+      FragmentComponent,
       DefaultViewModelFactories.FragmentEntryPoint,
       ViewComponentManager.ViewWithFragmentComponentBuilderEntryPoint,
       GeneratedComponent {
